@@ -11,6 +11,14 @@ endif()
 
 project ("VulkanLearning")
 
+#define project directory
+set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
+set(DEPS_DIR "${CMAKE_SOURCE_DIR}/deps")
+set(INC_DIR "${CMAKE_SOURCE_DIR}/include")
+
+#add include directory
+include_directories("${INC_DIR}/")
+
 # Add source to this project's executable.
 add_executable (VulkanLearning "main.cpp" )
 
@@ -18,4 +26,17 @@ if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET VulkanLearning PROPERTY CXX_STANDARD 20)
 endif()
 
-# TODO: Add tests and install targets if needed.
+# Add sub projects.
+add_subdirectory(${SRC_DIR})
+add_subdirectory(${DEPS_DIR})
+
+find_package(Vulkan REQUIRED)
+
+# Add libraries
+target_link_libraries(VulkanLearning PUBLIC "${DEPS_DIR}/libs/GLFW/glfw3dll.lib;Vulkan::Vulkan")
+
+# Copy Dll
+add_custom_command(TARGET VulkanLearning POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E  copy_if_different
+        "$<TARGET_RUNTIME_DLLS:VulkanLearning>"
+        "$<TARGET_FILE_DIR:VulkanLearning>")
