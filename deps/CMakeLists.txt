@@ -1,9 +1,10 @@
-cmake_minimum_required (VERSION 3.8)
+cmake_minimum_required (VERSION 3.21)
 
 set (DEPS_SRC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 set (IMGUI_SRC "${DEPS_SRC}/imgui")
 set (DEPS_INC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 set (DEPS_LIBS "${CMAKE_CURRENT_SOURCE_DIR}/libs")
+set (DEPS_BIN "${CMAKE_CURRENT_SOURCE_DIR}/bin")
 
 set (DEPS_SRC_FILES
     "${IMGUI_SRC}/imgui.cpp"
@@ -18,4 +19,13 @@ target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/")
 target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/imgui/")
 target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/GLFW/")
 
+#define lib
+add_library(GLFW SHARED IMPORTED)
+set_target_properties(GLFW PROPERTIES IMPORTED_LOCATION "${DEPS_BIN}/GLFW/glfw3.dll" )
+set_target_properties(GLFW PROPERTIES IMPORTED_IMPLIB "${DEPS_LIBS}/GLFW/glfw3dll.lib" )
+
+# Add libraries
+target_link_libraries(VulkanLearning PUBLIC "GLFW")
+
 target_sources(VulkanLearning PUBLIC ${DEPS_SRC_FILES})
+

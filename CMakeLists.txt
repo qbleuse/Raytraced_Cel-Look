@@ -1,7 +1,7 @@
 ﻿# CMakeList.txt : CMake project for VulkanLearning, include source and define
 # project specific logic here.
 #
-cmake_minimum_required (VERSION 3.8)
+cmake_minimum_required (VERSION 3.21)
 
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141)
@@ -33,10 +33,11 @@ add_subdirectory(${DEPS_DIR})
 find_package(Vulkan REQUIRED)
 
 # Add libraries
-target_link_libraries(VulkanLearning PUBLIC "${DEPS_DIR}/libs/GLFW/glfw3dll.lib;Vulkan::Vulkan")
+target_link_libraries(VulkanLearning PUBLIC "Vulkan::Vulkan")
 
 # Copy Dll
 add_custom_command(TARGET VulkanLearning POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E  copy_if_different
+    COMMAND ${CMAKE_COMMAND} -E  copy
         "$<TARGET_RUNTIME_DLLS:VulkanLearning>"
-        "$<TARGET_FILE_DIR:VulkanLearning>")
+        "$<TARGET_FILE_DIR:VulkanLearning>"
+		COMMAND_EXPAND_LISTS)
