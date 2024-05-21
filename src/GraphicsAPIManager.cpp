@@ -75,6 +75,34 @@ bool GraphicsAPIManager::FindAPISupported()
 
 /*===== Graphics API Window and Device =====*/
 
+bool GraphicsAPIManager::CreateVulkanInterface()
+{
+	//to describe the app to the graphics API (directly taken from Vulkan tutorial)
+	VkApplicationInfo appInfo{};
+	appInfo.sType				= VK_STRUCTURE_TYPE_APPLICATION_INFO;
+	appInfo.pApplicationName	= "Vulkan Raytraced-Cel-Sahding";
+	appInfo.applicationVersion	= VK_MAKE_VERSION(1, 0, 0);
+	appInfo.pEngineName			= "No Engine";
+	appInfo.engineVersion		= VK_MAKE_VERSION(1, 0, 0);
+	appInfo.apiVersion			= VK_API_VERSION_1_0;
+
+	//the struct that will be given to create our VkInstance
+	VkInstanceCreateInfo createInfo{};
+	createInfo.sType			= VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	createInfo.pApplicationInfo = &appInfo;
+
+	//the count of extensions needed for glfw to enable interaction with Vulkan
+	uint32_t glfwExtensionCount = 0;
+	//the names of the extensions needed for glfw to enable interaction with Vulkan
+	const char** glfwExtensions;
+	glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+	createInfo.enabledExtensionCount	= glfwExtensionCount;
+	createInfo.ppEnabledExtensionNames	= glfwExtensions;
+
+	return false;
+}
+
 
 bool GraphicsAPIManager::MakeWindows(GLFWwindow** windows)const
 {

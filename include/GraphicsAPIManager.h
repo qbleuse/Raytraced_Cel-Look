@@ -23,6 +23,8 @@ class GraphicsAPIManager
 	/*===== GRAPHICS API SUPPORT =====*/
 	public:
 
+		/* Vulkan */
+
 		//whether this machine supports Vulkan
 		bool vulkan_supported = false;
 		//whether this machine supports hardware accelerated Raytracing through Vulkan
@@ -33,18 +35,22 @@ class GraphicsAPIManager
 		//this will be a C-array that you will be able to go through usin vk_extension_count.
 		struct VkExtensionProperties* vk_extensions = nullptr;
 
-
+		/* DirectX*/
 
 		//whether this machine supports DirectX 12
 		bool DX12_supported = false;
 		//whether this machine supports hardware accelerated Raytracing through DirectX Raytracing
 		bool DXR_supported = false;
 
+		/* Metal */
+
 		//whether this machine supports Metal
 		bool metal_supported = false;
 		//whether this machine supports hardware accelerated Raytracing through Metal Raytracing 
 		//(for this at least a M3 machine would be necessary so not sure if this will really be implemented or not)
 		bool metal_rt_supported = false;
+
+		/* Agnostic */
 
 		/**
 		* Find which Graphics API is supported by the machine. will change the value of the above flags accordingly to be used freely outside this class.
@@ -58,6 +64,23 @@ class GraphicsAPIManager
 #pragma region Graphics API Window and Device
 	/*===== GRAPHICS API WINDOW AND DEVICE =====*/
 	public:
+
+		/* Vulkan */
+
+		struct VkInstance VulkanInterface;
+
+		/**
+		* Initializes the VkInstance inside this class
+		* - returns : wether VkInstanceCreation was a success.
+		*/
+		bool CreateVulkanInterface();
+
+		/**
+		* Creates the associated Interface Object for each Graphics API supported.
+		* - returns : whether at least one Interface was successfully created.
+		*/
+		bool CreateGraphicsInterfaces();
+
 		/**
 		* Create A GLFWwindow struct for each Graphics API supported and add it to the GLFWwindow array given in parameter.
 		* max that can be supported for one machine is two. (2 windows expected on Windows, one on Linux and two on MacOS).
