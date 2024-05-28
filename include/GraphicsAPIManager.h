@@ -2,6 +2,7 @@
 #define __GRAPHICSAPIMANAGER_H__
 
 #include <cstdint>
+#include <vulkan/vulkan.h>
 
 /**
 * class that manages what Graphics API this machine supports, and initialize the associated resources.
@@ -58,6 +59,12 @@ class GraphicsAPIManager
 		*/
 		bool FindAPISupported();
 
+		/**
+		* Finds if raytracing extensions is supported by the Graphics API on the machine. will change the value of the above flags accordingly to be used freely outside this class.
+		* - returns : whether or not at least one graphics API is supported.
+		*/
+		bool FindRTSupported();
+
 		/*===== END GRAPHICS API SUPPORT =====*/
 #pragma endregion
 
@@ -67,13 +74,16 @@ class GraphicsAPIManager
 
 		/* Vulkan */
 
-		struct VkInstance VulkanInterface;
+		VkInstance VulkanInterface;
 
 		/**
 		* Initializes the VkInstance inside this class
 		* - returns : wether VkInstanceCreation was a success.
 		*/
 		bool CreateVulkanInterface();
+
+
+		/* Agnostic */
 
 		/**
 		* Creates the associated Interface Object for each Graphics API supported.

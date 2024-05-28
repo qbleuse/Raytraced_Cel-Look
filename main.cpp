@@ -38,6 +38,12 @@ int main()
 			return 1;
 		}
 
+		if (!GAPI.CreateGraphicsInterfaces())
+		{
+			printf("Graphics API Manager Error: We were not able to initialize the Logical Interfaces for the supported Graphics API.\n");
+			return 1;
+		}
+
 		//let the Graphics API create the windows if they're able to
  		GLFWwindow* windows[2] = {nullptr, nullptr};
 		GAPI.MakeWindows(windows);
