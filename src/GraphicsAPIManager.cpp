@@ -25,6 +25,7 @@ GraphicsAPIManager::~GraphicsAPIManager()
 	if (vk_extensions)
 		free(vk_extensions);
 
+	vkDestroyDevice(VulkanDevice, nullptr);
 	vkDestroyInstance(VulkanInterface, nullptr);
 }
 
@@ -87,23 +88,6 @@ bool GraphicsAPIManager::FindVulkanRTSupported(VkExtensionProperties* PhysicalDe
 
 bool GraphicsAPIManager::FindRTSupported()
 {
-	//used to count how many of the extensions we need this machine supports
-	char needed_extensions = 0;
-	//sadly extremely ineffective but necessary look up of all the extensions to see if we support raytracing
-	for (uint32_t i = 0; i < vk_extension_count; i++)
-	{
-		if (strcmp(vk_extensions[i].extensionName, "VK_KHR_acceleration_structure") == 0
-			|| strcmp(vk_extensions[i].extensionName, "VK_KHR_ray_tracing_pipeline") == 0
-			|| strcmp(vk_extensions[i].extensionName, "VK_KHR_ray_query") == 0)
-		{
-			if (++needed_extensions >= 3)
-				break;
-		}
-	}
-
-	//finding out if necessary extensions are supported
-	vulkan_rt_supported = needed_extensions >= 3;
-
 	return vulkan_rt_supported || DXR_supported || metal_rt_supported;
 }
 
@@ -111,6 +95,9 @@ bool GraphicsAPIManager::FindRTSupported()
 
 bool GraphicsAPIManager::CreateVulkanInterface()
 {
+	//variable used to gauge if a vulkan call went wrong.
+	VkResult result = VK_SUCCESS;
+
 	//to describe the app to the graphics API (directly taken from Vulkan tutorial)
 	VkApplicationInfo appInfo{};
 	appInfo.sType				= VK_STRUCTURE_TYPE_APPLICATION_INFO;
@@ -145,11 +132,11 @@ bool GraphicsAPIManager::CreateVulkanInterface()
 
 	//get the number of validation layers
 	uint32_t layer_count;
-	vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
+	VK_CALL_PRINT(vkEnumerateInstanceLayerProperties(&layer_count, nullptr))
 
 	//get the validation layers in an array
 	VkLayerProperties* layers = (VkLayerProperties*)malloc(layer_count*sizeof(VkLayerProperties));
-	vkEnumerateInstanceLayerProperties(&layer_count, layers);
+	VK_CALL_PRINT(vkEnumerateInstanceLayerProperties(&layer_count, layers))
 
 	const char* validationLayer[] = { "VK_LAYER_KHRONOS_validation" };
 
@@ -186,9 +173,6 @@ bool GraphicsAPIManager::CreateVulkanInterface()
 		printf("%s.\n", allExtensions[i]);
 	}
 
-	//variable used to gauge if a vulkan call went wrong.
-	VkResult result = VK_SUCCESS;
-
 	//creating the instance
 	VK_CALL_PRINT(vkCreateInstance(&createInfo, nullptr, &VulkanInterface));
 	free(allExtensions);
@@ -204,13 +188,16 @@ bool GraphicsAPIManager::CreateGraphicsInterfaces()
 
 bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 {
+	//variable used to gauge if a vulkan call went wrong.
+	VkResult result = VK_SUCCESS;
+
 	// get the number of physical device
 	uint32_t deviceCount = 0;
-	vkEnumeratePhysicalDevices(VulkanInterface, &deviceCount, nullptr);
+	VK_CALL_PRINT(vkEnumeratePhysicalDevices(VulkanInterface, &deviceCount, nullptr))
 
 	//the list of physical devices currently available for Vulkan
 	VkPhysicalDevice* devices = (VkPhysicalDevice*)malloc(deviceCount * sizeof(VkPhysicalDevice));
-	vkEnumeratePhysicalDevices(VulkanInterface, &deviceCount, devices);
+	VK_CALL_PRINT(vkEnumeratePhysicalDevices(VulkanInterface, &deviceCount, devices))
 
 	//output to console the gpus
 	printf("\nVulkan found %d GPU. Below the available devices :\n",deviceCount);
@@ -223,13 +210,11 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	for (uint32_t i = 0; i < deviceCount; i++)
 	{
 		//the device's properties (name, driver, type etc...)
-		VkPhysicalDeviceProperties2 deviceProperty;
+		VkPhysicalDeviceProperties2 deviceProperty{};
  		deviceProperty.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-		deviceProperty.pNext = nullptr;
 		//the device's features (geometry shader support, raytracing support, etc...)
-		VkPhysicalDeviceFeatures2 deviceFeature;
+		VkPhysicalDeviceFeatures2 deviceFeature{};
 		deviceFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-		deviceFeature.pNext = nullptr;
 
 		//getting the two structs
 		vkGetPhysicalDeviceProperties2(devices[i], &deviceProperty);
@@ -244,11 +229,11 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 
 		//the number of devices extensions 
 		uint32_t deviceExtensionNb = 0;
-		vkEnumerateDeviceExtensionProperties(devices[i], nullptr, &deviceExtensionNb, nullptr);
+		VK_CALL_PRINT(vkEnumerateDeviceExtensionProperties(devices[i], nullptr, &deviceExtensionNb, nullptr))
 
 		//the device's extension properties
 		VkExtensionProperties* GPUExtensions = (VkExtensionProperties*)alloca(sizeof(VkExtensionProperties) * deviceExtensionNb);
-		vkEnumerateDeviceExtensionProperties(devices[i], nullptr, &deviceExtensionNb, GPUExtensions);
+		VK_CALL_PRINT(vkEnumerateDeviceExtensionProperties(devices[i], nullptr, &deviceExtensionNb, GPUExtensions))
 
 		//we have two conditions to choose our GPU: 1 - raytracing support.
 		bool raytracingSupported = FindVulkanRTSupported(GPUExtensions, deviceExtensionNb);
@@ -262,8 +247,32 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 			currentDeviceID = i;
 	}
 
-	//Vulkan Physica Device chosen
-	VulkanPhysicalDevice = devices[currentDeviceID];
+	//vkGetPhysicalDeviceQueueFamilyProperties2(devices[currentDeviceID],)
+
+	//create the queues associated with the device
+	VkDeviceQueueCreateInfo queueCreateInfo{};
+	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+	//queueCreateInfo.queueFamilyIndex = VK_QUEUE_GRAPHICS_BIT;
+	float queuePriorities[2] = { 0.0f, 1.0f };
+	queueCreateInfo.pQueuePriorities = queuePriorities;
+	queueCreateInfo.queueCount = 2;
+
+	//create the device with the proper extension
+	VkDeviceCreateInfo deviceCreateInfo{};
+	deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
+	deviceCreateInfo.queueCreateInfoCount = 1;
+	
+	const char* deviceExtensions[] = { "VK_KHR_acceleration_structure" , "VK_KHR_ray_tracing_pipeline", "VK_KHR_ray_query", "VK_KHR_deferred_host_operations" };
+	if (vulkan_rt_supported)
+	{
+		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
+		deviceCreateInfo.enabledExtensionCount = 4;
+	}
+
+	//Vulkan Physical Device chosen
+
+	VK_CALL_PRINT(vkCreateDevice(devices[currentDeviceID], &deviceCreateInfo, nullptr, &VulkanDevice))
 	
 	free(devices);
 	return true;
@@ -271,10 +280,9 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 
 bool GraphicsAPIManager::CreateHardwareInterfaces()
 {
-
 	CreateVulkanHardwareInterface();
 
-	return VulkanPhysicalDevice != nullptr;
+	return VulkanDevice != nullptr;
 }
 
 

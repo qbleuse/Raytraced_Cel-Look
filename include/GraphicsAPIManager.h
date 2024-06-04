@@ -82,9 +82,9 @@ class GraphicsAPIManager
 		/* Vulkan */
 
 		//The Interface allowing the creation of application wide resources
-		VkInstance VulkanInterface				= VK_NULL_HANDLE;
+		VkInstance VulkanInterface = VK_NULL_HANDLE;
 		//The Interface allowing the creation of hardware resources (usually tied to GPU)
-		VkPhysicalDevice VulkanPhysicalDevice	= VK_NULL_HANDLE;
+		VkDevice VulkanDevice = VK_NULL_HANDLE;
 
 		/**
 		* Initializes the VkInstance inside this class
