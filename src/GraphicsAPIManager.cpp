@@ -238,7 +238,10 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 		//we have two conditions to choose our GPU: 1 - raytracing support.
 		bool raytracingSupported = FindVulkanRTSupported(GPUExtensions, deviceExtensionNb);
 		if (raytracingSupported && !currentRaytracingSupported)
+		{
 			currentDeviceID = i;
+			currentRaytracingSupported = true;
+		}
 
 		// 2 - discrete GPU > everything else.
 		if (raytracingSupported 
@@ -247,12 +250,36 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 			currentDeviceID = i;
 	}
 
-	//vkGetPhysicalDeviceQueueFamilyProperties2(devices[currentDeviceID],)
+	//the number of queue family this GPU is capable of 
+	//(this entails being able to run compute shader, or if the GPU has video decode/encode cores)
+	//Raytracing is considered as a graphic queue, same as rasterizer.
+	uint32_t queueFamilyNb = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties2(devices[currentDeviceID], &queueFamilyNb, nullptr);
+
+	//the queue familty this GPU supports
+	VkQueueFamilyProperties* queueFamilyProperties = (VkQueueFamilyProperties*)alloca(sizeof(VkQueueFamilyProperties)*queueFamilyNb);
+	memset(queueFamilyProperties, 0, sizeof(VkQueueFamilyProperties) * queueFamilyNb);
+	vkGetPhysicalDeviceQueueFamilyProperties(devices[currentDeviceID], &queueFamilyNb, queueFamilyProperties);
+
+	uint32_t wantedQueueIndex = 0;
+
+	for (; wantedQueueIndex <= queueFamilyNb; wantedQueueIndex++)
+	{
+		if (wantedQueueIndex == queueFamilyNb)
+		{
+			queueFamilyNb = 0;
+			break;
+		}
+
+		if (queueFamilyProperties[wantedQueueIndex].queueFlags & 
+			(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT))
+			break;
+	}
 
 	//create the queues associated with the device
 	VkDeviceQueueCreateInfo queueCreateInfo{};
 	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-	//queueCreateInfo.queueFamilyIndex = VK_QUEUE_GRAPHICS_BIT;
+	queueCreateInfo.queueFamilyIndex = queueFamilyNb == 0 ? 0 : wantedQueueIndex;
 	float queuePriorities[2] = { 0.0f, 1.0f };
 	queueCreateInfo.pQueuePriorities = queuePriorities;
 	queueCreateInfo.queueCount = 2;
@@ -271,9 +298,18 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	}
 
 	//Vulkan Physical Device chosen
-
 	VK_CALL_PRINT(vkCreateDevice(devices[currentDeviceID], &deviceCreateInfo, nullptr, &VulkanDevice))
 	
+	//announce what GPU we end up with
+	{
+		VkPhysicalDeviceProperties2 deviceProperty{};
+		deviceProperty.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+
+		vkGetPhysicalDeviceProperties2(devices[currentDeviceID], &deviceProperty);
+
+		printf("Selected %d - %s. Raytracing Supports : %s.\n", currentDeviceID, deviceProperty.properties.deviceName, currentRaytracingSupported ? "true" : "false");
+	}
+
 	free(devices);
 	return true;
 }
