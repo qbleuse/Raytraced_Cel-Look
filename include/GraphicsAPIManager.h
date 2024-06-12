@@ -36,6 +36,13 @@ class GraphicsAPIManager
 		//this will be a C-array that you will be able to go through usin vk_extension_count.
 		struct VkExtensionProperties* vk_extensions = nullptr;
 
+		/**
+		* Finds if raytracing extensions is supported by the Vulkan on the specified Physical Device. 
+		* /!\ this will change the value of the above flags accordingly as if there is a device that handles raytracing, it should be choosed over any other device.
+		* - returns : whether or not raytracing is supported by this physical device.
+		*/
+		bool FindVulkanRTSupported(VkExtensionProperties* PhysicalDeviceExtensionProperties, uint32_t physicalExtensionNb);
+
 		/* DirectX*/
 
 		//whether this machine supports DirectX 12
@@ -74,13 +81,23 @@ class GraphicsAPIManager
 
 		/* Vulkan */
 
-		VkInstance VulkanInterface;
+		//The Interface allowing the creation of application wide resources
+		VkInstance VulkanInterface = VK_NULL_HANDLE;
+		//The Interface allowing the creation of hardware resources (usually tied to GPU)
+		VkDevice VulkanDevice = VK_NULL_HANDLE;
 
 		/**
 		* Initializes the VkInstance inside this class
-		* - returns : wether VkInstanceCreation was a success.
+		* - returns : whether VkInstance creation was a success.
 		*/
 		bool CreateVulkanInterface();
+
+		/**
+		* Initializes the VkPhysicalDevice of this class. This will only choose a single Physical Device, with preferably raytracing support.
+		* Dedicated Graphics are prefered over integrated graphics.
+		* - returns : whether VkPhysicalDevice creation was a success.
+		*/
+		bool CreateVulkanHardwareInterface();
 
 
 		/* Agnostic */
@@ -90,6 +107,14 @@ class GraphicsAPIManager
 		* - returns : whether at least one Interface was successfully created.
 		*/
 		bool CreateGraphicsInterfaces();
+
+		/**
+		* Creates the associated Hardware Interface Object for each Graphics API supported.
+		* This will only choose a single Physical Device per Graphics API, with preferably raytracing support.
+		* Dedicated Graphics are prefered over integrated graphics.
+		* - returns : whether at least one Hardware Interface was successfully created.
+		*/
+		bool CreateHardwareInterfaces();
 
 		/**
 		* Create A GLFWwindow struct for each Graphics API supported and add it to the GLFWwindow array given in parameter.
