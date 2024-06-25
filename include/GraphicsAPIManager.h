@@ -83,6 +83,8 @@ public:
 
 		//The Interface allowing the creation of application wide resources
 		VkInstance VulkanInterface {VK_NULL_HANDLE};
+		//The Interface that represents the chosen GPU
+		VkPhysicalDevice VulkanGPU{ VK_NULL_HANDLE };
 		//The Interface allowing the creation of hardware resources (usually tied to GPU)
 		VkDevice VulkanDevice{ VK_NULL_HANDLE };
 		//The Interface for presenting to screen

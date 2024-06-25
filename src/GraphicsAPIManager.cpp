@@ -271,16 +271,18 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 			currentDeviceID = i;
 	}
 
+	VulkanGPU = devices[currentDeviceID];
+
 	//the number of queue family this GPU is capable of 
 	//(this entails being able to run compute shader, or if the GPU has video decode/encode cores)
 	//Raytracing is considered as a graphic queue, same as rasterizer.
 	uint32_t queueFamilyNb = 0;
-	vkGetPhysicalDeviceQueueFamilyProperties2(devices[currentDeviceID], &queueFamilyNb, nullptr);
+	vkGetPhysicalDeviceQueueFamilyProperties2(VulkanGPU, &queueFamilyNb, nullptr);
 
 	//the queue familty this GPU supports
 	VkQueueFamilyProperties* queueFamilyProperties = (VkQueueFamilyProperties*)alloca(sizeof(VkQueueFamilyProperties)*queueFamilyNb);
 	memset(queueFamilyProperties, 0, sizeof(VkQueueFamilyProperties) * queueFamilyNb);
-	vkGetPhysicalDeviceQueueFamilyProperties(devices[currentDeviceID], &queueFamilyNb, queueFamilyProperties);
+	vkGetPhysicalDeviceQueueFamilyProperties(VulkanGPU, &queueFamilyNb, queueFamilyProperties);
 
 	uint32_t wantedQueueIndex = 0;
 
@@ -319,14 +321,14 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	}
 
 	//Vulkan Physical Device chosen
-	VK_CALL_PRINT(vkCreateDevice(devices[currentDeviceID], &deviceCreateInfo, nullptr, &VulkanDevice))
+	VK_CALL_PRINT(vkCreateDevice(VulkanGPU, &deviceCreateInfo, nullptr, &VulkanDevice))
 	
 	//announce what GPU we end up with
 	{
 		VkPhysicalDeviceProperties2 deviceProperty{};
 		deviceProperty.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
 
-		vkGetPhysicalDeviceProperties2(devices[currentDeviceID], &deviceProperty);
+		vkGetPhysicalDeviceProperties2(VulkanGPU, &deviceProperty);
 
 		printf("Selected %d - %s. Raytracing Supports : %s.\n", currentDeviceID, deviceProperty.properties.deviceName, currentRaytracingSupported ? "true" : "false");
 	}
@@ -338,7 +340,7 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	
 	//getting back the second queue
 	QueueInfo.queueIndex = 1;
-	vkGetDeviceQueue2(VulkanDevice, &QueueInfo, &VulkanQueues[0]);
+	vkGetDeviceQueue2(VulkanDevice, &QueueInfo, &VulkanQueues[1]);
 
 
 	free(devices);
@@ -424,7 +426,7 @@ bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
 	createinfo.sType					= VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 	createinfo.surface					= VulkanSurface;
 	createinfo.minImageCount			= 3;//completely arbitrary
-	createinfo.imageFormat				= VK_FORMAT_R8G8B8A8_UNORM;
+	createinfo.imageFormat				= VK_FORMAT_R8G8B8_UNORM;
 	createinfo.imageColorSpace			= VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
 	createinfo.imageExtent				= VkExtent2D(width, height);
 	createinfo.imageUsage				= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
