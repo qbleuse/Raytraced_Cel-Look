@@ -25,7 +25,9 @@ GraphicsAPIManager::~GraphicsAPIManager()
 	if (vk_extensions)
 		free(vk_extensions);
 
+	vkDestroySwapchainKHR(VulkanDevice, VulkanSwapchain, nullptr);
 	vkDestroyDevice(VulkanDevice, nullptr);
+	vkDestroySurfaceKHR(VulkanInterface, VulkanSurface, nullptr);
 	vkDestroyInstance(VulkanInterface, nullptr);
 }
 
@@ -206,6 +208,7 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	uint32_t currentDeviceID = 0;
 	VkPhysicalDeviceType currentType = VkPhysicalDeviceType::VK_PHYSICAL_DEVICE_TYPE_MAX_ENUM;
 	bool currentRaytracingSupported = false;
+	bool canPresent = true;
 	//we'll sort what GPU we want here
 	for (uint32_t i = 0; i < deviceCount; i++)
 	{
@@ -233,18 +236,36 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 
 		//the device's extension properties
 		VkExtensionProperties* GPUExtensions = (VkExtensionProperties*)alloca(sizeof(VkExtensionProperties) * deviceExtensionNb);
-		VK_CALL_PRINT(vkEnumerateDeviceExtensionProperties(devices[i], nullptr, &deviceExtensionNb, GPUExtensions))
+		VK_CALL_PRINT(vkEnumerateDeviceExtensionProperties(devices[i], nullptr, &deviceExtensionNb, GPUExtensions));
 
-		//we have two conditions to choose our GPU: 1 - raytracing support.
+		//we have two conditions to choose our GPU:
+
+		//1 - can it present to screen ?
+		bool swapchainsupport = false;
+		for (uint32_t i = 0; i < deviceExtensionNb; i++)
+		{
+			if (strcmp(GPUExtensions[i].extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME) == 0)
+			{
+				swapchainsupport = true;
+				if (swapchainsupport && !canPresent)
+				{
+					currentDeviceID = i;
+					canPresent = true;
+				}
+				break;
+			}
+		}
+
+		//2 - raytracing support.
 		bool raytracingSupported = FindVulkanRTSupported(GPUExtensions, deviceExtensionNb);
-		if (raytracingSupported && !currentRaytracingSupported)
+		if (raytracingSupported && !currentRaytracingSupported && swapchainsupport)
 		{
 			currentDeviceID = i;
 			currentRaytracingSupported = true;
 		}
 
-		// 2 - discrete GPU > everything else.
-		if (raytracingSupported 
+		// 3 - discrete GPU > everything else.
+		if (swapchainsupport && raytracingSupported 
 			&& deviceProperty.properties.deviceType == VkPhysicalDeviceType::VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
 			&& currentType != VkPhysicalDeviceType::VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
 			currentDeviceID = i;
@@ -290,11 +311,11 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
 	deviceCreateInfo.queueCreateInfoCount = 1;
 	
-	const char* deviceExtensions[] = { "VK_KHR_acceleration_structure" , "VK_KHR_ray_tracing_pipeline", "VK_KHR_ray_query", "VK_KHR_deferred_host_operations" };
+	const char* deviceExtensions[] = { "VK_KHR_acceleration_structure" , "VK_KHR_ray_tracing_pipeline", "VK_KHR_ray_query", "VK_KHR_deferred_host_operations", VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 	if (vulkan_rt_supported)
 	{
 		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
-		deviceCreateInfo.enabledExtensionCount = 4;
+		deviceCreateInfo.enabledExtensionCount = 5;
 	}
 
 	//Vulkan Physical Device chosen
@@ -310,6 +331,16 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 		printf("Selected %d - %s. Raytracing Supports : %s.\n", currentDeviceID, deviceProperty.properties.deviceName, currentRaytracingSupported ? "true" : "false");
 	}
 
+	//Getting back the first queue
+	VkDeviceQueueInfo2 QueueInfo{};
+	QueueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2;
+	vkGetDeviceQueue2(VulkanDevice, &QueueInfo, &VulkanQueues[0]);
+	
+	//getting back the second queue
+	QueueInfo.queueIndex = 1;
+	vkGetDeviceQueue2(VulkanDevice, &QueueInfo, &VulkanQueues[0]);
+
+
 	free(devices);
 	return true;
 }
@@ -322,7 +353,7 @@ bool GraphicsAPIManager::CreateHardwareInterfaces()
 }
 
 
-bool GraphicsAPIManager::MakeWindows(GLFWwindow** windows)const
+bool GraphicsAPIManager::MakeWindows(GLFWwindow** windows)
 {
 	//the windows we'll return
 	*windows = (GLFWwindow*)_malloca(sizeof(GLFWwindow*)*2);
@@ -345,7 +376,17 @@ bool GraphicsAPIManager::MakeWindows(GLFWwindow** windows)const
 	
 	if (vulkan_supported)
 	{
-		windows[nb_window_init++] = glfwCreateWindow(800, 600, window_name, nullptr, nullptr);
+		VulkanWindow = glfwCreateWindow(800, 600, window_name, nullptr, nullptr);
+
+		VkResult result = VK_SUCCESS;
+		VK_CALL_PRINT(glfwCreateWindowSurface(VulkanInterface, VulkanWindow, nullptr, &VulkanSurface));
+
+		//window creation was successful, let's get surface info so that we'll be able to use it when needing to recreate the framebuffer
+		//in case of resize for example.
+		if (result == VK_SUCCESS)
+		{
+			windows[nb_window_init++] = VulkanWindow;
+		}
 	}
 
 	/* DirectX Support */
@@ -373,5 +414,48 @@ bool GraphicsAPIManager::MakeWindows(GLFWwindow** windows)const
 		windows[nb_window_init++] = glfwCreateWindow(800, 600, window_name, nullptr, nullptr);
 	}
 
-	return windows[0] == nullptr && windows[1] == nullptr;
+	return windows[0] != nullptr || windows[1] != nullptr;
+}
+
+bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
+{
+	//creating the swap chain
+	VkSwapchainCreateInfoKHR createinfo{};
+	createinfo.sType					= VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	createinfo.surface					= VulkanSurface;
+	createinfo.minImageCount			= 3;//completely arbitrary
+	createinfo.imageFormat				= VK_FORMAT_R8G8B8A8_UNORM;
+	createinfo.imageColorSpace			= VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+	createinfo.imageExtent				= VkExtent2D(width, height);
+	createinfo.imageUsage				= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	createinfo.queueFamilyIndexCount	= 0;
+	createinfo.imageArrayLayers			= 1;
+	createinfo.compositeAlpha			= VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+	createinfo.imageSharingMode			= VK_SHARING_MODE_EXCLUSIVE;
+	createinfo.clipped					= VK_TRUE;
+	createinfo.presentMode				= VK_PRESENT_MODE_FIFO_KHR;//for now v_sync
+	createinfo.oldSwapchain				= VulkanSwapchain == VK_NULL_HANDLE ? nullptr : VulkanSwapchain;
+	createinfo.preTransform				= VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+
+	//to know if we succeeded
+	VkResult result = VK_SUCCESS;
+
+	//creating the swapchain
+	VkSwapchainKHR tempSwapchain{};
+	VK_CALL_PRINT(vkCreateSwapchainKHR(VulkanDevice, &createinfo, nullptr, &tempSwapchain))
+
+	//save if we need to change it afterwards
+	VulkanSwapchain = tempSwapchain;
+
+	return result == VK_SUCCESS;
+}
+
+bool GraphicsAPIManager::MakeSwapChain(GLFWwindow* toAssociateWindow, int32_t width, int32_t height)
+{
+	/* Vulkan Support */
+
+
+	if (toAssociateWindow == VulkanWindow)
+		return CreateVulkanSwapChain(width, height);
+
 }

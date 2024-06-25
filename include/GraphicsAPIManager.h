@@ -13,7 +13,7 @@ class GraphicsAPIManager
 {
 #pragma region Graphics API Manager
 	/*===== GRAPHICS API MANAGER =====*/
-	public:
+public:
 
 	~GraphicsAPIManager();
 
@@ -22,7 +22,7 @@ class GraphicsAPIManager
 
 #pragma region Graphics API Support
 	/*===== GRAPHICS API SUPPORT =====*/
-	public:
+public:
 
 		/* Vulkan */
 
@@ -35,56 +35,62 @@ class GraphicsAPIManager
 		//the vulkan is supported, the array of extension supported by the current machine.
 		//this will be a C-array that you will be able to go through usin vk_extension_count.
 		struct VkExtensionProperties* vk_extensions = nullptr;
-
+		
 		/**
-		* Finds if raytracing extensions is supported by the Vulkan on the specified Physical Device. 
+		* Finds if raytracing extensions is supported by the Vulkan on the specified Physical Device.
 		* /!\ this will change the value of the above flags accordingly as if there is a device that handles raytracing, it should be choosed over any other device.
 		* - returns : whether or not raytracing is supported by this physical device.
 		*/
 		bool FindVulkanRTSupported(VkExtensionProperties* PhysicalDeviceExtensionProperties, uint32_t physicalExtensionNb);
-
+		
 		/* DirectX*/
-
+		
 		//whether this machine supports DirectX 12
 		bool DX12_supported = false;
 		//whether this machine supports hardware accelerated Raytracing through DirectX Raytracing
 		bool DXR_supported = false;
-
+		
 		/* Metal */
-
+		
 		//whether this machine supports Metal
 		bool metal_supported = false;
 		//whether this machine supports hardware accelerated Raytracing through Metal Raytracing 
 		//(for this at least a M3 machine would be necessary so not sure if this will really be implemented or not)
 		bool metal_rt_supported = false;
-
+		
 		/* Agnostic */
-
+		
 		/**
 		* Find which Graphics API is supported by the machine. will change the value of the above flags accordingly to be used freely outside this class.
 		* - returns : whether or not at least one graphics API is supported.
 		*/
 		bool FindAPISupported();
-
+		
 		/**
 		* Finds if raytracing extensions is supported by the Graphics API on the machine. will change the value of the above flags accordingly to be used freely outside this class.
 		* - returns : whether or not at least one graphics API is supported.
 		*/
 		bool FindRTSupported();
 
-		/*===== END GRAPHICS API SUPPORT =====*/
+	/*===== END GRAPHICS API SUPPORT =====*/
 #pragma endregion
 
 #pragma region Graphics API Window and Device
 	/*===== GRAPHICS API WINDOW AND DEVICE =====*/
-	public:
+public:
 
 		/* Vulkan */
 
 		//The Interface allowing the creation of application wide resources
-		VkInstance VulkanInterface = VK_NULL_HANDLE;
+		VkInstance VulkanInterface {VK_NULL_HANDLE};
 		//The Interface allowing the creation of hardware resources (usually tied to GPU)
-		VkDevice VulkanDevice = VK_NULL_HANDLE;
+		VkDevice VulkanDevice{ VK_NULL_HANDLE };
+		//The Interface for presenting to screen
+		VkSurfaceKHR VulkanSurface{VK_NULL_HANDLE};
+		//The Interface to control the swap chain
+		VkSwapchainKHR VulkanSwapchain{ VK_NULL_HANDLE };
+		//The window linked to Vulkan
+		struct GLFWwindow* VulkanWindow{nullptr};
 
 		/**
 		* Initializes the VkInstance inside this class
@@ -98,6 +104,13 @@ class GraphicsAPIManager
 		* - returns : whether VkPhysicalDevice creation was a success.
 		*/
 		bool CreateVulkanHardwareInterface();
+
+		/**
+		* Creates or recreates the VkSwapchainKHR of this class, using VulkanSurface.
+		* This shoulbe use only after windows are created, as this need a surface.
+		* - returns : whether Swapchain creation succeeded
+		*/
+		bool CreateVulkanSwapChain(int32_t width, int32_t height);
 
 
 		/* Agnostic */
@@ -122,10 +135,32 @@ class GraphicsAPIManager
 		* - returns : whether at least one window was successfully created.
 		*
 		*/
-		bool MakeWindows(struct GLFWwindow**)const;
+		bool MakeWindows(struct GLFWwindow**);
+
+		/**
+		* Creates or recreates a swapchain associated with the window given in parameter.
+		* - returns : whether at least one window was successfully created.
+		*
+		*/
+		bool MakeSwapChain(struct GLFWwindow* toAssociateWindow, int32_t width, int32_t height);
 
 
 	/*===== END GRAPHICS API WINDOW AND DEVICE  =====*/
+#pragma endregion
+
+
+#pragma region Graphics API Queue And CommandLists
+/*===== GRAPHICS API WINDOW AND DEVICE =====*/
+	public:
+
+		/* Vulkan */
+
+		//The Interface allowing the creation of Command to the chosen physical device
+		VkQueue VulkanQueues[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
+
+
+
+		/*===== END GRAPHICS API QUEUE AND Command Lists=====*/
 #pragma endregion
 
 };

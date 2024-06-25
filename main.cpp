@@ -52,7 +52,30 @@ int main()
 
 		//let the Graphics API create the windows if they're able to
  		GLFWwindow* windows[2] = {nullptr, nullptr};
-		GAPI.MakeWindows(windows);
+		if (!GAPI.MakeWindows(windows))
+		{
+			printf("Graphics API Manager Error: We were not able to the windows associated with the supported Graphics API.\n");
+			return 1;
+		}
+
+		//the width and height of the windows
+		int32_t width[2], height[2] = { 0, 0};
+		glfwGetFramebufferSize(windows[0], &width[0], &height[0]);
+		if (windows[1] != nullptr)
+			glfwGetFramebufferSize(windows[1], &width[1], &height[1]);
+
+		if (!GAPI.MakeSwapChain(windows[0], width[0], height[0]))
+		{
+			printf("Graphics API Manager Error: We were not able to create a swapchain associated with the first window.\n");
+			return 1;
+		}
+
+		if (windows[1] != nullptr && !GAPI.MakeSwapChain(windows[1], width[1], height[1]))
+		{
+			printf("Graphics API Manager Error: We were not able to create a swapchain associated with the second window.\n");
+			return 1;
+		}
+
 
 		while (!glfwWindowShouldClose(windows[0]))
 		{
