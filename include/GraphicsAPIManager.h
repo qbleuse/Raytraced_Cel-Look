@@ -91,6 +91,7 @@ public:
 		VkSurfaceKHR VulkanSurface{VK_NULL_HANDLE};
 		//The Interface to control the swap chain
 		VkSwapchainKHR VulkanSwapchain{ VK_NULL_HANDLE };
+		VkSurfaceFormatKHR VulkanSurfaceFormat{};
 		//The window linked to Vulkan
 		struct GLFWwindow* VulkanWindow{nullptr};
 
@@ -159,6 +160,7 @@ public:
 
 		//The Interface allowing the creation of Command to the chosen physical device
 		VkQueue VulkanQueues[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
+		uint32_t VulkanQueueFamily{ 0 };
 
 
 

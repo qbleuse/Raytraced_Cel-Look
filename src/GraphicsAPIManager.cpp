@@ -25,7 +25,7 @@ GraphicsAPIManager::~GraphicsAPIManager()
 	if (vk_extensions)
 		free(vk_extensions);
 
-	vkDestroySwapchainKHR(VulkanDevice, VulkanSwapchain, nullptr);
+	//vkDestroySwapchainKHR(VulkanDevice, VulkanSwapchain, nullptr);
 	vkDestroyDevice(VulkanDevice, nullptr);
 	vkDestroySurfaceKHR(VulkanInterface, VulkanSurface, nullptr);
 	vkDestroyInstance(VulkanInterface, nullptr);
@@ -284,17 +284,15 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	memset(queueFamilyProperties, 0, sizeof(VkQueueFamilyProperties) * queueFamilyNb);
 	vkGetPhysicalDeviceQueueFamilyProperties(VulkanGPU, &queueFamilyNb, queueFamilyProperties);
 
-	uint32_t wantedQueueIndex = 0;
-
-	for (; wantedQueueIndex <= queueFamilyNb; wantedQueueIndex++)
+	for (; VulkanQueueFamily <= queueFamilyNb; VulkanQueueFamily++)
 	{
-		if (wantedQueueIndex == queueFamilyNb)
+		if (VulkanQueueFamily == queueFamilyNb)
 		{
 			queueFamilyNb = 0;
 			break;
 		}
 
-		if (queueFamilyProperties[wantedQueueIndex].queueFlags & 
+		if (queueFamilyProperties[VulkanQueueFamily].queueFlags &
 			(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT))
 			break;
 	}
@@ -302,7 +300,7 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	//create the queues associated with the device
 	VkDeviceQueueCreateInfo queueCreateInfo{};
 	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-	queueCreateInfo.queueFamilyIndex = queueFamilyNb == 0 ? 0 : wantedQueueIndex;
+	queueCreateInfo.queueFamilyIndex = VulkanQueueFamily = queueFamilyNb == 0 ? 0 : VulkanQueueFamily;
 	float queuePriorities[2] = { 0.0f, 1.0f };
 	queueCreateInfo.pQueuePriorities = queuePriorities;
 	queueCreateInfo.queueCount = 2;
@@ -378,10 +376,25 @@ bool GraphicsAPIManager::MakeWindows(GLFWwindow** windows)
 	
 	if (vulkan_supported)
 	{
-		VulkanWindow = glfwCreateWindow(800, 600, window_name, nullptr, nullptr);
+		VulkanWindow = glfwCreateWindow(1080, 600, window_name, nullptr, nullptr);
 
 		VkResult result = VK_SUCCESS;
 		VK_CALL_PRINT(glfwCreateWindowSurface(VulkanInterface, VulkanWindow, nullptr, &VulkanSurface));
+
+		uint32_t formatCount{0};
+		vkGetPhysicalDeviceSurfaceFormatsKHR(VulkanGPU, VulkanSurface, &formatCount, nullptr);
+
+		VkSurfaceFormatKHR* formats = (VkSurfaceFormatKHR*)alloca(sizeof(VkSurfaceFormatKHR) * formatCount);
+		vkGetPhysicalDeviceSurfaceFormatsKHR(VulkanGPU, VulkanSurface, &formatCount, formats);
+		for (uint32_t i = 0; i < formatCount; i++)
+		{
+			if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB || formats[i].format == VK_FORMAT_R8G8B8_UNORM)
+			{
+				VulkanSurfaceFormat = formats[i];
+				break;
+			}
+		}
+
 
 		//window creation was successful, let's get surface info so that we'll be able to use it when needing to recreate the framebuffer
 		//in case of resize for example.
@@ -426,8 +439,8 @@ bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
 	createinfo.sType					= VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 	createinfo.surface					= VulkanSurface;
 	createinfo.minImageCount			= 3;//completely arbitrary
-	createinfo.imageFormat				= VK_FORMAT_R8G8B8_UNORM;
-	createinfo.imageColorSpace			= VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+	createinfo.imageFormat				= VulkanSurfaceFormat.format;
+	createinfo.imageColorSpace			= VulkanSurfaceFormat.colorSpace;
 	createinfo.imageExtent				= VkExtent2D(width, height);
 	createinfo.imageUsage				= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 	createinfo.queueFamilyIndexCount	= 0;
