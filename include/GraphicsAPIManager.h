@@ -91,7 +91,17 @@ public:
 		VkSurfaceKHR VulkanSurface{VK_NULL_HANDLE};
 		//The Interface to control the swap chain
 		VkSwapchainKHR VulkanSwapchain{ VK_NULL_HANDLE };
+		//The chosen format of the framebuffers
 		VkSurfaceFormatKHR VulkanSurfaceFormat{};
+		
+		//The actual frames of the swapchain. this is an array containing a number of VkImage (with a minimum of 3)
+		VkImage* VulkanFrames{ nullptr };
+		//The actual frames buffers of the swapchain. this is an array containing a number of VkImageViews equal to the number of frames.
+		//This is the interface that will allow us to write into the actual frames we want to present to the screen.
+		VkImageView* VulkanFrameColourBuffers{ nullptr };
+		//The nb of actual Vulkan framebuffers in the Vulkan swapchain at any given time (this can change between hardware)
+		uint32_t NbVulkanFrames{ 0 };
+
 		//The window linked to Vulkan
 		struct GLFWwindow* VulkanWindow{nullptr};
 

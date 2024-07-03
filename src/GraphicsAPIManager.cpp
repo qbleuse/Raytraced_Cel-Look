@@ -25,6 +25,17 @@ GraphicsAPIManager::~GraphicsAPIManager()
 	if (vk_extensions)
 		free(vk_extensions);
 
+	//destroying old frames array (theoretically, the if is useless as free(nullptr) does nothing, but it apparently crashes on some OS)
+	if (VulkanFrames)
+		free(VulkanFrames);
+	//destroying old framesbuffers associated with frames
+	if (VulkanFrameColourBuffers)
+	{
+		for (uint32_t i = 0; i < NbVulkanFrames; i++)
+			vkDestroyImageView(VulkanDevice, VulkanFrameColourBuffers[i], nullptr);
+		free(VulkanFrameColourBuffers);
+	}
+
 	//vkDestroySwapchainKHR(VulkanDevice, VulkanSwapchain, nullptr);
 	vkDestroyDevice(VulkanDevice, nullptr);
 	vkDestroySurfaceKHR(VulkanInterface, VulkanSurface, nullptr);
@@ -311,11 +322,15 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
 	deviceCreateInfo.queueCreateInfoCount = 1;
 	
-	const char* deviceExtensions[] = { "VK_KHR_acceleration_structure" , "VK_KHR_ray_tracing_pipeline", "VK_KHR_ray_query", "VK_KHR_deferred_host_operations", VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+	const char* deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_acceleration_structure" , "VK_KHR_ray_tracing_pipeline", "VK_KHR_ray_query", "VK_KHR_deferred_host_operations" };
+	deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
 	if (vulkan_rt_supported)
 	{
-		deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
 		deviceCreateInfo.enabledExtensionCount = 5;
+	}
+	else
+	{
+		deviceCreateInfo.enabledExtensionCount = 1;
 	}
 
 	//Vulkan Physical Device chosen
@@ -388,7 +403,7 @@ bool GraphicsAPIManager::MakeWindows(GLFWwindow** windows)
 		vkGetPhysicalDeviceSurfaceFormatsKHR(VulkanGPU, VulkanSurface, &formatCount, formats);
 		for (uint32_t i = 0; i < formatCount; i++)
 		{
-			if (formats[i].format == VK_FORMAT_B8G8R8A8_SRGB || formats[i].format == VK_FORMAT_R8G8B8_UNORM)
+			if (formats[i].format == VK_FORMAT_R8G8B8A8_SRGB || formats[i].format == VK_FORMAT_R8G8B8_UNORM)
 			{
 				VulkanSurfaceFormat = formats[i];
 				break;
@@ -434,11 +449,17 @@ bool GraphicsAPIManager::MakeWindows(GLFWwindow** windows)
 
 bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
 {
+	//the struct allowing us to know the display capabilities of our hardware
+	VkSurfaceCapabilitiesKHR SurfaceCapabilities{};
+
+	//gettting back our display capabilities
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VulkanGPU, VulkanSurface, &SurfaceCapabilities);
+
 	//creating the swap chain
 	VkSwapchainCreateInfoKHR createinfo{};
 	createinfo.sType					= VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 	createinfo.surface					= VulkanSurface;
-	createinfo.minImageCount			= 3;//completely arbitrary
+	createinfo.minImageCount			= SurfaceCapabilities.maxImageCount;
 	createinfo.imageFormat				= VulkanSurfaceFormat.format;
 	createinfo.imageColorSpace			= VulkanSurfaceFormat.colorSpace;
 	createinfo.imageExtent				= VkExtent2D(width, height);
@@ -461,6 +482,45 @@ bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
 
 	//save if we need to change it afterwards
 	VulkanSwapchain = tempSwapchain;
+
+	//destroying old frames array (theoretically, the if is useless as free(nullptr) does nothing, but it apparently crashes on some OS)
+	if (VulkanFrames)
+		free(VulkanFrames);
+	//destroying old framesbuffers associated with frames
+	if (VulkanFrameColourBuffers)
+	{
+		for (uint32_t i = 0; i < NbVulkanFrames; i++)
+			vkDestroyImageView(VulkanDevice, VulkanFrameColourBuffers[i], nullptr);
+		free(VulkanFrameColourBuffers);
+	}
+
+	//get back the number of frames the swapchain was able to create
+	VK_CALL_PRINT(vkGetSwapchainImagesKHR(VulkanDevice, VulkanSwapchain, &NbVulkanFrames, nullptr));
+	VulkanFrames = (VkImage*)malloc(sizeof(VkImage) * NbVulkanFrames);
+	// get back the actual frames
+	VK_CALL_PRINT(vkGetSwapchainImagesKHR(VulkanDevice, VulkanSwapchain, &NbVulkanFrames, VulkanFrames));
+
+	//recreate the array of framebuffers associated with the swapchain's frames.
+	VulkanFrameColourBuffers = (VkImageView*)malloc(sizeof(VkImageView) * NbVulkanFrames);
+	
+	//describe the ImageView (FrameBuffers) associated with the Frames of the swap chain we want to create
+	VkImageViewCreateInfo frameBufferInfo{};
+	frameBufferInfo.sType						= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	frameBufferInfo.components					= { VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY };
+	frameBufferInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	frameBufferInfo.viewType						= VK_IMAGE_VIEW_TYPE_2D;
+	frameBufferInfo.format							= VulkanSurfaceFormat.format;
+	frameBufferInfo.subresourceRange.baseMipLevel	= 0;
+	frameBufferInfo.subresourceRange.levelCount		= 1;
+	frameBufferInfo.subresourceRange.baseArrayLayer = 0;
+	frameBufferInfo.subresourceRange.layerCount		= 1;
+
+	for (uint32_t i = 0; i < NbVulkanFrames; i++)
+	{
+		frameBufferInfo.image = VulkanFrames[i];
+		VK_CALL_PRINT(vkCreateImageView(VulkanDevice, &frameBufferInfo, nullptr, &VulkanFrameColourBuffers[i]));
+	}
+
 
 	return result == VK_SUCCESS;
 }

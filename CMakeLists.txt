@@ -1,7 +1,7 @@
 ﻿# CMakeList.txt : CMake project for VulkanLearning, include source and define
 # project specific logic here.
 #
-cmake_minimum_required (VERSION 3.21)
+cmake_minimum_required (VERSION 3.24)
 
 # Enable Hot Reload for MSVC compilers if supported.
 if (POLICY CMP0141)
@@ -30,10 +30,12 @@ endif()
 add_subdirectory(${SRC_DIR})
 add_subdirectory(${DEPS_DIR})
 
-find_package(Vulkan REQUIRED)
+find_package(Vulkan REQUIRED COMPONENTS shaderc_combined)
 
 # Add libraries
 target_link_libraries(VulkanLearning PUBLIC "Vulkan::Vulkan")
+target_link_libraries(VulkanLearning PUBLIC "Vulkan::shaderc_combined")
+
 
 # Copy Dll
 add_custom_command(TARGET VulkanLearning POST_BUILD

@@ -10,6 +10,7 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
+#include "shaderc/shaderc.h"
 
 //Graphics API include
 #include "GraphicsAPIManager.h"
@@ -76,9 +77,10 @@ void InitImGuiVulkan(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResourc
 
 	//set Surface
 	ImGuiResource.ImGuiWindow.Surface = GAPI.VulkanSurface;
+	ImGuiResource.ImGuiWindow.Swapchain = GAPI.VulkanSwapchain;
 
 	//create ImGui FrameBuffer
-	ImGui_ImplVulkanH_CreateOrResizeWindow(GAPI.VulkanInterface, GAPI.VulkanGPU, GAPI.VulkanDevice, &ImGuiResource.ImGuiWindow, GAPI.VulkanQueueFamily, nullptr, width, height, 3);
+	ImGui_ImplVulkanH_CreateOrResizeWindow(GAPI.VulkanInterface, GAPI.VulkanGPU, GAPI.VulkanDevice, &ImGuiResource.ImGuiWindow, GAPI.VulkanQueueFamily, nullptr, width, height, GAPI.NbVulkanFrames);
 
 	ImGui_ImplGlfw_InitForVulkan(GAPI.VulkanWindow, true);
 	ImGui_ImplVulkan_InitInfo init_info = {};
@@ -92,7 +94,7 @@ void InitImGuiVulkan(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResourc
 	init_info.RenderPass		= ImGuiResource.ImGuiWindow.RenderPass;
 	init_info.Subpass			= 0;
 	init_info.MinImageCount		= 3;
-	init_info.ImageCount		= 3;
+	init_info.ImageCount		= GAPI.NbVulkanFrames;
 	init_info.MSAASamples		= VK_SAMPLE_COUNT_1_BIT;
 	init_info.Allocator			= nullptr;
 	init_info.CheckVkResultFn	= nullptr;
@@ -108,7 +110,7 @@ void FrameRender(const GraphicsAPIManager& GAPI, ImGuiResource& imgui, ImDrawDat
 
 	VkSemaphore image_acquired_semaphore = imgui.ImGuiWindow.FrameSemaphores[imgui.ImGuiWindow.SemaphoreIndex].ImageAcquiredSemaphore;
 	VkSemaphore render_complete_semaphore = imgui.ImGuiWindow.FrameSemaphores[imgui.ImGuiWindow.SemaphoreIndex].RenderCompleteSemaphore;
-	err = vkAcquireNextImageKHR(GAPI.VulkanDevice, GAPI.VulkanSwapchain, UINT64_MAX, image_acquired_semaphore, VK_NULL_HANDLE, &imgui.ImGuiWindow.FrameIndex);
+	err = vkAcquireNextImageKHR(GAPI.VulkanDevice, imgui.ImGuiWindow.Swapchain, UINT64_MAX, image_acquired_semaphore, VK_NULL_HANDLE, &imgui.ImGuiWindow.FrameIndex);
 	if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR)
 	{
 		imgui.SwapChainRebuild = true;
@@ -278,7 +280,7 @@ int main()
 						//GAPI.MakeSwapChain(windows[i], fb_width, fb_height);
 
 						ImGui_ImplVulkan_SetMinImageCount(3);
-						ImGui_ImplVulkanH_CreateOrResizeWindow(GAPI.VulkanInterface, GAPI.VulkanGPU, GAPI.VulkanDevice, &imguiResource.ImGuiWindow, GAPI.VulkanQueueFamily, nullptr, fb_width, fb_height, 3);
+						ImGui_ImplVulkanH_CreateOrResizeWindow(GAPI.VulkanInterface, GAPI.VulkanGPU, GAPI.VulkanDevice, &imguiResource.ImGuiWindow, GAPI.VulkanQueueFamily, nullptr, fb_width, fb_height, GAPI.NbVulkanFrames);
 						imguiResource.ImGuiWindow.FrameIndex = 0;
 						imguiResource.SwapChainRebuild = false;
 					}
