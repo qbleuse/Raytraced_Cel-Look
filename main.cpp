@@ -10,10 +10,13 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
-#include "shaderc/shaderc.h"
 
 //Graphics API include
 #include "GraphicsAPIManager.h"
+
+//app include
+#include "AppWideContext.h"
+#include "Scene.h"
 
 #include <cstdio>
 
@@ -87,7 +90,7 @@ void InitImGuiVulkan(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResourc
 	init_info.Instance			= GAPI.VulkanInterface;
 	init_info.PhysicalDevice	= GAPI.VulkanGPU;
 	init_info.Device			= GAPI.VulkanDevice;
-	init_info.QueueFamily		= 0;
+	init_info.QueueFamily		= GAPI.VulkanQueueFamily;
 	init_info.Queue				= GAPI.VulkanQueues[1];
 	init_info.PipelineCache		= VK_NULL_HANDLE;
 	init_info.DescriptorPool	= ImGuiResource.ImGuiDescriptorPool;
@@ -260,6 +263,9 @@ int main()
 		//resources for main loop
 		bool show_demo_window = true;
 		ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+
+		AppWideContext AppContext;
+		AppContext.ImContext = ImGui::GetIO();
 
 		while (!glfwWindowShouldClose(windows[0]))
 		{

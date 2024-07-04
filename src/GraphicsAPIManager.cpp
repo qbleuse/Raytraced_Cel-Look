@@ -3,16 +3,6 @@
 //glfw include
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-
-//vulkan include
-#include <vulkan/vk_enum_string_helper.h>
-
-#define VK_CALL_PRINT(vk_call)\
-	result = vk_call;\
-	if (result != VK_SUCCESS)\
-	{\
-		printf("Vulkan call error : %s ; result : %s .\n", #vk_call, string_VkResult(result));\
-	}\
 	
 //printf include
 #include <cstdio>

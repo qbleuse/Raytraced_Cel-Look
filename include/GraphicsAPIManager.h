@@ -2,7 +2,8 @@
 #define __GRAPHICSAPIMANAGER_H__
 
 #include <cstdint>
-#include <vulkan/vulkan.h>
+
+#include "ConcatenatedVulkan.h"
 
 /**
 * class that manages what Graphics API this machine supports, and initialize the associated resources.
