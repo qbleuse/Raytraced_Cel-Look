@@ -20,6 +20,11 @@ private:
 
 	/* Vulkan */
 
+	//the viewport of this scene (can change at runtime, as window can be resized)
+	VkViewport triangleViewport{};
+	VkRenderPass triangleRenderPass{};
+	VkPipeline trianglePipeline{};
+
 	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
 	void PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
 
