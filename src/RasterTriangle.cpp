@@ -178,8 +178,31 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	VkResult result = VK_SUCCESS;
 	VK_CALL_PRINT(vkCreateRenderPass(GAPI.VulkanDevice, &renderPassInfo, nullptr, &triangleRenderPass));
 
+	//finally creating our pipeline
+	VkGraphicsPipelineCreateInfo pipelineInfo{};
+	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 
+	//putting our two shader stages 
+	VkPipelineShaderStageCreateInfo stages[2] = {vertShaderStageInfo, fragShaderStageInfo};
+	pipelineInfo.pStages	= stages;
+	pipelineInfo.stageCount = 2;
 
+	//fill up the pipeline description
+	pipelineInfo.pVertexInputState		= &vertexInputInfo;
+	pipelineInfo.pInputAssemblyState	= &inputAssembly;
+	pipelineInfo.pViewportState			= &viewportStateInfo;
+	pipelineInfo.pRasterizationState	= &rasterizer;
+	pipelineInfo.pMultisampleState		= &multisampling;
+	pipelineInfo.pDepthStencilState		= nullptr; // Optional
+	pipelineInfo.pColorBlendState		= &colorBlending;
+	pipelineInfo.pDynamicState			= &dynamicStateInfo;
+	pipelineInfo.layout					= nullptr;
+	pipelineInfo.renderPass				= triangleRenderPass;
+	pipelineInfo.subpass				= 0;
+	pipelineInfo.basePipelineHandle		= VK_NULL_HANDLE;
+	pipelineInfo.basePipelineIndex		= -1;
+
+	VK_CALL_PRINT(vkCreateGraphicsPipelines(GAPI.VulkanDevice, nullptr, 1, &pipelineInfo, nullptr, &trianglePipeline));
 	
 	vkDestroyShaderModule(GAPI.VulkanDevice, FragmentShader, nullptr);
 	vkDestroyShaderModule(GAPI.VulkanDevice, VertexShader, nullptr);

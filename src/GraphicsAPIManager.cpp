@@ -393,7 +393,7 @@ bool GraphicsAPIManager::MakeWindows(GLFWwindow** windows)
 		vkGetPhysicalDeviceSurfaceFormatsKHR(VulkanGPU, VulkanSurface, &formatCount, formats);
 		for (uint32_t i = 0; i < formatCount; i++)
 		{
-			if (formats[i].format == VK_FORMAT_R8G8B8A8_SRGB || formats[i].format == VK_FORMAT_R8G8B8_UNORM)
+			if (formats[i].format == VK_FORMAT_R8G8B8A8_SRGB || formats[i].format == VK_FORMAT_B8G8R8A8_SRGB)
 			{
 				VulkanSurfaceFormat = formats[i];
 				break;
@@ -454,7 +454,7 @@ bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
 	createinfo.imageColorSpace			= VulkanSurfaceFormat.colorSpace;
 	createinfo.imageExtent				= VkExtent2D(width, height);
 	createinfo.imageUsage				= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-	createinfo.queueFamilyIndexCount	= 0;
+	createinfo.queueFamilyIndexCount	= VulkanQueueFamily;
 	createinfo.imageArrayLayers			= 1;
 	createinfo.compositeAlpha			= VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	createinfo.imageSharingMode			= VK_SHARING_MODE_EXCLUSIVE;
