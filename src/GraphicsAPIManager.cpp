@@ -16,14 +16,43 @@ GraphicsAPIManager::~GraphicsAPIManager()
 		free(vk_extensions);
 
 	//destroying old frames array (theoretically, the if is useless as free(nullptr) does nothing, but it apparently crashes on some OS)
-	if (VulkanFrames)
-		free(VulkanFrames);
-	//destroying old framesbuffers associated with frames
-	if (VulkanFrameColourBuffers)
+	if (VulkanBackBuffers)
+		free(VulkanBackBuffers);
+
+	//destroy command pools
+	if (VulkanCommandPool[0])
+		vkDestroyCommandPool(VulkanDevice, VulkanCommandPool[0], nullptr);
+	if (VulkanCommandPool[1])
+		vkDestroyCommandPool(VulkanDevice, VulkanCommandPool[1], nullptr);
+
+	//destroy semaphores
+	if (VulkanCanPresentSemaphore)
 	{
 		for (uint32_t i = 0; i < NbVulkanFrames; i++)
-			vkDestroyImageView(VulkanDevice, VulkanFrameColourBuffers[i], nullptr);
-		free(VulkanFrameColourBuffers);
+			vkDestroySemaphore(VulkanDevice, VulkanCanPresentSemaphore[i], nullptr);
+		free(VulkanCanPresentSemaphore);
+	}
+	if (VulkanHasPresentedSemaphore)
+	{
+		for (uint32_t i = 0; i < NbVulkanFrames; i++)
+			vkDestroySemaphore(VulkanDevice, VulkanHasPresentedSemaphore[i], nullptr);
+		free(VulkanHasPresentedSemaphore);
+	}
+
+	//destroy Fence
+	if (VulkanIsDrawingFence)
+	{
+		for (uint32_t i = 0; i < NbVulkanFrames; i++)
+			vkDestroyFence(VulkanDevice, VulkanIsDrawingFence[i], nullptr);
+		free(VulkanIsDrawingFence);
+	}
+
+	//destroying old framesbuffers associated with frames
+	if (VulkanBackColourBuffers)
+	{
+		for (uint32_t i = 0; i < NbVulkanFrames; i++)
+			vkDestroyImageView(VulkanDevice, VulkanBackColourBuffers[i], nullptr);
+		free(VulkanBackColourBuffers);
 	}
 
 	//vkDestroySwapchainKHR(VulkanDevice, VulkanSwapchain, nullptr);
@@ -345,6 +374,19 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	QueueInfo.queueIndex = 1;
 	vkGetDeviceQueue2(VulkanDevice, &QueueInfo, &VulkanQueues[1]);
 
+	{
+		//create command pool objects
+		VkCommandPoolCreateInfo poolInfo{};
+		poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		poolInfo.queueFamilyIndex = VulkanQueueFamily;
+
+		//making the first command pool
+		VK_CALL_PRINT(vkCreateCommandPool(VulkanDevice, &poolInfo, nullptr, &VulkanCommandPool[0]));
+		//making the second command pool
+		VK_CALL_PRINT(vkCreateCommandPool(VulkanDevice, &poolInfo, nullptr, &VulkanCommandPool[1]));
+	}
+	
 
 	free(devices);
 	return true;
@@ -474,24 +516,24 @@ bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
 	VulkanSwapchain = tempSwapchain;
 
 	//destroying old frames array (theoretically, the if is useless as free(nullptr) does nothing, but it apparently crashes on some OS)
-	if (VulkanFrames)
-		free(VulkanFrames);
+	if (VulkanBackBuffers)
+		free(VulkanBackBuffers);
 	//destroying old framesbuffers associated with frames
-	if (VulkanFrameColourBuffers)
+	if (VulkanBackColourBuffers)
 	{
 		for (uint32_t i = 0; i < NbVulkanFrames; i++)
-			vkDestroyImageView(VulkanDevice, VulkanFrameColourBuffers[i], nullptr);
-		free(VulkanFrameColourBuffers);
+			vkDestroyImageView(VulkanDevice, VulkanBackColourBuffers[i], nullptr);
+		free(VulkanBackColourBuffers);
 	}
 
 	//get back the number of frames the swapchain was able to create
 	VK_CALL_PRINT(vkGetSwapchainImagesKHR(VulkanDevice, VulkanSwapchain, &NbVulkanFrames, nullptr));
-	VulkanFrames = (VkImage*)malloc(sizeof(VkImage) * NbVulkanFrames);
+	VulkanBackBuffers = (VkImage*)malloc(sizeof(VkImage) * NbVulkanFrames);
 	// get back the actual frames
-	VK_CALL_PRINT(vkGetSwapchainImagesKHR(VulkanDevice, VulkanSwapchain, &NbVulkanFrames, VulkanFrames));
+	VK_CALL_PRINT(vkGetSwapchainImagesKHR(VulkanDevice, VulkanSwapchain, &NbVulkanFrames, VulkanBackBuffers));
 
 	//recreate the array of framebuffers associated with the swapchain's frames.
-	VulkanFrameColourBuffers = (VkImageView*)malloc(sizeof(VkImageView) * NbVulkanFrames);
+	VulkanBackColourBuffers = (VkImageView*)malloc(sizeof(VkImageView) * NbVulkanFrames);
 	
 	//describe the ImageView (FrameBuffers) associated with the Frames of the swap chain we want to create
 	VkImageViewCreateInfo frameBufferInfo{};
@@ -507,9 +549,57 @@ bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
 
 	for (uint32_t i = 0; i < NbVulkanFrames; i++)
 	{
-		frameBufferInfo.image = VulkanFrames[i];
-		VK_CALL_PRINT(vkCreateImageView(VulkanDevice, &frameBufferInfo, nullptr, &VulkanFrameColourBuffers[i]));
+		frameBufferInfo.image = VulkanBackBuffers[i];
+		VK_CALL_PRINT(vkCreateImageView(VulkanDevice, &frameBufferInfo, nullptr, &VulkanBackColourBuffers[i]));
 	}
+
+
+	//create semaphores and fences
+	{
+
+		//destroy semaphores
+		if (VulkanCanPresentSemaphore)
+		{
+			for (uint32_t i = 0; i < NbVulkanFrames; i++)
+				vkDestroySemaphore(VulkanDevice, VulkanCanPresentSemaphore[i], nullptr);
+			free(VulkanCanPresentSemaphore);
+		}
+		if (VulkanHasPresentedSemaphore)
+		{
+			for (uint32_t i = 0; i < NbVulkanFrames; i++)
+				vkDestroySemaphore(VulkanDevice, VulkanHasPresentedSemaphore[i], nullptr);
+			free(VulkanHasPresentedSemaphore);
+		}
+
+		//destroy fence
+		if (VulkanIsDrawingFence)
+		{
+			for (uint32_t i = 0; i < NbVulkanFrames; i++)
+				vkDestroyFence(VulkanDevice, VulkanIsDrawingFence[i], nullptr);
+			free(VulkanIsDrawingFence);
+		}
+
+		VkSemaphoreCreateInfo semaphoreInfo{};
+		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+		VkFenceCreateInfo fenceInfo{};
+		fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+		fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+		//allocate for new semaphores
+		VulkanCanPresentSemaphore	= (VkSemaphore*)malloc(sizeof(VkSemaphore) * NbVulkanFrames);
+		VulkanHasPresentedSemaphore = (VkSemaphore*)malloc(sizeof(VkSemaphore) * NbVulkanFrames);
+		VulkanIsDrawingFence		= (VkFence*)malloc(sizeof(VkFence) * NbVulkanFrames);
+
+		for (uint32_t i = 0; i < NbVulkanFrames; i++)
+		{
+			VK_CALL_PRINT(vkCreateSemaphore(VulkanDevice, &semaphoreInfo, nullptr, &VulkanCanPresentSemaphore[i]));
+			VK_CALL_PRINT(vkCreateSemaphore(VulkanDevice, &semaphoreInfo, nullptr, &VulkanHasPresentedSemaphore[i]));
+			VK_CALL_PRINT(vkCreateFence(VulkanDevice, &fenceInfo, nullptr, &VulkanIsDrawingFence[i]));
+		}
+
+	}
+
 
 
 	return result == VK_SUCCESS;
@@ -522,5 +612,19 @@ bool GraphicsAPIManager::MakeSwapChain(GLFWwindow* toAssociateWindow, int32_t wi
 
 	if (toAssociateWindow == VulkanWindow)
 		return CreateVulkanSwapChain(width, height);
+
+}
+
+/*===== Graphics API Queues and Command =====*/
+
+bool GraphicsAPIManager::GetVulkanNextFrame()
+{
+	VkResult result = VK_SUCCESS;
+
+	VK_CALL_PRINT(vkAcquireNextImageKHR(VulkanDevice, VulkanSwapchain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+}
+
+bool GraphicsAPIManager::GetNextFrame()
+{
 
 }

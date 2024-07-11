@@ -10,6 +10,8 @@ class Scene
 public:
 	virtual void Prepare(class GraphicsAPIManager& GAPI) = 0;
 
+	virtual void Resize(class GraphicsAPIManager& GAPI, uint32_t width, uint32_t height) = 0;
+
 	virtual void Act(struct AppWideContext& AppContext) = 0;
 
 	virtual void Show(class GraphicsAPIManager& GAPI) = 0;

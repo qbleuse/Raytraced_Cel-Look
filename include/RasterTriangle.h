@@ -21,12 +21,15 @@ private:
 	/* Vulkan */
 
 	//the viewport of this scene (can change at runtime, as window can be resized)
-	VkViewport triangleViewport{};
-	VkRenderPass triangleRenderPass{};
-	VkPipeline trianglePipeline{};
+	VkViewport		triangleViewport{};
+	VkRenderPass	triangleRenderPass{};
+	VkPipeline		trianglePipeline{};
+	VkFramebuffer*	triangleOutput{nullptr};
 
 	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
 	void PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
+	void ResizeVulkanResource(class GraphicsAPIManager& GAPI, uint32_t width, uint32_t height);
+
 
 	/* DirectX */
 
@@ -40,9 +43,11 @@ private:
 public:
 	/*===== Scene Interface =====*/
 
-	virtual ~RasterTriangle();
+	//virtual ~RasterTriangle();
 
 	virtual void Prepare(class GraphicsAPIManager& GAPI)final;
+
+	virtual void Resize(class GraphicsAPIManager& GAPI, uint32_t width, uint32_t height)final;
 
 	virtual void Act(struct AppWideContext& AppContext)final;
 

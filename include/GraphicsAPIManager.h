@@ -96,10 +96,10 @@ public:
 		VkSurfaceFormatKHR VulkanSurfaceFormat{};
 		
 		//The actual frames of the swapchain. this is an array containing a number of VkImage (with a minimum of 3)
-		VkImage* VulkanFrames{ nullptr };
+		VkImage* VulkanBackBuffers{ nullptr };
 		//The actual frames buffers of the swapchain. this is an array containing a number of VkImageViews equal to the number of frames.
 		//This is the interface that will allow us to write into the actual frames we want to present to the screen.
-		VkImageView* VulkanFrameColourBuffers{ nullptr };
+		VkImageView* VulkanBackColourBuffers{ nullptr };
 		//The nb of actual Vulkan framebuffers in the Vulkan swapchain at any given time (this can change between hardware)
 		uint32_t NbVulkanFrames{ 0 };
 
@@ -164,14 +164,34 @@ public:
 
 
 #pragma region Graphics API Queue And CommandLists
-/*===== GRAPHICS API WINDOW AND DEVICE =====*/
+/*===== GRAPHICS API QUEUES AND COMMAND =====*/
 	public:
 
 		/* Vulkan */
 
 		//The Interface allowing the creation of Command to the chosen physical device
-		VkQueue VulkanQueues[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
-		uint32_t VulkanQueueFamily{ 0 };
+		VkQueue			VulkanQueues[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
+		uint32_t		VulkanQueueFamily{ 0 };
+		VkCommandPool	VulkanCommandPool[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
+		VkSemaphore*	VulkanCanPresentSemaphore = nullptr;
+		VkSemaphore*	VulkanHasPresentedSemaphore = nullptr;
+		VkFence*		VulkanIsDrawingFence = nullptr;
+		uint32_t		VulkanCurrentFrame = 0;
+
+		/*
+		* Gets the index of Vulkan's swapchain framebuffer that can be used.
+		* - returns : if current index could be get, false means VK_ERROR_OUT_OF_DATE_KHR or VK_SUBOPTIMAL_KHR.
+		*/
+		bool GetVulkanNextFrame();
+
+
+		/* Agnostic */
+
+		/*
+		* Gets the index of each Graphics API swapchain framebuffer that can be used.
+		* - returns : if current index could be get, false usually means needing to recreate swapchain.
+		*/
+		bool GetNextFrame();
 
 
 

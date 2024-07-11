@@ -221,6 +221,52 @@ void RasterTriangle::Prepare(GraphicsAPIManager& GAPI)
 	PrepareVulkanProps(GAPI, vertexShader, fragmentShader);
 }
 
+/*===== Resize =====*/
+
+void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, uint32_t width, uint32_t height)
+{
+	VkResult result = VK_SUCCESS;
+
+	if (triangleOutput != nullptr)
+	{
+		for (uint32_t i = 0; GAPI.NbVulkanFrames; i++)
+			vkDestroyFramebuffer(GAPI.VulkanDevice, triangleOutput[i], nullptr);
+		free(triangleOutput);
+	}
+
+	//creating the description of the output of our pipeline
+	VkFramebufferCreateInfo framebufferInfo{};
+	framebufferInfo.sType			= VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+	framebufferInfo.renderPass		= triangleRenderPass;
+	framebufferInfo.width			= width;
+	framebufferInfo.height			= height;
+	framebufferInfo.layers = 1;
+
+	//filling up the viewport
+	triangleViewport.width = (float)width;
+	triangleViewport.height = (float)height;
+	triangleViewport.maxDepth = 1.0f;
+	triangleViewport.minDepth = 0.0f;
+	triangleViewport.x = 0.0f;
+	triangleViewport.y = 0.0f;
+
+	triangleOutput = (VkFramebuffer*)malloc(sizeof(VkFramebuffer) * GAPI.NbVulkanFrames);
+	for (uint32_t i = 0; GAPI.NbVulkanFrames; i++)
+	{
+		framebufferInfo.attachmentCount = 1;
+		framebufferInfo.pAttachments = &GAPI.VulkanBackColourBuffers[i];
+
+		VK_CALL_PRINT(vkCreateFramebuffer(GAPI.VulkanDevice, &framebufferInfo, nullptr, &triangleOutput[i]))
+	}
+}
+
+
+void RasterTriangle::Resize(class GraphicsAPIManager& GAPI, uint32_t width, uint32_t height)
+{
+	ResizeVulkanResource(GAPI, width, height);
+}
+
+
 /*===== Act =====*/
 
 void RasterTriangle::Act(AppWideContext& AppContext)
@@ -239,6 +285,13 @@ void RasterTriangle::Show(GraphicsAPIManager& GAPI)
 
 void RasterTriangle::Close(class GraphicsAPIManager& GAPI)
 {
+	if (triangleOutput != nullptr)
+	{
+		for (uint32_t i = 0; GAPI.NbVulkanFrames; i++)
+			vkDestroyFramebuffer(GAPI.VulkanDevice, triangleOutput[i], nullptr);
+		free(triangleOutput);
+	}
+
 	vkDestroyPipeline(GAPI.VulkanDevice, trianglePipeline, nullptr);
 	vkDestroyRenderPass(GAPI.VulkanDevice, triangleRenderPass, nullptr);
 }

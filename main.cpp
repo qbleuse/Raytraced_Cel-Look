@@ -46,7 +46,8 @@ struct ImGuiResource
 	/* Vulkan */
 
 	ImGui_ImplVulkanH_Window ImGuiWindow;
-	VkDescriptorPool ImGuiDescriptorPool;
+	VkDescriptorPool ImGuiDescriptorPool{VK_NULL_HANDLE};
+	VkCommandBuffer ImGuiCommandBuffer{ VK_NULL_HANDLE };
 	bool SwapChainRebuild{ false };
 
 };
@@ -56,6 +57,8 @@ void InitImGuiVulkan(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResourc
 
 	//create a GPU Buffer for ImGUI textures
 	{
+		VkResult result = VK_SUCCESS;
+
 		VkDescriptorPoolSize pool_sizes[] =
 		{
 			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1 },
@@ -66,7 +69,19 @@ void InitImGuiVulkan(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResourc
 		pool_info.maxSets = 1;
 		pool_info.poolSizeCount = (uint32_t)IM_ARRAYSIZE(pool_sizes);
 		pool_info.pPoolSizes = pool_sizes;
-		vkCreateDescriptorPool(GAPI.VulkanDevice, &pool_info, nullptr, &ImGuiResource.ImGuiDescriptorPool);
+		
+		VK_CALL_PRINT(vkCreateDescriptorPool(GAPI.VulkanDevice, &pool_info, nullptr, &ImGuiResource.ImGuiDescriptorPool));
+
+		VkCommandBufferAllocateInfo allocInfo{};
+		allocInfo.sType			= VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		allocInfo.commandPool	= GAPI.VulkanCommandPool[1];
+		allocInfo.level			= VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocInfo.commandBufferCount = 1;
+
+		VK_CALL_PRINT(vkAllocateCommandBuffers(GAPI.VulkanDevice, &allocInfo, &ImGuiResource.ImGuiCommandBuffer));
+
+
+
 	}
 
 	//set FrameBuffer Format and ColorSpace
