@@ -19,6 +19,13 @@ GraphicsAPIManager::~GraphicsAPIManager()
 	if (VulkanBackBuffers)
 		free(VulkanBackBuffers);
 
+	//destroy command buffers (we want the same number of command buffer as backbuffers)
+	if (VulkanCommand != nullptr)
+	{
+		vkFreeCommandBuffers(VulkanDevice, VulkanCommandPool[0], NbVulkanFrames, VulkanCommand);
+		free(VulkanCommand);
+	}
+
 	//destroy command pools
 	if (VulkanCommandPool[0])
 		vkDestroyCommandPool(VulkanDevice, VulkanCommandPool[0], nullptr);
@@ -55,7 +62,7 @@ GraphicsAPIManager::~GraphicsAPIManager()
 		free(VulkanBackColourBuffers);
 	}
 
-	//vkDestroySwapchainKHR(VulkanDevice, VulkanSwapchain, nullptr);
+	vkDestroySwapchainKHR(VulkanDevice, VulkanSwapchain, nullptr);
 	vkDestroyDevice(VulkanDevice, nullptr);
 	vkDestroySurfaceKHR(VulkanInterface, VulkanSurface, nullptr);
 	vkDestroyInstance(VulkanInterface, nullptr);
@@ -481,11 +488,35 @@ bool GraphicsAPIManager::MakeWindows(GLFWwindow** windows)
 
 bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
 {
+	vkDeviceWaitIdle(VulkanDevice);
+
+	//to know if we succeeded
+	VkResult result = VK_SUCCESS;
+
+	//destroying old frames array (theoretically, the if is useless as free(nullptr) does nothing, but it apparently crashes on some OS)
+	if (VulkanBackBuffers)
+		free(VulkanBackBuffers);
+	//destroying old framesbuffers associated with frames
+	VK_CLEAR_RAW_ARRAY(VulkanBackColourBuffers, NbVulkanFrames, vkDestroyImageView, VulkanDevice);
+	//destroy semaphores
+	VK_CLEAR_RAW_ARRAY(VulkanCanPresentSemaphore, NbVulkanFrames, vkDestroySemaphore, VulkanDevice);
+	VK_CLEAR_RAW_ARRAY(VulkanHasPresentedSemaphore, NbVulkanFrames, vkDestroySemaphore, VulkanDevice);
+	//destroy fence
+	VK_CLEAR_RAW_ARRAY(VulkanIsDrawingFence, NbVulkanFrames, vkDestroyFence, VulkanDevice);
+	//destroy command buffers (we want the same number of command buffer as backbuffers)
+	if (VulkanCommand != nullptr)
+	{
+		vkFreeCommandBuffers(VulkanDevice, VulkanCommandPool[0], NbVulkanFrames, VulkanCommand);
+		free(VulkanCommand);
+	}
+
 	//the struct allowing us to know the display capabilities of our hardware
 	VkSurfaceCapabilitiesKHR SurfaceCapabilities{};
 
 	//gettting back our display capabilities
 	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VulkanGPU, VulkanSurface, &SurfaceCapabilities);
+
+	VkSwapchainKHR tempSwapchain{ VulkanSwapchain };
 
 	//creating the swap chain
 	VkSwapchainCreateInfoKHR createinfo{};
@@ -502,29 +533,13 @@ bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
 	createinfo.imageSharingMode			= VK_SHARING_MODE_EXCLUSIVE;
 	createinfo.clipped					= VK_TRUE;
 	createinfo.presentMode				= VK_PRESENT_MODE_FIFO_KHR;//for now v_sync
-	createinfo.oldSwapchain				= VulkanSwapchain == VK_NULL_HANDLE ? nullptr : VulkanSwapchain;
+	createinfo.oldSwapchain				= tempSwapchain;
 	createinfo.preTransform				= VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 
-	//to know if we succeeded
-	VkResult result = VK_SUCCESS;
-
 	//creating the swapchain
-	VkSwapchainKHR tempSwapchain{};
-	VK_CALL_PRINT(vkCreateSwapchainKHR(VulkanDevice, &createinfo, nullptr, &tempSwapchain))
+	VK_CALL_PRINT(vkCreateSwapchainKHR(VulkanDevice, &createinfo, nullptr, &VulkanSwapchain))
 
-	//save if we need to change it afterwards
-	VulkanSwapchain = tempSwapchain;
-
-	//destroying old frames array (theoretically, the if is useless as free(nullptr) does nothing, but it apparently crashes on some OS)
-	if (VulkanBackBuffers)
-		free(VulkanBackBuffers);
-	//destroying old framesbuffers associated with frames
-	if (VulkanBackColourBuffers)
-	{
-		for (uint32_t i = 0; i < NbVulkanFrames; i++)
-			vkDestroyImageView(VulkanDevice, VulkanBackColourBuffers[i], nullptr);
-		free(VulkanBackColourBuffers);
-	}
+	vkDestroySwapchainKHR(VulkanDevice, tempSwapchain, nullptr);
 
 	//get back the number of frames the swapchain was able to create
 	VK_CALL_PRINT(vkGetSwapchainImagesKHR(VulkanDevice, VulkanSwapchain, &NbVulkanFrames, nullptr));
@@ -553,31 +568,8 @@ bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
 		VK_CALL_PRINT(vkCreateImageView(VulkanDevice, &frameBufferInfo, nullptr, &VulkanBackColourBuffers[i]));
 	}
 
-
 	//create semaphores and fences
 	{
-
-		//destroy semaphores
-		if (VulkanCanPresentSemaphore)
-		{
-			for (uint32_t i = 0; i < NbVulkanFrames; i++)
-				vkDestroySemaphore(VulkanDevice, VulkanCanPresentSemaphore[i], nullptr);
-			free(VulkanCanPresentSemaphore);
-		}
-		if (VulkanHasPresentedSemaphore)
-		{
-			for (uint32_t i = 0; i < NbVulkanFrames; i++)
-				vkDestroySemaphore(VulkanDevice, VulkanHasPresentedSemaphore[i], nullptr);
-			free(VulkanHasPresentedSemaphore);
-		}
-
-		//destroy fence
-		if (VulkanIsDrawingFence)
-		{
-			for (uint32_t i = 0; i < NbVulkanFrames; i++)
-				vkDestroyFence(VulkanDevice, VulkanIsDrawingFence[i], nullptr);
-			free(VulkanIsDrawingFence);
-		}
 
 		VkSemaphoreCreateInfo semaphoreInfo{};
 		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -600,7 +592,21 @@ bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
 
 	}
 
+	//create commmand buffers
+	{
 
+		//first allocate
+		VulkanCommand = (VkCommandBuffer*)malloc(sizeof(VkCommandBuffer) * NbVulkanFrames);
+
+		//then fill up the command buffers in the array
+		VkCommandBufferAllocateInfo command_info{};
+		command_info.sType				= VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		command_info.commandPool		= VulkanCommandPool[0];
+		command_info.level				= VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		command_info.commandBufferCount = NbVulkanFrames;
+
+		vkAllocateCommandBuffers(VulkanDevice, &command_info, VulkanCommand);
+	}
 
 	return result == VK_SUCCESS;
 }
@@ -621,10 +627,24 @@ bool GraphicsAPIManager::GetVulkanNextFrame()
 {
 	VkResult result = VK_SUCCESS;
 
-	VK_CALL_PRINT(vkAcquireNextImageKHR(VulkanDevice, VulkanSwapchain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+	VK_CALL_PRINT(vkAcquireNextImageKHR(VulkanDevice, VulkanSwapchain, UINT64_MAX, VulkanCanPresentSemaphore[VulkanCurrentFrame], VK_NULL_HANDLE, &VulkanFrameIndex));
+
+	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
+		return false;
+
+	//if we already looped through all the frames in our swapchain, but this one did not finish drawing, we have no other choice than wait
+	vkWaitForFences(VulkanDevice, 1, &VulkanIsDrawingFence[VulkanFrameIndex], VK_TRUE, UINT64_MAX);
+
+	//if we did not wait or 
+	vkResetFences(VulkanDevice, 1, &VulkanIsDrawingFence[VulkanFrameIndex]);
+
+	//VK_CALL_PRINT(vkResetCommandPool(VulkanDevice, VulkanCommandPool[0], 0));
+	//VK_CALL_PRINT(vkResetCommandPool(VulkanDevice, VulkanCommandPool[1], 0));
+
+	return true;
 }
 
 bool GraphicsAPIManager::GetNextFrame()
 {
-
+	return GetVulkanNextFrame();
 }

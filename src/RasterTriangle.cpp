@@ -45,7 +45,7 @@ void RasterTriangle::PrepareVulkanScripts(GraphicsAPIManager& GAPI, VkShaderModu
 	//compiling our vertex shader into byte code
 	shaderc_compilation_result_t compiled_vertex = shaderc_compile_into_spv(shader_compiler, vertex_shader, strlen(vertex_shader), shaderc_vertex_shader, "Raster Triangle Vertex", "main", compile_options);
 	//compiling our fragment shader into byte code
-	shaderc_compilation_result_t compiled_fragment = shaderc_compile_into_spv(shader_compiler, fragment_shader, strlen(fragment_shader), shaderc_vertex_shader, "Raster Triangle Fragment", "main", compile_options);
+	shaderc_compilation_result_t compiled_fragment = shaderc_compile_into_spv(shader_compiler, fragment_shader, strlen(fragment_shader), shaderc_fragment_shader, "Raster Triangle Fragment", "main", compile_options);
 
 
 	// make compiled shader, vulkan shaders
@@ -87,10 +87,10 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 
 	//describe vertex shader stage 
 	VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-	vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	vertShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-	vertShaderStageInfo.module = FragmentShader;
-	vertShaderStageInfo.pName = "main";
+	fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	fragShaderStageInfo.module = FragmentShader;
+	fragShaderStageInfo.pName = "main";
 
 	//the vertex input for the input assembly stage. in this scene, there will not be any vertices, so we'll fill it up with nothing.
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
@@ -109,17 +109,17 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	//most things are described in advance in vulkan pipeline, but this is the config of thing that can be changed on the fly. in our situation it will be only Viewport.
 	VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
 	dynamicStateInfo.sType				= VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-	dynamicStateInfo.dynamicStateCount	= 1;
-	VkDynamicState viewportState		= VK_DYNAMIC_STATE_VIEWPORT;
-	dynamicStateInfo.pDynamicStates		= &viewportState;
+	dynamicStateInfo.dynamicStateCount	= 2;
+	VkDynamicState viewportState[2] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+	dynamicStateInfo.pDynamicStates		= viewportState;
 
 	//describing our viewport (even it is still dynamic)
 	VkPipelineViewportStateCreateInfo viewportStateInfo{};
 	viewportStateInfo.sType				= VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 	viewportStateInfo.viewportCount		= 1;
 	viewportStateInfo.pViewports		= &triangleViewport;
-	viewportStateInfo.scissorCount		= 0;
-	viewportStateInfo.pScissors			= nullptr;
+	viewportStateInfo.scissorCount		= 1;
+	viewportStateInfo.pScissors			= &triangleScissors;
 
 	//the description of our rasterizer : a very simple one, that will just fill up polygon (in this case one)
 	VkPipelineRasterizationStateCreateInfo rasterizer{};
@@ -128,6 +128,7 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	rasterizer.polygonMode		= VK_POLYGON_MODE_FILL;
 	rasterizer.cullMode			= VK_CULL_MODE_NONE;
 	rasterizer.frontFace		= VK_FRONT_FACE_CLOCKWISE;
+	rasterizer.lineWidth		= 1.0f;
 
 	//the description of the MSAA, here we just don't want it, an aliased triangle is more than enough
 	VkPipelineMultisampleStateCreateInfo multisampling{};
@@ -178,6 +179,11 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	VkResult result = VK_SUCCESS;
 	VK_CALL_PRINT(vkCreateRenderPass(GAPI.VulkanDevice, &renderPassInfo, nullptr, &triangleRenderPass));
 
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+
+	VK_CALL_PRINT(vkCreatePipelineLayout(GAPI.VulkanDevice, &pipelineLayoutInfo, nullptr, &triangleLayout));
+
 	//finally creating our pipeline
 	VkGraphicsPipelineCreateInfo pipelineInfo{};
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -196,13 +202,13 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	pipelineInfo.pDepthStencilState		= nullptr; // Optional
 	pipelineInfo.pColorBlendState		= &colorBlending;
 	pipelineInfo.pDynamicState			= &dynamicStateInfo;
-	pipelineInfo.layout					= nullptr;
+	pipelineInfo.layout					= triangleLayout;
 	pipelineInfo.renderPass				= triangleRenderPass;
 	pipelineInfo.subpass				= 0;
 	pipelineInfo.basePipelineHandle		= VK_NULL_HANDLE;
 	pipelineInfo.basePipelineIndex		= -1;
 
-	VK_CALL_PRINT(vkCreateGraphicsPipelines(GAPI.VulkanDevice, nullptr, 1, &pipelineInfo, nullptr, &trianglePipeline));
+	VK_CALL_PRINT(vkCreateGraphicsPipelines(GAPI.VulkanDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &trianglePipeline));
 	
 	vkDestroyShaderModule(GAPI.VulkanDevice, FragmentShader, nullptr);
 	vkDestroyShaderModule(GAPI.VulkanDevice, VertexShader, nullptr);
@@ -223,16 +229,11 @@ void RasterTriangle::Prepare(GraphicsAPIManager& GAPI)
 
 /*===== Resize =====*/
 
-void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, uint32_t width, uint32_t height)
+void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height)
 {
 	VkResult result = VK_SUCCESS;
 
-	if (triangleOutput != nullptr)
-	{
-		for (uint32_t i = 0; GAPI.NbVulkanFrames; i++)
-			vkDestroyFramebuffer(GAPI.VulkanDevice, triangleOutput[i], nullptr);
-		free(triangleOutput);
-	}
+	VK_CLEAR_RAW_ARRAY(triangleOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
 
 	//creating the description of the output of our pipeline
 	VkFramebufferCreateInfo framebufferInfo{};
@@ -250,8 +251,10 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, uint32
 	triangleViewport.x = 0.0f;
 	triangleViewport.y = 0.0f;
 
+	triangleScissors.extent = { (uint32_t)width, (uint32_t)height };
+
 	triangleOutput = (VkFramebuffer*)malloc(sizeof(VkFramebuffer) * GAPI.NbVulkanFrames);
-	for (uint32_t i = 0; GAPI.NbVulkanFrames; i++)
+	for (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
 	{
 		framebufferInfo.attachmentCount = 1;
 		framebufferInfo.pAttachments = &GAPI.VulkanBackColourBuffers[i];
@@ -261,7 +264,7 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, uint32
 }
 
 
-void RasterTriangle::Resize(class GraphicsAPIManager& GAPI, uint32_t width, uint32_t height)
+void RasterTriangle::Resize(class GraphicsAPIManager& GAPI, int32_t width, int32_t height)
 {
 	ResizeVulkanResource(GAPI, width, height);
 }
@@ -278,6 +281,56 @@ void RasterTriangle::Act(AppWideContext& AppContext)
 
 void RasterTriangle::Show(GraphicsAPIManager& GAPI)
 {
+	VkResult err;
+	VkCommandBuffer commandBuffer = GAPI.GetCurrentVulkanCommand();
+	VkSemaphore waitSemaphore = GAPI.GetCurrentCanPresentSemaphore();
+	VkSemaphore signalSemaphore = GAPI.GetCurrentHasPresentedSemaphore();
+
+	{
+		err = vkResetCommandBuffer(commandBuffer, 0);
+		//check_vk_result(err);
+		VkCommandBufferBeginInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		err = vkBeginCommandBuffer(commandBuffer, &info);
+		//	check_vk_result(err);
+	}
+	{
+		VkRenderPassBeginInfo info = {};
+		info.sType			= VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		info.renderPass		= triangleRenderPass;
+		info.framebuffer	= triangleOutput[GAPI.VulkanFrameIndex];
+		info.renderArea.extent.width = triangleViewport.width;
+		info.renderArea.extent.height = triangleViewport.height;
+		info.clearValueCount = 0;
+		//info.pClearValues				= &imgui.ImGuiWindow.ClearValue;
+		vkCmdBeginRenderPass(commandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
+	}
+
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
+	vkCmdSetViewport(commandBuffer, 0, 1, &triangleViewport);
+	vkCmdSetScissor(commandBuffer, 0, 1, &triangleScissors);
+	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+	// Submit command buffer
+	vkCmdEndRenderPass(commandBuffer);
+	{
+		VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		VkSubmitInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		info.waitSemaphoreCount = 1;
+		info.pWaitSemaphores = &waitSemaphore;
+		info.pWaitDstStageMask = &wait_stage;
+		info.commandBufferCount = 1;
+		info.pCommandBuffers = &commandBuffer;
+		info.signalSemaphoreCount = 1;
+		info.pSignalSemaphores = &signalSemaphore;
+
+		err = vkEndCommandBuffer(commandBuffer);
+		//check_vk_result(err);
+		err = vkQueueSubmit(GAPI.VulkanQueues[0], 1, &info, GAPI.VulkanIsDrawingFence[GAPI.VulkanFrameIndex]);
+		//check_vk_result(err);
+	}
 
 }
 
@@ -285,13 +338,9 @@ void RasterTriangle::Show(GraphicsAPIManager& GAPI)
 
 void RasterTriangle::Close(class GraphicsAPIManager& GAPI)
 {
-	if (triangleOutput != nullptr)
-	{
-		for (uint32_t i = 0; GAPI.NbVulkanFrames; i++)
-			vkDestroyFramebuffer(GAPI.VulkanDevice, triangleOutput[i], nullptr);
-		free(triangleOutput);
-	}
+	VK_CLEAR_RAW_ARRAY(triangleOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
 
+	vkDestroyPipelineLayout(GAPI.VulkanDevice, triangleLayout, nullptr);
 	vkDestroyPipeline(GAPI.VulkanDevice, trianglePipeline, nullptr);
 	vkDestroyRenderPass(GAPI.VulkanDevice, triangleRenderPass, nullptr);
 }

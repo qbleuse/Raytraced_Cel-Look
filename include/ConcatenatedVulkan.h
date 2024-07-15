@@ -13,4 +13,12 @@
 		printf("Vulkan call error : %s ; result : %s .\n", #vk_call, string_VkResult(result));\
 	}\
 
+#define VK_CLEAR_RAW_ARRAY(raw_array, size, call, device) \
+	if (raw_array != nullptr)\
+	{\
+		for (uint32_t i = 0; i < size; i++)\
+			call(device, raw_array[i], nullptr);\
+		free(raw_array);\
+	}\
+
 #endif //__CONCATENATED_VULKAN_H__

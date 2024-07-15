@@ -173,16 +173,40 @@ public:
 		VkQueue			VulkanQueues[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
 		uint32_t		VulkanQueueFamily{ 0 };
 		VkCommandPool	VulkanCommandPool[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
+		VkCommandBuffer* VulkanCommand{ nullptr };
 		VkSemaphore*	VulkanCanPresentSemaphore = nullptr;
 		VkSemaphore*	VulkanHasPresentedSemaphore = nullptr;
 		VkFence*		VulkanIsDrawingFence = nullptr;
 		uint32_t		VulkanCurrentFrame = 0;
+		uint32_t		VulkanFrameIndex = 0;
 
 		/*
 		* Gets the index of Vulkan's swapchain framebuffer that can be used.
 		* - returns : if current index could be get, false means VK_ERROR_OUT_OF_DATE_KHR or VK_SUBOPTIMAL_KHR.
 		*/
 		bool GetVulkanNextFrame();
+
+		/*
+		* Returns the command buffer currently used for this frame to record commands
+		*/
+		__forceinline VkCommandBuffer GetCurrentVulkanCommand()const { return VulkanCommand[VulkanFrameIndex]; }
+		
+		/*
+		* Returns the semaphore currently used for this frame to track if we can preesent
+		*/
+		__forceinline VkSemaphore GetCurrentCanPresentSemaphore()const { return VulkanCanPresentSemaphore[VulkanCurrentFrame]; }
+
+		/*
+		* Returns the semaphore currently used for this frame to track if frame was presented
+		*/
+		__forceinline VkSemaphore GetCurrentHasPresentedSemaphore()const { return VulkanHasPresentedSemaphore[VulkanCurrentFrame]; }
+
+		/*
+		* Returns the fence currently used for this frame to track if GPU is still executing command
+		*/
+		__forceinline VkFence GetCurrentIsDrawingFence()const { return VulkanIsDrawingFence[VulkanFrameIndex]; }
+
+
 
 
 		/* Agnostic */
