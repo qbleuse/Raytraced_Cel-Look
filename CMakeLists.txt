@@ -20,7 +20,7 @@ set(INC_DIR "${CMAKE_SOURCE_DIR}/include")
 include_directories("${INC_DIR}/")
 
 # Add source to this project's executable.
-add_executable (VulkanLearning "main.cpp" )
+add_executable (VulkanLearning "main.cpp")
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET VulkanLearning PROPERTY CXX_STANDARD 20)

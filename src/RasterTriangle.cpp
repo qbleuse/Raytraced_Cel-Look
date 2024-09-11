@@ -3,6 +3,7 @@
 //include app class
 #include "GraphicsAPIManager.h"
 #include "AppWideContext.h"
+#include "VulkanHelper.h"
 
 //vulkan shader compiler
 #include "shaderc/shaderc.h"
@@ -179,8 +180,31 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	VkResult result = VK_SUCCESS;
 	VK_CALL_PRINT(vkCreateRenderPass(GAPI.VulkanDevice, &renderPassInfo, nullptr, &triangleRenderPass));
 
+	//creating our uniform buffer
+	VkDescriptorSetLayoutBinding vertexUniformLayoutBinding{};
+	vertexUniformLayoutBinding.binding = 0;
+	vertexUniformLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	vertexUniformLayoutBinding.descriptorCount = 1;
+	vertexUniformLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkDescriptorSetLayoutBinding pixelUniformLayoutBinding{};
+	pixelUniformLayoutBinding.binding = 0;
+	pixelUniformLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	pixelUniformLayoutBinding.descriptorCount = 1;
+	pixelUniformLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkDescriptorSetLayoutCreateInfo layoutInfo{};
+	layoutInfo.sType		= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.bindingCount = 2;
+	VkDescriptorSetLayoutBinding uniformLayoutBinding[2] = { vertexUniformLayoutBinding, pixelUniformLayoutBinding };
+	layoutInfo.pBindings = uniformLayoutBinding;
+
+	VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI.VulkanDevice, &layoutInfo, nullptr, &triangleDescriptorLayout));
+
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutInfo.pSetLayouts = &triangleDescriptorLayout;
+	pipelineLayoutInfo.setLayoutCount = 1;
 
 	VK_CALL_PRINT(vkCreatePipelineLayout(GAPI.VulkanDevice, &pipelineLayoutInfo, nullptr, &triangleLayout));
 
@@ -234,6 +258,10 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 	VkResult result = VK_SUCCESS;
 
 	VK_CLEAR_RAW_ARRAY(triangleOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
+	VK_CLEAR_RAW_ARRAY(triangleUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
+	VK_CLEAR_RAW_ARRAY(triangleGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
+	free(triangleCPUUniformBuffer);
+
 
 	//creating the description of the output of our pipeline
 	VkFramebufferCreateInfo framebufferInfo{};
@@ -254,12 +282,22 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 	triangleScissors.extent = { (uint32_t)width, (uint32_t)height };
 
 	triangleOutput = (VkFramebuffer*)malloc(sizeof(VkFramebuffer) * GAPI.NbVulkanFrames);
+
+	triangleUniformBuffer = (VkBuffer*)malloc(sizeof(VkBuffer) * GAPI.NbVulkanFrames);
+	triangleGPUUniformBuffer = (VkDeviceMemory*)malloc(sizeof(VkDeviceMemory) * GAPI.NbVulkanFrames);
+	triangleCPUUniformBuffer = (void**)malloc(sizeof(void*) * GAPI.NbVulkanFrames);
+
 	for (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
 	{
 		framebufferInfo.attachmentCount = 1;
 		framebufferInfo.pAttachments = &GAPI.VulkanBackColourBuffers[i];
 
 		VK_CALL_PRINT(vkCreateFramebuffer(GAPI.VulkanDevice, &framebufferInfo, nullptr, &triangleOutput[i]))
+
+		if (CreateVulkanBuffer(GAPI, sizeof(UniformBuffer), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, triangleUniformBuffer[i], triangleGPUUniformBuffer[i]))
+		{
+			VK_CALL_PRINT(vkMapMemory(GAPI.VulkanDevice, triangleGPUUniformBuffer[i], 0, sizeof(UniformBuffer), 0, &triangleCPUUniformBuffer[i]));
+		}
 	}
 }
 
@@ -339,7 +377,11 @@ void RasterTriangle::Show(GraphicsAPIManager& GAPI)
 void RasterTriangle::Close(class GraphicsAPIManager& GAPI)
 {
 	VK_CLEAR_RAW_ARRAY(triangleOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
+	VK_CLEAR_RAW_ARRAY(triangleUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
+	VK_CLEAR_RAW_ARRAY(triangleGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
+	free(triangleCPUUniformBuffer);
 
+	vkDestroyDescriptorSetLayout(GAPI.VulkanDevice, triangleDescriptorLayout, nullptr);
 	vkDestroyPipelineLayout(GAPI.VulkanDevice, triangleLayout, nullptr);
 	vkDestroyPipeline(GAPI.VulkanDevice, trianglePipeline, nullptr);
 	vkDestroyRenderPass(GAPI.VulkanDevice, triangleRenderPass, nullptr);

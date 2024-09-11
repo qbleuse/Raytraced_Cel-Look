@@ -14,6 +14,14 @@
 class RasterTriangle : public Scene
 {
 
+	struct UniformBuffer
+	{
+		ImVec4 first;
+		ImVec4 second;
+		ImVec4 third;
+		ImVec4 padding;
+	};
+
 #pragma region GRAPHICS API
 private:
 	/*===== Graphics API =====*/
@@ -21,12 +29,17 @@ private:
 	/* Vulkan */
 
 	//the viewport of this scene (can change at runtime, as window can be resized)
-	VkViewport			triangleViewport{};
-	VkRect2D			triangleScissors{};
-	VkRenderPass		triangleRenderPass{};
-	VkPipelineLayout	triangleLayout{};
-	VkPipeline			trianglePipeline{};
-	VkFramebuffer*		triangleOutput{nullptr};
+	VkViewport				triangleViewport{};
+	VkRect2D				triangleScissors{};
+	VkRenderPass			triangleRenderPass{};
+	VkDescriptorSetLayout	triangleDescriptorLayout{};
+	VkPipelineLayout		triangleLayout{};
+	VkPipeline				trianglePipeline{};
+	VkFramebuffer*			triangleOutput{nullptr};
+
+	VkBuffer*				triangleUniformBuffer{nullptr};
+	VkDeviceMemory*			triangleGPUUniformBuffer{ nullptr };
+	void**					triangleCPUUniformBuffer{ nullptr };
 
 	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
 	void PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
