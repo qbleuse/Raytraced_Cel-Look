@@ -37,16 +37,22 @@ private:
 	VkViewport				triangleViewport{};
 	VkRect2D				triangleScissors{};
 	VkRenderPass			triangleRenderPass{};
-	VkDescriptorSetLayout	triangleDescriptorLayout{};
+	VkDescriptorSetLayout	triangleVertexDescriptorLayout{};
+	//VkDescriptorSetLayout	trianglePixelDescriptorLayout{};
 	VkDescriptorPool		triangleDescriptorPool{};
 	VkPipelineLayout		triangleLayout{};
 	VkPipeline				trianglePipeline{};
 	VkFramebuffer*			triangleOutput{nullptr};
 
-	VkBuffer*				triangleUniformBuffer{nullptr};
-	VkDeviceMemory*			triangleGPUUniformBuffer{ nullptr };
-	void**					triangleCPUUniformBuffer{ nullptr };
-	VkDescriptorSet*		triangleDescriptorSet{ nullptr };
+	VkBuffer*				triangleVertexUniformBuffer{nullptr};
+	VkDeviceMemory*			triangleVertexGPUUniformBuffer{ nullptr };
+	void**					triangleVertexCPUUniformBuffer{ nullptr };
+	VkDescriptorSet*		triangleVertexDescriptorSet{ nullptr };
+	VkBuffer*				trianglePixelUniformBuffer{ nullptr };
+	VkDeviceMemory*			trianglePixelGPUUniformBuffer{ nullptr };
+	void**					trianglePixelCPUUniformBuffer{ nullptr };
+	//VkDescriptorSet*		trianglePixelDescriptorSet{ nullptr };
+
 
 	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
 	void PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
@@ -81,6 +87,8 @@ public:
 	bool changed = true;
 
 	UniformBuffer pointBuffer;
+	UniformBuffer colorBuffer;
+
 
 
 	/*===== END Scene Interface =====*/
