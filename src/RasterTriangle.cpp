@@ -404,6 +404,7 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 
 		VkWriteDescriptorSet write[2] = { descriptorWrite, colordescriptorWrite };
 		vkUpdateDescriptorSets(GAPI.VulkanDevice, 2, write, 0, nullptr);
+
 	
 	}
 
@@ -461,7 +462,6 @@ void RasterTriangle::Show(GraphicsAPIManager& GAPI)
 			memcpy(&triangleVertexCPUUniformBuffer[i], (void*)&pointBuffer, sizeof(UniformBuffer));
 		for (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
 			memcpy(&trianglePixelCPUUniformBuffer[i], (void*)&colorBuffer, sizeof(UniformBuffer));
-
 	}
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
