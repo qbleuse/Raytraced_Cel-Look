@@ -2,7 +2,6 @@
 
 //include app class
 #include "GraphicsAPIManager.h"
-#include "AppWideContext.h"
 #include "VulkanHelper.h"
 
 //vulkan shader compiler
@@ -15,7 +14,12 @@ void RasterTriangle::PrepareVulkanScripts(GraphicsAPIManager& GAPI, VkShaderModu
 	//define vertex shader
 	const char* vertex_shader = 
 		R"(#version 450
-			
+
+			layout(binding = 0) uniform PointBufferObject
+			{
+				vec4 points[4];
+			} point_ubo;
+
 			vec2 positions[3] = vec2[](
 			    vec2(0.0, -0.5),
 			    vec2(0.5, 0.5),
@@ -24,7 +28,7 @@ void RasterTriangle::PrepareVulkanScripts(GraphicsAPIManager& GAPI, VkShaderModu
 
 			void main()
 			{
-				gl_Position = vec4(positions[gl_VertexIndex],  0.0, 1.0);
+				gl_Position = vec4(positions[gl_VertexIndex].xy,  0.0, 1.0);
 			})";
 
 	const char* fragment_shader =
@@ -187,17 +191,17 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	vertexUniformLayoutBinding.descriptorCount = 1;
 	vertexUniformLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-	VkDescriptorSetLayoutBinding pixelUniformLayoutBinding{};
-	pixelUniformLayoutBinding.binding = 0;
-	pixelUniformLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	pixelUniformLayoutBinding.descriptorCount = 1;
-	pixelUniformLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	//VkDescriptorSetLayoutBinding pixelUniformLayoutBinding{};
+	//pixelUniformLayoutBinding.binding = 1;
+	//pixelUniformLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	//pixelUniformLayoutBinding.descriptorCount = 1;
+	//pixelUniformLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
 	VkDescriptorSetLayoutCreateInfo layoutInfo{};
 	layoutInfo.sType		= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.bindingCount = 2;
-	VkDescriptorSetLayoutBinding uniformLayoutBinding[2] = { vertexUniformLayoutBinding, pixelUniformLayoutBinding };
-	layoutInfo.pBindings = uniformLayoutBinding;
+	layoutInfo.bindingCount = 1;
+	//VkDescriptorSetLayoutBinding uniformLayoutBinding[2] = { vertexUniformLayoutBinding, pixelUniformLayoutBinding };
+	layoutInfo.pBindings = &vertexUniformLayoutBinding;
 
 	VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI.VulkanDevice, &layoutInfo, nullptr, &triangleDescriptorLayout));
 
@@ -242,7 +246,11 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 void RasterTriangle::Prepare(GraphicsAPIManager& GAPI)
 {
 	//the Shaders needed.
-	VkShaderModule vertexShader{}, fragmentShader{};
+	VkShaderModule vertexShader{}, fragmentShader{}; \
+
+	pointBuffer.first	= ImVec4(0.0f, -0.5f, 0.0f, 0.0f);
+	pointBuffer.second	= ImVec4(0.5f, 0.5f, 0.0f, 0.0f);
+	pointBuffer.third	= ImVec4(-0.5f, 0.5f, 0.0f, 0.0f);
 
 	//compile the shaders here
 	PrepareVulkanScripts(GAPI, vertexShader, fragmentShader);
@@ -261,6 +269,9 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 	VK_CLEAR_RAW_ARRAY(triangleUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
 	VK_CLEAR_RAW_ARRAY(triangleGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
 	free(triangleCPUUniformBuffer);
+	if (triangleDescriptorSet) vkFreeDescriptorSets(GAPI.VulkanDevice, triangleDescriptorPool, GAPI.NbVulkanFrames, triangleDescriptorSet);
+	free(triangleDescriptorSet);
+	vkDestroyDescriptorPool(GAPI.VulkanDevice, triangleDescriptorPool, nullptr);
 
 
 	//creating the description of the output of our pipeline
@@ -286,6 +297,36 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 	triangleUniformBuffer = (VkBuffer*)malloc(sizeof(VkBuffer) * GAPI.NbVulkanFrames);
 	triangleGPUUniformBuffer = (VkDeviceMemory*)malloc(sizeof(VkDeviceMemory) * GAPI.NbVulkanFrames);
 	triangleCPUUniformBuffer = (void**)malloc(sizeof(void*) * GAPI.NbVulkanFrames);
+	memset(triangleCPUUniformBuffer, 0, sizeof(void*) * GAPI.NbVulkanFrames);
+	memset(triangleGPUUniformBuffer, 0, sizeof(VkDeviceMemory*) * GAPI.NbVulkanFrames);
+	memset(triangleUniformBuffer, 0, sizeof(VkBuffer*) * GAPI.NbVulkanFrames);
+
+	//create the descriptor pool
+	VkDescriptorPoolSize poolSize{};
+	poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	poolSize.descriptorCount = GAPI.NbVulkanFrames;
+
+	VkDescriptorPoolCreateInfo poolInfo{};
+	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.poolSizeCount = 1;
+	poolInfo.pPoolSizes = &poolSize;
+	poolInfo.maxSets = GAPI.NbVulkanFrames;
+
+	VK_CALL_PRINT(vkCreateDescriptorPool(GAPI.VulkanDevice, &poolInfo, nullptr, &triangleDescriptorPool))
+
+	//describe a descriptor set for each of our framebuffer (a uniform bufer per frame)
+	VkDescriptorSetAllocateInfo allocInfo{};
+	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	allocInfo.descriptorPool = triangleDescriptorPool;
+	allocInfo.descriptorSetCount = GAPI.NbVulkanFrames;
+	VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*)alloca(GAPI.NbVulkanFrames * sizeof(VkDescriptorSetLayout));
+	for (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
+		memcpy(&layouts[i], &triangleDescriptorLayout, sizeof(VkDescriptorSetLayout));
+	allocInfo.pSetLayouts = layouts;
+
+	triangleDescriptorSet = (VkDescriptorSet*)malloc(sizeof(VkDescriptorSet) * GAPI.NbVulkanFrames);
+	VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI.VulkanDevice, &allocInfo, triangleDescriptorSet));
+
 
 	for (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
 	{
@@ -294,11 +335,30 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 
 		VK_CALL_PRINT(vkCreateFramebuffer(GAPI.VulkanDevice, &framebufferInfo, nullptr, &triangleOutput[i]))
 
-		if (CreateVulkanBuffer(GAPI, sizeof(UniformBuffer), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, triangleUniformBuffer[i], triangleGPUUniformBuffer[i]))
+		if (CreateVulkanBuffer(GAPI, sizeof(UniformBuffer), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &triangleUniformBuffer[i], &triangleGPUUniformBuffer[i]))
 		{
 			VK_CALL_PRINT(vkMapMemory(GAPI.VulkanDevice, triangleGPUUniformBuffer[i], 0, sizeof(UniformBuffer), 0, &triangleCPUUniformBuffer[i]));
 		}
+
+		VkDescriptorBufferInfo bufferInfo{};
+		bufferInfo.buffer = triangleUniformBuffer[i];
+		bufferInfo.offset = 0;
+		bufferInfo.range = sizeof(UniformBuffer);
+
+		VkWriteDescriptorSet descriptorWrite{};
+		descriptorWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrite.dstSet			= triangleDescriptorSet[i];
+		descriptorWrite.dstBinding		= 0;
+		descriptorWrite.dstArrayElement = 0;
+		descriptorWrite.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrite.descriptorCount = 1;
+		descriptorWrite.pBufferInfo		= &bufferInfo;
+
+		vkUpdateDescriptorSets(GAPI.VulkanDevice, 1, &descriptorWrite, 0, nullptr);
 	}
+
+
+
 }
 
 
@@ -345,7 +405,36 @@ void RasterTriangle::Show(GraphicsAPIManager& GAPI)
 		vkCmdBeginRenderPass(commandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
 	}
 
+	if (changed)
+	{
+		for (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
+			memcpy(&triangleCPUUniformBuffer[i], (void*)&pointBuffer, sizeof(UniformBuffer));
+
+		//VkMappedMemoryRange memoryRange{};
+		//memoryRange.memory = triangleGPUUniformBuffer[GAPI.VulkanFrameIndex];
+		//memoryRange.size = sizeof(UniformBuffer);
+		//vkFlushMappedMemoryRanges(GAPI.VulkanDevice,1,&memoryRange);
+
+		VkDescriptorBufferInfo bufferInfo{};
+		bufferInfo.buffer = triangleUniformBuffer[GAPI.VulkanFrameIndex];
+		bufferInfo.offset = 0;
+		bufferInfo.range = sizeof(UniformBuffer);
+
+		VkWriteDescriptorSet descriptorWrite{};
+		descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrite.dstSet = triangleDescriptorSet[GAPI.VulkanFrameIndex];
+		descriptorWrite.dstBinding = 0;
+		descriptorWrite.dstArrayElement = 0;
+		descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrite.descriptorCount = 1;
+		descriptorWrite.pBufferInfo = &bufferInfo;
+
+		vkUpdateDescriptorSets(GAPI.VulkanDevice, 1, &descriptorWrite, 0, nullptr);
+	}
+
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, triangleLayout, 0, 1, &triangleDescriptorSet[GAPI.VulkanFrameIndex], 0, nullptr);
+
 	vkCmdSetViewport(commandBuffer, 0, 1, &triangleViewport);
 	vkCmdSetScissor(commandBuffer, 0, 1, &triangleScissors);
 	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
@@ -380,6 +469,10 @@ void RasterTriangle::Close(class GraphicsAPIManager& GAPI)
 	VK_CLEAR_RAW_ARRAY(triangleUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
 	VK_CLEAR_RAW_ARRAY(triangleGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
 	free(triangleCPUUniformBuffer);
+
+	vkFreeDescriptorSets(GAPI.VulkanDevice, triangleDescriptorPool, GAPI.NbVulkanFrames, triangleDescriptorSet);
+	free(triangleDescriptorSet);
+	vkDestroyDescriptorPool(GAPI.VulkanDevice, triangleDescriptorPool, nullptr);
 
 	vkDestroyDescriptorSetLayout(GAPI.VulkanDevice, triangleDescriptorLayout, nullptr);
 	vkDestroyPipelineLayout(GAPI.VulkanDevice, triangleLayout, nullptr);
