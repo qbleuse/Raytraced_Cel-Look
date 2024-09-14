@@ -21,4 +21,12 @@
 		free(raw_array);\
 	}\
 
+#define VK_CLEAR_ARRAY(_array, size, call, device) \
+	if (_array != nullptr)\
+	{\
+		for (uint32_t i = 0; i < size; i++)\
+			call(device, _array[i], nullptr);\
+		_array.Clear();\
+	}\
+
 #endif //__CONCATENATED_VULKAN_H__

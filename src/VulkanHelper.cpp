@@ -2,9 +2,9 @@
 
 #include "GraphicsAPIManager.h"
 
-/* BUFFERS */
+/*===== BUFFERS =====*/
 
-bool CreateVulkanBuffer(GraphicsAPIManager& GAPI, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer* buffer, VkDeviceMemory* bufferMemory)
+bool CreateVulkanBuffer(GraphicsAPIManager& GAPI, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
 {
 	VkResult result = VK_SUCCESS;
 
@@ -14,10 +14,10 @@ bool CreateVulkanBuffer(GraphicsAPIManager& GAPI, VkDeviceSize size, VkBufferUsa
 	bufferInfo.usage = usage;
 	bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-	VK_CALL_PRINT(vkCreateBuffer(GAPI.VulkanDevice, &bufferInfo, nullptr, buffer))
+	VK_CALL_PRINT(vkCreateBuffer(GAPI.VulkanDevice, &bufferInfo, nullptr, &buffer))
 	
 	VkMemoryRequirements memRequirements;
-	vkGetBufferMemoryRequirements(GAPI.VulkanDevice, *buffer, &memRequirements);
+	vkGetBufferMemoryRequirements(GAPI.VulkanDevice, buffer, &memRequirements);
 	
 	VkMemoryAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -33,9 +33,21 @@ bool CreateVulkanBuffer(GraphicsAPIManager& GAPI, VkDeviceSize size, VkBufferUsa
 		}
 	}
 
-	VK_CALL_PRINT(vkAllocateMemory(GAPI.VulkanDevice, &allocInfo, nullptr, bufferMemory))
+	VK_CALL_PRINT(vkAllocateMemory(GAPI.VulkanDevice, &allocInfo, nullptr, &bufferMemory))
 
-	VK_CALL_PRINT(vkBindBufferMemory(GAPI.VulkanDevice, *buffer, *bufferMemory, 0));
+	VK_CALL_PRINT(vkBindBufferMemory(GAPI.VulkanDevice, buffer, bufferMemory, 0));
 
 	return result == VK_SUCCESS;
+}
+
+bool CreateUniformBufferHandle(GraphicsAPIManager& GAPI, UniformBufferHandle& bufferHandle, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, bool mapCPUMemoryHandle)
+{
+	VkResult result = VK_SUCCESS;
+
+	bool buffer_handle_created_successful = CreateVulkanBuffer(GAPI, size, usage, properties, bufferHandle.GPUBuffer, bufferHandle.GPUMemoryHandle);
+
+	if (mapCPUMemoryHandle)
+		VK_CALL_PRINT(vkMapMemory(GAPI.VulkanDevice, bufferHandle.GPUMemoryHandle, 0, size, 0, &bufferHandle.CPUMemoryHandle));
+
+	return result == VK_SUCCESS && buffer_handle_created_successful;
 }

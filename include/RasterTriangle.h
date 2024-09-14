@@ -11,7 +11,7 @@
 //for imgui and context
 #include "AppWideContext.h"
 
-
+#include "Utilities.h"
 
 /**
 * This class is the beginning and first scene of all good Graphics Project : a Rasterized Triangle !
@@ -34,24 +34,26 @@ private:
 	/* Vulkan */
 
 	//the viewport of this scene (can change at runtime, as window can be resized)
-	VkViewport				triangleViewport{};
-	VkRect2D				triangleScissors{};
-	VkRenderPass			triangleRenderPass{};
-	VkDescriptorSetLayout	triangleVertexDescriptorLayout{};
-	//VkDescriptorSetLayout	trianglePixelDescriptorLayout{};
-	VkDescriptorPool		triangleDescriptorPool{};
-	VkPipelineLayout		triangleLayout{};
-	VkPipeline				trianglePipeline{};
-	VkFramebuffer*			triangleOutput{nullptr};
+	VkViewport					triangleViewport{};
+	VkRect2D					triangleScissors{};
+	VkRenderPass				triangleRenderPass{};
+	VkDescriptorSetLayout		triangleVertexDescriptorLayout{};
+	//VkDescriptorSetLayout		trianglePixelDescriptorLayout{};
+	VkDescriptorPool			triangleDescriptorPool{};
+	VkPipelineLayout			triangleLayout{};
+	VkPipeline					trianglePipeline{};
+	SimpleArray<VkFramebuffer>	triangleOutput;
 
-	VkBuffer*				triangleVertexUniformBuffer{nullptr};
-	VkDeviceMemory*			triangleVertexGPUUniformBuffer{ nullptr };
-	void**					triangleVertexCPUUniformBuffer{ nullptr };
-	VkDescriptorSet*		triangleVertexDescriptorSet{ nullptr };
-	VkBuffer*				trianglePixelUniformBuffer{ nullptr };
-	VkDeviceMemory*			trianglePixelGPUUniformBuffer{ nullptr };
-	void**					trianglePixelCPUUniformBuffer{ nullptr };
-	//VkDescriptorSet*		trianglePixelDescriptorSet{ nullptr };
+	//SimpleArray<UniformBufferHandle>	trianglePointsHandle;
+	//SimpleArray<UniformBufferHandle>	triangleColourHandle;
+
+	SimpleArray<VkBuffer>				triangleVertexUniformBuffer;
+	SimpleArray<VkDeviceMemory>			triangleVertexGPUUniformBuffer;
+	SimpleArray<void*>					triangleVertexCPUUniformBuffer;
+	SimpleArray<VkDescriptorSet>		triangleVertexDescriptorSet;
+	SimpleArray<VkBuffer>				trianglePixelUniformBuffer;
+	SimpleArray<VkDeviceMemory>			trianglePixelGPUUniformBuffer;
+	SimpleArray<void*>					trianglePixelCPUUniformBuffer;
 
 
 	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);

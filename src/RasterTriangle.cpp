@@ -278,15 +278,15 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 {
 	VkResult result = VK_SUCCESS;
 
-	VK_CLEAR_RAW_ARRAY(triangleOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
-	VK_CLEAR_RAW_ARRAY(triangleVertexUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
-	VK_CLEAR_RAW_ARRAY(triangleVertexGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
-	free(triangleVertexCPUUniformBuffer);
+	VK_CLEAR_ARRAY(triangleOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
+	VK_CLEAR_ARRAY(triangleVertexUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
+	VK_CLEAR_ARRAY(triangleVertexGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
+	triangleVertexCPUUniformBuffer.Clear();
 	//if (triangleVertexDescriptorSet) vkFreeDescriptorSets(GAPI.VulkanDevice, triangleDescriptorPool, GAPI.NbVulkanFrames, triangleVertexDescriptorSet);
 	//free(triangleVertexDescriptorSet);
-	VK_CLEAR_RAW_ARRAY(trianglePixelUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
-	VK_CLEAR_RAW_ARRAY(trianglePixelGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
-	free(trianglePixelCPUUniformBuffer);
+	VK_CLEAR_ARRAY(trianglePixelUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
+	VK_CLEAR_ARRAY(trianglePixelGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
+	trianglePixelCPUUniformBuffer.Clear();
 	//if (trianglePixelDescriptorSet) vkFreeDescriptorSets(GAPI.VulkanDevice, triangleDescriptorPool, GAPI.NbVulkanFrames, trianglePixelDescriptorSet);
 	//free(trianglePixelDescriptorSet);
 	vkDestroyDescriptorPool(GAPI.VulkanDevice, triangleDescriptorPool, nullptr);
@@ -310,21 +310,15 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 
 	triangleScissors.extent = { (uint32_t)width, (uint32_t)height };
 
-	triangleOutput = (VkFramebuffer*)malloc(sizeof(VkFramebuffer) * GAPI.NbVulkanFrames);
+	triangleOutput.Alloc(GAPI.NbVulkanFrames);
 
-	trianglePixelUniformBuffer = (VkBuffer*)malloc(sizeof(VkBuffer) * GAPI.NbVulkanFrames);
-	trianglePixelGPUUniformBuffer = (VkDeviceMemory*)malloc(sizeof(VkDeviceMemory) * GAPI.NbVulkanFrames);
-	trianglePixelCPUUniformBuffer = (void**)malloc(sizeof(void*) * GAPI.NbVulkanFrames);
-	memset(trianglePixelCPUUniformBuffer, 0, sizeof(void*) * GAPI.NbVulkanFrames);
-	memset(trianglePixelGPUUniformBuffer, 0, sizeof(VkDeviceMemory*) * GAPI.NbVulkanFrames);
-	memset(trianglePixelUniformBuffer, 0, sizeof(VkBuffer*) * GAPI.NbVulkanFrames);
+	trianglePixelUniformBuffer.Alloc(GAPI.NbVulkanFrames);
+	trianglePixelGPUUniformBuffer.Alloc(GAPI.NbVulkanFrames);
+	trianglePixelCPUUniformBuffer.Alloc(GAPI.NbVulkanFrames);
 
-	triangleVertexUniformBuffer = (VkBuffer*)malloc(sizeof(VkBuffer) * GAPI.NbVulkanFrames);
-	triangleVertexGPUUniformBuffer = (VkDeviceMemory*)malloc(sizeof(VkDeviceMemory) * GAPI.NbVulkanFrames);
-	triangleVertexCPUUniformBuffer = (void**)malloc(sizeof(void*) * GAPI.NbVulkanFrames);
-	memset(triangleVertexCPUUniformBuffer, 0, sizeof(void*) * GAPI.NbVulkanFrames);
-	memset(triangleVertexGPUUniformBuffer, 0, sizeof(VkDeviceMemory*) * GAPI.NbVulkanFrames);
-	memset(triangleVertexUniformBuffer, 0, sizeof(VkBuffer*) * GAPI.NbVulkanFrames);
+	triangleVertexUniformBuffer.Alloc(GAPI.NbVulkanFrames);
+	triangleVertexGPUUniformBuffer.Alloc(GAPI.NbVulkanFrames);
+	triangleVertexCPUUniformBuffer.Alloc(GAPI.NbVulkanFrames);
 
 	//create the descriptor pool
 	VkDescriptorPoolSize poolSize{};
@@ -350,9 +344,9 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 		memcpy(&layouts[i], &triangleVertexDescriptorLayout, sizeof(VkDescriptorSetLayout));
 	allocInfo.pSetLayouts = layouts;
 
-	triangleVertexDescriptorSet = (VkDescriptorSet*)malloc(sizeof(VkDescriptorSet) * GAPI.NbVulkanFrames);
+	triangleVertexDescriptorSet.Alloc(GAPI.NbVulkanFrames);
 	//trianglePixelDescriptorSet = (VkDescriptorSet*)malloc(sizeof(VkDescriptorSet) * GAPI.NbVulkanFrames);
-	VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI.VulkanDevice, &allocInfo, triangleVertexDescriptorSet));
+	VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI.VulkanDevice, &allocInfo, *triangleVertexDescriptorSet));
 
 
 
@@ -505,13 +499,11 @@ void RasterTriangle::Show(GraphicsAPIManager& GAPI)
 
 void RasterTriangle::Close(class GraphicsAPIManager& GAPI)
 {
-	VK_CLEAR_RAW_ARRAY(triangleOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
-	VK_CLEAR_RAW_ARRAY(triangleVertexUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
-	VK_CLEAR_RAW_ARRAY(triangleVertexGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
-	free(triangleVertexCPUUniformBuffer);
-	VK_CLEAR_RAW_ARRAY(trianglePixelUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
-	VK_CLEAR_RAW_ARRAY(trianglePixelGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
-	free(trianglePixelCPUUniformBuffer);
+	VK_CLEAR_ARRAY(triangleOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
+	VK_CLEAR_ARRAY(triangleVertexUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
+	VK_CLEAR_ARRAY(triangleVertexGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
+	VK_CLEAR_ARRAY(trianglePixelUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
+	VK_CLEAR_ARRAY(trianglePixelGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
 
 	//vkFreeDescriptorSets(GAPI.VulkanDevice, triangleDescriptorPool, GAPI.NbVulkanFrames, triangleVertexDescriptorSet);
 	//free(triangleVertexDescriptorSet);
