@@ -6,12 +6,14 @@
 #include "Scene.h"
 
 //Graphics API
-#include "ConcatenatedVulkan.h"
+#include "VulkanHelper.h"
 
 //for imgui and context
 #include "AppWideContext.h"
 
+//utilities include
 #include "Utilities.h"
+#include "Maths.h"
 
 /**
 * This class is the beginning and first scene of all good Graphics Project : a Rasterized Triangle !
@@ -21,10 +23,10 @@ class RasterTriangle : public Scene
 
 	struct UniformBuffer
 	{
-		ImVec4 first;
-		ImVec4 second;
-		ImVec4 third;
-		ImVec4 padding;
+		vec4 first;
+		vec4 second;
+		vec4 third;
+		vec4 padding;
 	};
 
 #pragma region GRAPHICS API
@@ -43,17 +45,12 @@ private:
 	VkPipelineLayout			triangleLayout{};
 	VkPipeline					trianglePipeline{};
 	SimpleArray<VkFramebuffer>	triangleOutput;
-
-	//SimpleArray<UniformBufferHandle>	trianglePointsHandle;
-	//SimpleArray<UniformBufferHandle>	triangleColourHandle;
-
-	SimpleArray<VkBuffer>				triangleVertexUniformBuffer;
-	SimpleArray<VkDeviceMemory>			triangleVertexGPUUniformBuffer;
-	SimpleArray<void*>					triangleVertexCPUUniformBuffer;
 	SimpleArray<VkDescriptorSet>		triangleVertexDescriptorSet;
-	SimpleArray<VkBuffer>				trianglePixelUniformBuffer;
-	SimpleArray<VkDeviceMemory>			trianglePixelGPUUniformBuffer;
-	SimpleArray<void*>					trianglePixelCPUUniformBuffer;
+
+
+	UniformBufferHandle	trianglePointsHandle;
+	UniformBufferHandle	triangleColourHandle;
+
 
 
 	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
@@ -81,7 +78,7 @@ public:
 
 	virtual void Act(struct AppWideContext& AppContext)final;
 
-	virtual void Show(class GraphicsAPIManager& GAPI)final;
+	virtual void Show(GAPIHandle& GAPIHandle)final;
 
 	virtual void Close(class GraphicsAPIManager& GAPI)final;
 

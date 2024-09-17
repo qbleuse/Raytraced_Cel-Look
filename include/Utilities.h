@@ -48,6 +48,11 @@ public:
 		return _raw_data[i];
 	}
 
+	const T& operator[](int32_t i)const
+	{
+		return _raw_data[i];
+	}
+
 	T** operator&()
 	{
 		return &_raw_data;
@@ -83,6 +88,7 @@ public:
 	{
 		if (_raw_data)
 			free(_raw_data);
+		_raw_data = nullptr;
 	}
 
 	void Alloc(uint32_t nb)

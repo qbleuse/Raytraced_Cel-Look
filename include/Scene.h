@@ -16,7 +16,7 @@ public:
 
 	virtual void Act(struct AppWideContext& AppContext) = 0;
 
-	virtual void Show(class GraphicsAPIManager& GAPI) = 0;
+	virtual void Show(struct GAPIHandle& GAPIHandle) = 0;
 
 	virtual void Close(class GraphicsAPIManager& GAPI) = 0;
 };

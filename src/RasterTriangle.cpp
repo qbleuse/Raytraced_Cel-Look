@@ -4,8 +4,6 @@
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
 
-//vulkan shader compiler
-#include "shaderc/shaderc.h"
 
 /*===== Prepare =====*/
 
@@ -45,44 +43,10 @@ void RasterTriangle::PrepareVulkanScripts(GraphicsAPIManager& GAPI, VkShaderModu
 		}
 		)";
 
-	//our shader compiler 
-	shaderc_compiler_t shader_compiler = shaderc_compiler_initialize();
 
-	//the compile option of our compiler
-	shaderc_compile_options_t compile_options = shaderc_compile_options_initialize();
-	
-	//compiling our vertex shader into byte code
-	shaderc_compilation_result_t compiled_vertex = shaderc_compile_into_spv(shader_compiler, vertex_shader, strlen(vertex_shader), shaderc_vertex_shader, "Raster Triangle Vertex", "main", compile_options);
-	//compiling our fragment shader into byte code
-	shaderc_compilation_result_t compiled_fragment = shaderc_compile_into_spv(shader_compiler, fragment_shader, strlen(fragment_shader), shaderc_fragment_shader, "Raster Triangle Fragment", "main", compile_options);
+	CreateVulkanShaders(GAPI, VertexShader, VK_SHADER_STAGE_VERTEX_BIT, vertex_shader, "Raster Triangle Vertex");
+	CreateVulkanShaders(GAPI, FragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_shader, "Raster Triangle Frag");
 
-
-	// make compiled shader, vulkan shaders
-	{
-		//the Vulkan Vertex Shader 
-		VkShaderModuleCreateInfo shaderinfo{};
-		shaderinfo.sType	= VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-		shaderinfo.codeSize = shaderc_result_get_length(compiled_vertex);
-		shaderinfo.pCode	= (uint32_t*)shaderc_result_get_bytes(compiled_vertex);
-
-		VkResult result = VK_SUCCESS;
-		VK_CALL_PRINT(vkCreateShaderModule(GAPI.VulkanDevice, &shaderinfo, nullptr, &VertexShader))
-
-		//the Vulkan Fragment Shader 
-		shaderinfo.codeSize = shaderc_result_get_length(compiled_fragment);
-		shaderinfo.pCode = (uint32_t*)shaderc_result_get_bytes(compiled_fragment);
-
-		VK_CALL_PRINT(vkCreateShaderModule(GAPI.VulkanDevice, &shaderinfo, nullptr, &FragmentShader))
-	}
-
-
-	shaderc_result_release(compiled_vertex);
-	shaderc_result_release(compiled_fragment);
-
-
-	//release both compile options and compiler
-	shaderc_compile_options_release(compile_options);
-	shaderc_compiler_release(shader_compiler);
 }
 
 void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader)
@@ -256,13 +220,13 @@ void RasterTriangle::Prepare(GraphicsAPIManager& GAPI)
 	//the Shaders needed.
 	VkShaderModule vertexShader{}, fragmentShader{}; \
 
-	pointBuffer.first	= ImVec4(0.0f, -0.5f, 0.0f, 0.0f);
-	pointBuffer.second	= ImVec4(0.5f, 0.5f, 0.0f, 0.0f);
-	pointBuffer.third	= ImVec4(-0.5f, 0.5f, 0.0f, 0.0f);
+	pointBuffer.first	= vec4(0.0f, -0.5f, 0.0f, 0.0f);
+	pointBuffer.second	= vec4(0.5f, 0.5f, 0.0f, 0.0f);
+	pointBuffer.third	= vec4(-0.5f, 0.5f, 0.0f, 0.0f);
 
-	colorBuffer.first = ImVec4(1.0f, 0.0f, 0.0f, 0.0f);
-	colorBuffer.second = ImVec4(0.0f, 1.0f, 0.0f, 0.0f);
-	colorBuffer.third = ImVec4(0.0f, 0.0f, 1.0f, 0.0f);
+	colorBuffer.first = vec4(1.0f, 0.0f, 0.0f, 0.0f);
+	colorBuffer.second = vec4(0.0f, 1.0f, 0.0f, 0.0f);
+	colorBuffer.third = vec4(0.0f, 0.0f, 1.0f, 0.0f);
 
 
 	//compile the shaders here
@@ -279,16 +243,6 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 	VkResult result = VK_SUCCESS;
 
 	VK_CLEAR_ARRAY(triangleOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
-	VK_CLEAR_ARRAY(triangleVertexUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
-	VK_CLEAR_ARRAY(triangleVertexGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
-	triangleVertexCPUUniformBuffer.Clear();
-	//if (triangleVertexDescriptorSet) vkFreeDescriptorSets(GAPI.VulkanDevice, triangleDescriptorPool, GAPI.NbVulkanFrames, triangleVertexDescriptorSet);
-	//free(triangleVertexDescriptorSet);
-	VK_CLEAR_ARRAY(trianglePixelUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
-	VK_CLEAR_ARRAY(trianglePixelGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
-	trianglePixelCPUUniformBuffer.Clear();
-	//if (trianglePixelDescriptorSet) vkFreeDescriptorSets(GAPI.VulkanDevice, triangleDescriptorPool, GAPI.NbVulkanFrames, trianglePixelDescriptorSet);
-	//free(trianglePixelDescriptorSet);
 	vkDestroyDescriptorPool(GAPI.VulkanDevice, triangleDescriptorPool, nullptr);
 
 
@@ -311,14 +265,6 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 	triangleScissors.extent = { (uint32_t)width, (uint32_t)height };
 
 	triangleOutput.Alloc(GAPI.NbVulkanFrames);
-
-	trianglePixelUniformBuffer.Alloc(GAPI.NbVulkanFrames);
-	trianglePixelGPUUniformBuffer.Alloc(GAPI.NbVulkanFrames);
-	trianglePixelCPUUniformBuffer.Alloc(GAPI.NbVulkanFrames);
-
-	triangleVertexUniformBuffer.Alloc(GAPI.NbVulkanFrames);
-	triangleVertexGPUUniformBuffer.Alloc(GAPI.NbVulkanFrames);
-	triangleVertexCPUUniformBuffer.Alloc(GAPI.NbVulkanFrames);
 
 	//create the descriptor pool
 	VkDescriptorPoolSize poolSize{};
@@ -348,27 +294,21 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 	//trianglePixelDescriptorSet = (VkDescriptorSet*)malloc(sizeof(VkDescriptorSet) * GAPI.NbVulkanFrames);
 	VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI.VulkanDevice, &allocInfo, *triangleVertexDescriptorSet));
 
+	//recreate the uniform bufferx
+	CreateUniformBufferHandle(GAPI, trianglePointsHandle, GAPI.NbVulkanFrames, sizeof(UniformBuffer));
+	CreateUniformBufferHandle(GAPI, triangleColourHandle, GAPI.NbVulkanFrames, sizeof(UniformBuffer));
+
 
 
 	for (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
 	{
 		framebufferInfo.attachmentCount = 1;
 		framebufferInfo.pAttachments = &GAPI.VulkanBackColourBuffers[i];
-
 		VK_CALL_PRINT(vkCreateFramebuffer(GAPI.VulkanDevice, &framebufferInfo, nullptr, &triangleOutput[i]))
 
-		if (CreateVulkanBuffer(GAPI, sizeof(UniformBuffer), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &triangleVertexUniformBuffer[i], &triangleVertexGPUUniformBuffer[i]))
-		{
-			VK_CALL_PRINT(vkMapMemory(GAPI.VulkanDevice, triangleVertexGPUUniformBuffer[i], 0, sizeof(UniformBuffer), 0, &triangleVertexCPUUniformBuffer[i]));
-		}
-
-		if (CreateVulkanBuffer(GAPI, sizeof(UniformBuffer), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, &trianglePixelUniformBuffer[i], &trianglePixelGPUUniformBuffer[i]))
-		{
-			VK_CALL_PRINT(vkMapMemory(GAPI.VulkanDevice, trianglePixelGPUUniformBuffer[i], 0, sizeof(UniformBuffer), 0, &trianglePixelCPUUniformBuffer[i]));
-		}
 
 		VkDescriptorBufferInfo bufferInfo{};
-		bufferInfo.buffer = triangleVertexUniformBuffer[i];
+		bufferInfo.buffer = trianglePointsHandle.GPUBuffer[i];
 		bufferInfo.offset = 0;
 		bufferInfo.range = sizeof(UniformBuffer);
 
@@ -382,7 +322,7 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 		descriptorWrite.pBufferInfo		= &bufferInfo;
 
 		VkDescriptorBufferInfo colorbufferInfo{};
-		colorbufferInfo.buffer = trianglePixelUniformBuffer[i];
+		colorbufferInfo.buffer = triangleColourHandle.GPUBuffer[i];
 		colorbufferInfo.offset = 0;
 		colorbufferInfo.range = sizeof(UniformBuffer);
 		
@@ -422,12 +362,12 @@ void RasterTriangle::Act(AppWideContext& AppContext)
 
 /*===== Show =====*/
 
-void RasterTriangle::Show(GraphicsAPIManager& GAPI)
+void RasterTriangle::Show(GAPIHandle& RuntimeGAPIHandle)
 {
 	VkResult err;
-	VkCommandBuffer commandBuffer = GAPI.GetCurrentVulkanCommand();
-	VkSemaphore waitSemaphore = GAPI.GetCurrentCanPresentSemaphore();
-	VkSemaphore signalSemaphore = GAPI.GetCurrentHasPresentedSemaphore();
+	VkCommandBuffer commandBuffer = RuntimeGAPIHandle.GetCurrentVulkanCommand();
+	VkSemaphore waitSemaphore = RuntimeGAPIHandle.GetCurrentCanPresentSemaphore();
+	VkSemaphore signalSemaphore = RuntimeGAPIHandle.GetCurrentHasPresentedSemaphore();
 
 	{
 		err = vkResetCommandBuffer(commandBuffer, 0);
@@ -442,7 +382,7 @@ void RasterTriangle::Show(GraphicsAPIManager& GAPI)
 		VkRenderPassBeginInfo info = {};
 		info.sType			= VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		info.renderPass		= triangleRenderPass;
-		info.framebuffer	= triangleOutput[GAPI.VulkanFrameIndex];
+		info.framebuffer	= triangleOutput[RuntimeGAPIHandle.VulkanFrameIndex];
 		info.renderArea.extent.width = triangleViewport.width;
 		info.renderArea.extent.height = triangleViewport.height;
 		info.clearValueCount = 0;
@@ -453,9 +393,9 @@ void RasterTriangle::Show(GraphicsAPIManager& GAPI)
 	if (changed)
 	{
 		//for (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
-		memcpy(triangleVertexCPUUniformBuffer[GAPI.VulkanFrameIndex], (void*)&pointBuffer, sizeof(UniformBuffer));
+		memcpy(trianglePointsHandle.CPUMemoryHandle[RuntimeGAPIHandle.VulkanFrameIndex], (void*)&pointBuffer, sizeof(UniformBuffer));
 		//or (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
-		memcpy(trianglePixelCPUUniformBuffer[GAPI.VulkanFrameIndex], (void*)&colorBuffer, sizeof(UniformBuffer));
+		memcpy(triangleColourHandle.CPUMemoryHandle[RuntimeGAPIHandle.VulkanFrameIndex], (void*)&colorBuffer, sizeof(UniformBuffer));
 
 		//VkMappedMemoryRange range = {};
 		//range.memory = triangleVertexGPUUniformBuffer[GAPI.VulkanFrameIndex];
@@ -466,7 +406,7 @@ void RasterTriangle::Show(GraphicsAPIManager& GAPI)
 	}
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, triangleLayout, 0, 1, &triangleVertexDescriptorSet[GAPI.VulkanFrameIndex], 0, nullptr);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, triangleLayout, 0, 1, &triangleVertexDescriptorSet[RuntimeGAPIHandle.VulkanFrameIndex], 0, nullptr);
 
 
 	vkCmdSetViewport(commandBuffer, 0, 1, &triangleViewport);
@@ -489,7 +429,7 @@ void RasterTriangle::Show(GraphicsAPIManager& GAPI)
 
 		err = vkEndCommandBuffer(commandBuffer);
 		//check_vk_result(err);
-		err = vkQueueSubmit(GAPI.VulkanQueues[0], 1, &info, GAPI.VulkanIsDrawingFence[GAPI.VulkanFrameIndex]);
+		err = vkQueueSubmit(RuntimeGAPIHandle.VulkanQueues[0], 1, &info, RuntimeGAPIHandle.VulkanIsDrawingFence[RuntimeGAPIHandle.VulkanFrameIndex]);
 		//check_vk_result(err);
 	}
 
@@ -500,10 +440,9 @@ void RasterTriangle::Show(GraphicsAPIManager& GAPI)
 void RasterTriangle::Close(class GraphicsAPIManager& GAPI)
 {
 	VK_CLEAR_ARRAY(triangleOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
-	VK_CLEAR_ARRAY(triangleVertexUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
-	VK_CLEAR_ARRAY(triangleVertexGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
-	VK_CLEAR_ARRAY(trianglePixelUniformBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
-	VK_CLEAR_ARRAY(trianglePixelGPUUniformBuffer, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
+
+	ClearUniformBufferHandle(GAPI, trianglePointsHandle);
+	ClearUniformBufferHandle(GAPI, triangleColourHandle);
 
 	//vkFreeDescriptorSets(GAPI.VulkanDevice, triangleDescriptorPool, GAPI.NbVulkanFrames, triangleVertexDescriptorSet);
 	//free(triangleVertexDescriptorSet);

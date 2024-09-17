@@ -3,7 +3,43 @@
 
 #include <cstdint>
 
-#include "ConcatenatedVulkan.h"
+#include "VulkanHelper.h"
+#include "Utilities.h"
+
+
+struct GAPIHandle
+{
+	/* Vulkan */
+	VkQueue	VulkanQueues[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
+	SimpleArray<VkCommandBuffer>	VulkanCommand;
+	SimpleArray<VkSemaphore>		VulkanCanPresentSemaphore;
+	SimpleArray<VkSemaphore>		VulkanHasPresentedSemaphore;
+	SimpleArray<VkFence>			VulkanIsDrawingFence;
+
+	uint32_t		VulkanCurrentFrame = 0;
+	uint32_t		VulkanFrameIndex = 0;
+
+	/*
+	* Returns the command buffer currently used for this frame to record commands
+	*/
+	__forceinline const VkCommandBuffer& GetCurrentVulkanCommand()const { return VulkanCommand[VulkanFrameIndex]; }
+
+	/*
+	* Returns the semaphore currently used for this frame to track if we can preesent
+	*/
+	__forceinline const VkSemaphore& GetCurrentCanPresentSemaphore()const { return VulkanCanPresentSemaphore[VulkanCurrentFrame]; }
+
+	/*
+	* Returns the semaphore currently used for this frame to track if frame was presented
+	*/
+	__forceinline const VkSemaphore& GetCurrentHasPresentedSemaphore()const { return VulkanHasPresentedSemaphore[VulkanCurrentFrame]; }
+
+	/*
+	* Returns the fence currently used for this frame to track if GPU is still executing command
+	*/
+	__forceinline const VkFence& GetCurrentIsDrawingFence()const { return VulkanIsDrawingFence[VulkanFrameIndex]; }
+
+};
 
 /**
 * class that manages what Graphics API this machine supports, and initialize the associated resources.
@@ -17,6 +53,8 @@ class GraphicsAPIManager
 public:
 
 	~GraphicsAPIManager();
+
+	GAPIHandle RuntimeHandle;
 
 	/*===== END GRAPHICS API MANAGER =====*/
 #pragma endregion
@@ -96,10 +134,10 @@ public:
 		VkSurfaceFormatKHR VulkanSurfaceFormat{};
 		
 		//The actual frames of the swapchain. this is an array containing a number of VkImage (with a minimum of 3)
-		VkImage* VulkanBackBuffers{ nullptr };
+		SimpleArray<VkImage> VulkanBackBuffers;
 		//The actual frames buffers of the swapchain. this is an array containing a number of VkImageViews equal to the number of frames.
 		//This is the interface that will allow us to write into the actual frames we want to present to the screen.
-		VkImageView* VulkanBackColourBuffers{ nullptr };
+		SimpleArray<VkImageView> VulkanBackColourBuffers;
 		//The nb of actual Vulkan framebuffers in the Vulkan swapchain at any given time (this can change between hardware)
 		uint32_t NbVulkanFrames{ 0 };
 
@@ -170,43 +208,14 @@ public:
 		/* Vulkan */
 
 		//The Interface allowing the creation of Command to the chosen physical device
-		VkQueue			VulkanQueues[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
 		uint32_t		VulkanQueueFamily{ 0 };
 		VkCommandPool	VulkanCommandPool[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
-		VkCommandBuffer* VulkanCommand{ nullptr };
-		VkSemaphore*	VulkanCanPresentSemaphore = nullptr;
-		VkSemaphore*	VulkanHasPresentedSemaphore = nullptr;
-		VkFence*		VulkanIsDrawingFence = nullptr;
-		uint32_t		VulkanCurrentFrame = 0;
-		uint32_t		VulkanFrameIndex = 0;
 
 		/*
 		* Gets the index of Vulkan's swapchain framebuffer that can be used.
 		* - returns : if current index could be get, false means VK_ERROR_OUT_OF_DATE_KHR or VK_SUBOPTIMAL_KHR.
 		*/
 		bool GetVulkanNextFrame();
-
-		/*
-		* Returns the command buffer currently used for this frame to record commands
-		*/
-		__forceinline VkCommandBuffer GetCurrentVulkanCommand()const { return VulkanCommand[VulkanFrameIndex]; }
-		
-		/*
-		* Returns the semaphore currently used for this frame to track if we can preesent
-		*/
-		__forceinline VkSemaphore GetCurrentCanPresentSemaphore()const { return VulkanCanPresentSemaphore[VulkanCurrentFrame]; }
-
-		/*
-		* Returns the semaphore currently used for this frame to track if frame was presented
-		*/
-		__forceinline VkSemaphore GetCurrentHasPresentedSemaphore()const { return VulkanHasPresentedSemaphore[VulkanCurrentFrame]; }
-
-		/*
-		* Returns the fence currently used for this frame to track if GPU is still executing command
-		*/
-		__forceinline VkFence GetCurrentIsDrawingFence()const { return VulkanIsDrawingFence[VulkanFrameIndex]; }
-
-
 
 
 		/* Agnostic */
@@ -223,6 +232,5 @@ public:
 #pragma endregion
 
 };
-
 
 #endif // !__GRAPHICSAPIMANAGER_H__

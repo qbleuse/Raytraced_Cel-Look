@@ -206,7 +206,7 @@ void InitImGuiVulkan(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResourc
 	init_info.PhysicalDevice	= GAPI.VulkanGPU;
 	init_info.Device			= GAPI.VulkanDevice;
 	init_info.QueueFamily		= GAPI.VulkanQueueFamily;
-	init_info.Queue				= GAPI.VulkanQueues[1];
+	init_info.Queue				= GAPI.RuntimeHandle.VulkanQueues[1];
 	init_info.PipelineCache		= VK_NULL_HANDLE;
 	init_info.DescriptorPool	= ImGuiResource.ImGuiDescriptorPool;
 	init_info.RenderPass		= ImGuiResource.ImGuiRenderPass;
@@ -220,7 +220,7 @@ void InitImGuiVulkan(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResourc
 
 }
 
-void FrameRender(const GraphicsAPIManager& GAPI, ImGuiResource& imgui, ImDrawData* draw_data, int32_t width, int32_t height)
+void FrameRender(const GAPIHandle& GAPI, ImGuiResource& imgui, ImDrawData* draw_data, int32_t width, int32_t height)
 {
 	if (imgui.SwapChainRebuild)
 		return;
@@ -271,26 +271,26 @@ void FrameRender(const GraphicsAPIManager& GAPI, ImGuiResource& imgui, ImDrawDat
 	}
 }
 
-void FramePresent( GraphicsAPIManager& GAPI, ImGuiResource& imgui)
+void FramePresent(GraphicsAPIManager& GAPI, ImGuiResource& imgui)
 {
 	if (imgui.SwapChainRebuild)
 		return;
-	VkSemaphore render_complete_semaphore = imgui.VulkanHasDrawnUI[GAPI.VulkanCurrentFrame];
+	VkSemaphore render_complete_semaphore = imgui.VulkanHasDrawnUI[GAPI.RuntimeHandle.VulkanCurrentFrame];
 	VkPresentInfoKHR info = {};
 	info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	info.waitSemaphoreCount		= 1;
 	info.pWaitSemaphores		= &render_complete_semaphore;
 	info.swapchainCount			= 1;
 	info.pSwapchains			= &GAPI.VulkanSwapchain;
-	info.pImageIndices			= &GAPI.VulkanFrameIndex;
-	VkResult err = vkQueuePresentKHR(GAPI.VulkanQueues[1], &info);
+	info.pImageIndices			= &GAPI.RuntimeHandle.VulkanFrameIndex;
+	VkResult err = vkQueuePresentKHR(GAPI.RuntimeHandle.VulkanQueues[1], &info);
 	if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR)
 	{
 		imgui.SwapChainRebuild = true;
 		return;
 	}
 	//check_vk_result(err);
-	GAPI.VulkanCurrentFrame = (GAPI.VulkanCurrentFrame + 1) % (GAPI.NbVulkanFrames); // Now we can use the next set of semaphores
+	GAPI.RuntimeHandle.VulkanCurrentFrame = (GAPI.RuntimeHandle.VulkanCurrentFrame + 1) % (GAPI.NbVulkanFrames); // Now we can use the next set of semaphores
 }
 
 int main()
@@ -407,7 +407,8 @@ int main()
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
 
-			scene[0]->Show(GAPI);
+			scene[0]->Show(GAPI.RuntimeHandle);
+
 
 			//do scene stuff here.
 
@@ -422,7 +423,7 @@ int main()
 			//if (!is_minimized)
 			{
 
-				FrameRender(GAPI,imguiResource, draw_data, width[0], height[0]);
+				FrameRender(GAPI.RuntimeHandle,imguiResource, draw_data, width[0], height[0]);
 				FramePresent(GAPI,imguiResource);
 			}
 
