@@ -16,8 +16,9 @@ struct GAPIHandle
 	SimpleArray<VkSemaphore>		VulkanHasPresentedSemaphore;
 	SimpleArray<VkFence>			VulkanIsDrawingFence;
 
-	uint32_t		VulkanCurrentFrame = 0;
-	uint32_t		VulkanFrameIndex = 0;
+	uint32_t VulkanCurrentFrame = 0;
+	uint32_t VulkanFrameIndex = 0;
+	uint32_t NbVulkanFrames{ 0 };
 
 	/*
 	* Returns the command buffer currently used for this frame to record commands

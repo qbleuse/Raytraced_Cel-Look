@@ -407,6 +407,8 @@ int main()
 			ImGui_ImplGlfw_NewFrame();
 			ImGui::NewFrame();
 
+			scene[0]->Act(AppContext);
+
 			scene[0]->Show(GAPI.RuntimeHandle);
 
 

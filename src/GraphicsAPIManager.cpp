@@ -518,6 +518,7 @@ bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
 
 	//get back the number of frames the swapchain was able to create
 	VK_CALL_PRINT(vkGetSwapchainImagesKHR(VulkanDevice, VulkanSwapchain, &NbVulkanFrames, nullptr));
+	RuntimeHandle.NbVulkanFrames = NbVulkanFrames;
 	VulkanBackBuffers.Alloc(NbVulkanFrames);
 	// get back the actual frames
 	VK_CALL_PRINT(vkGetSwapchainImagesKHR(VulkanDevice, VulkanSwapchain, &NbVulkanFrames, *VulkanBackBuffers));

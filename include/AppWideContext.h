@@ -5,7 +5,8 @@
 
 struct AppWideContext
 {
-	ImGuiIO ImContext;
+	ImGuiIO		ImContext;
+	//int32_t		width[2], height[2] = { 0, 0 };
 };
 
 #endif //__APP_WIDE_CONTEXT_H__

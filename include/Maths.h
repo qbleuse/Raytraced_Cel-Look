@@ -30,6 +30,11 @@ struct vec2
 		y{ _y }
 	{
 	}
+	vec2(ImVec2 imvec) :
+		x{ imvec.x },
+		y{ imvec.y }
+	{
+	}
 
 	/* accessor */
 
@@ -147,7 +152,15 @@ struct vec4
 		x{ _x },
 		y{ _y },
 		z{ _z },
-		w {_w}
+		w{ _w }
+	{
+	}
+
+	vec4(ImVec4 imvec) :
+		x{ imvec.x },
+		y{ imvec.y },
+		z{ imvec.z },
+		w {imvec.w}
 	{
 	}
 

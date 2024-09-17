@@ -125,7 +125,7 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	VkAttachmentDescription frameColourBufferAttachment{};
 	frameColourBufferAttachment.format			= GAPI.VulkanSurfaceFormat.format;
 	frameColourBufferAttachment.samples			= VK_SAMPLE_COUNT_1_BIT;
-	frameColourBufferAttachment.loadOp			= VK_ATTACHMENT_LOAD_OP_DONT_CARE;//we won't let pipeline clear, this should be application wide stuff
+	frameColourBufferAttachment.loadOp			= VK_ATTACHMENT_LOAD_OP_CLEAR;//we'll make the pipeline clear
 	frameColourBufferAttachment.storeOp			= VK_ATTACHMENT_STORE_OP_STORE;//we want to write into the framebuffer
 	frameColourBufferAttachment.initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;//we write onto the entire vewport so it will be completely replaced, what was before does not interests us
 	frameColourBufferAttachment.finalLayout		= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;//there is no post process this is immediate writing into frame buffer
@@ -220,7 +220,7 @@ void RasterTriangle::Prepare(GraphicsAPIManager& GAPI)
 	//the Shaders needed.
 	VkShaderModule vertexShader{}, fragmentShader{}; \
 
-	pointBuffer.first	= vec4(0.0f, -0.5f, 0.0f, 0.0f);
+	pointBuffer.first	= vec4(0.0f, -1.0f, 0.0f, 0.0f);
 	pointBuffer.second	= vec4(0.5f, 0.5f, 0.0f, 0.0f);
 	pointBuffer.third	= vec4(-0.5f, 0.5f, 0.0f, 0.0f);
 
@@ -357,7 +357,45 @@ void RasterTriangle::Resize(class GraphicsAPIManager& GAPI, int32_t width, int32
 
 void RasterTriangle::Act(AppWideContext& AppContext)
 {
+//	AppContext.ImContext.DisplaySize.x
 
+	vec2 pixelMousePos = vec2(ImGui::GetMousePos()) - vec2(ImGui::GetWindowPos());
+	vec2 displaySize = vec2(triangleViewport.width, triangleViewport.height);
+	vec2 screenSpaceMouse = vec2((pixelMousePos.x/displaySize.x) * 2.0f - 0.9f, (pixelMousePos.y/displaySize.y) * 2.0f - 0.8f);
+
+	if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+	{
+		if (length(pointBuffer.first.xy - screenSpaceMouse) < 0.1f)
+		{
+			pointBuffer.first.xy = screenSpaceMouse;
+			changed = true;
+		}
+		if (length(pointBuffer.second.xy - screenSpaceMouse) < 0.1f)
+		{
+			pointBuffer.second.xy = screenSpaceMouse;
+			changed = true;
+		}
+		if (length(pointBuffer.third.xy - screenSpaceMouse) < 0.1f)
+		{
+			pointBuffer.third.xy = screenSpaceMouse;
+			changed = true;
+		}
+	}
+
+	//UI update
+	{
+		ImGui::Begin("RasterTriangleOption");
+	
+		changed |= ImGui::SliderFloat2("First Point", pointBuffer.first.xy.array, -1.0f, 1.0f);
+		changed |= ImGui::SliderFloat2("Second Point", pointBuffer.second.xy.array, -1.0f, 1.0f);
+		changed |= ImGui::SliderFloat2("Third Point", pointBuffer.third.xy.array, -1.0f, 1.0f);
+	
+		changed |= ImGui::ColorPicker4("First Point Color", colorBuffer.first.array);
+		changed |= ImGui::ColorPicker4("Second Point Color", colorBuffer.second.array);
+		changed |= ImGui::ColorPicker4("Third Point Color", colorBuffer.third.array);
+	
+		ImGui::End();
+	}
 }
 
 /*===== Show =====*/
@@ -385,24 +423,23 @@ void RasterTriangle::Show(GAPIHandle& RuntimeGAPIHandle)
 		info.framebuffer	= triangleOutput[RuntimeGAPIHandle.VulkanFrameIndex];
 		info.renderArea.extent.width = triangleViewport.width;
 		info.renderArea.extent.height = triangleViewport.height;
-		info.clearValueCount = 0;
+		info.clearValueCount = 1;
+		VkClearValue clearValue{};
+		clearValue.color = { 0.2f, 0.2f, 0.2f, 1.0f };
+		info.pClearValues = &clearValue;
 		//info.pClearValues				= &imgui.ImGuiWindow.ClearValue;
 		vkCmdBeginRenderPass(commandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
 	}
 
 	if (changed)
 	{
-		//for (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
-		memcpy(trianglePointsHandle.CPUMemoryHandle[RuntimeGAPIHandle.VulkanFrameIndex], (void*)&pointBuffer, sizeof(UniformBuffer));
-		//or (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
-		memcpy(triangleColourHandle.CPUMemoryHandle[RuntimeGAPIHandle.VulkanFrameIndex], (void*)&colorBuffer, sizeof(UniformBuffer));
+		for (uint32_t i = 0; i < RuntimeGAPIHandle.NbVulkanFrames; i++)
+		{
+			memcpy(trianglePointsHandle.CPUMemoryHandle[i], (void*)&pointBuffer, sizeof(UniformBuffer));
+			memcpy(triangleColourHandle.CPUMemoryHandle[i], (void*)&colorBuffer, sizeof(UniformBuffer));
+		}
 
-		//VkMappedMemoryRange range = {};
-		//range.memory = triangleVertexGPUUniformBuffer[GAPI.VulkanFrameIndex];
-		//range.size = sizeof(UniformBuffer);
-		//range.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-		//
-		//vkFlushMappedMemoryRanges(GAPI.VulkanDevice, 1, &range);
+		changed = false;
 	}
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
