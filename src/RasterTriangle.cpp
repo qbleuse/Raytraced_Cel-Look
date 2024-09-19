@@ -3,6 +3,7 @@
 //include app class
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
+#include "imgui/imgui.h"
 
 
 /*===== Prepare =====*/
@@ -218,7 +219,7 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 void RasterTriangle::Prepare(GraphicsAPIManager& GAPI)
 {
 	//the Shaders needed.
-	VkShaderModule vertexShader{}, fragmentShader{}; \
+	VkShaderModule vertexShader{}, fragmentShader{};
 
 	pointBuffer.first	= vec4(0.0f, -1.0f, 0.0f, 0.0f);
 	pointBuffer.second	= vec4(0.5f, 0.5f, 0.0f, 0.0f);
@@ -238,11 +239,11 @@ void RasterTriangle::Prepare(GraphicsAPIManager& GAPI)
 
 /*===== Resize =====*/
 
-void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height)
+void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t old_width, int32_t old_height, uint32_t old_nb_frames)
 {
 	VkResult result = VK_SUCCESS;
 
-	VK_CLEAR_ARRAY(triangleOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
+	VK_CLEAR_ARRAY(triangleOutput, old_nb_frames, vkDestroyFramebuffer, GAPI.VulkanDevice);
 	vkDestroyDescriptorPool(GAPI.VulkanDevice, triangleDescriptorPool, nullptr);
 
 
@@ -250,19 +251,19 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 	VkFramebufferCreateInfo framebufferInfo{};
 	framebufferInfo.sType			= VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 	framebufferInfo.renderPass		= triangleRenderPass;
-	framebufferInfo.width			= width;
-	framebufferInfo.height			= height;
+	framebufferInfo.width			= GAPI.VulkanWidth;
+	framebufferInfo.height			= GAPI.VulkanHeight;
 	framebufferInfo.layers = 1;
 
 	//filling up the viewport
-	triangleViewport.width = (float)width;
-	triangleViewport.height = (float)height;
+	triangleViewport.width = (float)GAPI.VulkanWidth;
+	triangleViewport.height = (float)GAPI.VulkanHeight;
 	triangleViewport.maxDepth = 1.0f;
 	triangleViewport.minDepth = 0.0f;
 	triangleViewport.x = 0.0f;
 	triangleViewport.y = 0.0f;
 
-	triangleScissors.extent = { (uint32_t)width, (uint32_t)height };
+	triangleScissors.extent = { (uint32_t)GAPI.VulkanWidth, (uint32_t)GAPI.VulkanHeight};
 
 	triangleOutput.Alloc(GAPI.NbVulkanFrames);
 
@@ -347,9 +348,9 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 }
 
 
-void RasterTriangle::Resize(class GraphicsAPIManager& GAPI, int32_t width, int32_t height)
+void RasterTriangle::Resize(class GraphicsAPIManager& GAPI, int32_t old_width, int32_t old_height, uint32_t old_nb_frames)
 {
-	ResizeVulkanResource(GAPI, width, height);
+	ResizeVulkanResource(GAPI, old_width, old_height, old_nb_frames);
 }
 
 
@@ -357,35 +358,28 @@ void RasterTriangle::Resize(class GraphicsAPIManager& GAPI, int32_t width, int32
 
 void RasterTriangle::Act(AppWideContext& AppContext)
 {
-//	AppContext.ImContext.DisplaySize.x
-
-	vec2 pixelMousePos = vec2(ImGui::GetMousePos()) - vec2(ImGui::GetWindowPos());
-	vec2 displaySize = vec2(triangleViewport.width, triangleViewport.height);
-	vec2 screenSpaceMouse = vec2((pixelMousePos.x/displaySize.x) * 2.0f - 0.9f, (pixelMousePos.y/displaySize.y) * 2.0f - 0.8f);
 
 	if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
 	{
-		if (length(pointBuffer.first.xy - screenSpaceMouse) < 0.1f)
+		if (length(pointBuffer.first.xy - AppContext.window_mouse_pos.xy) < 0.1f)
 		{
-			pointBuffer.first.xy = screenSpaceMouse;
+			pointBuffer.first.xy = AppContext.window_mouse_pos.xy;
 			changed = true;
 		}
-		if (length(pointBuffer.second.xy - screenSpaceMouse) < 0.1f)
+		if (length(pointBuffer.second.xy - AppContext.window_mouse_pos.xy) < 0.1f)
 		{
-			pointBuffer.second.xy = screenSpaceMouse;
+			pointBuffer.second.xy = AppContext.window_mouse_pos.xy;
 			changed = true;
 		}
-		if (length(pointBuffer.third.xy - screenSpaceMouse) < 0.1f)
+		if (length(pointBuffer.third.xy - AppContext.window_mouse_pos.xy) < 0.1f)
 		{
-			pointBuffer.third.xy = screenSpaceMouse;
+			pointBuffer.third.xy = AppContext.window_mouse_pos.xy;
 			changed = true;
 		}
 	}
 
 	//UI update
-	{
-		ImGui::Begin("RasterTriangleOption");
-	
+	{	
 		changed |= ImGui::SliderFloat2("First Point", pointBuffer.first.xy.array, -1.0f, 1.0f);
 		changed |= ImGui::SliderFloat2("Second Point", pointBuffer.second.xy.array, -1.0f, 1.0f);
 		changed |= ImGui::SliderFloat2("Third Point", pointBuffer.third.xy.array, -1.0f, 1.0f);
@@ -393,8 +387,6 @@ void RasterTriangle::Act(AppWideContext& AppContext)
 		changed |= ImGui::ColorPicker4("First Point Color", colorBuffer.first.array);
 		changed |= ImGui::ColorPicker4("Second Point Color", colorBuffer.second.array);
 		changed |= ImGui::ColorPicker4("Third Point Color", colorBuffer.third.array);
-	
-		ImGui::End();
 	}
 }
 

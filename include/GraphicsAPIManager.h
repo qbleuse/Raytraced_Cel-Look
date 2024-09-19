@@ -144,6 +144,8 @@ public:
 
 		//The window linked to Vulkan
 		struct GLFWwindow* VulkanWindow{nullptr};
+		int32_t VulkanWidth{ 0 };
+		int32_t VulkanHeight{ 0 };
 
 		/**
 		* Initializes the VkInstance inside this class
@@ -163,7 +165,7 @@ public:
 		* This shoulbe use only after windows are created, as this need a surface.
 		* - returns : whether Swapchain creation succeeded
 		*/
-		bool CreateVulkanSwapChain(int32_t width, int32_t height);
+		bool ResizeVulkanSwapChain(int32_t width, int32_t height);
 
 
 		/* Agnostic */
@@ -183,19 +185,19 @@ public:
 		bool CreateHardwareInterfaces();
 
 		/**
-		* Create A GLFWwindow struct for each Graphics API supported and add it to the GLFWwindow array given in parameter.
+		* Create A GLFWwindow struct for each Graphics API supported.
 		* max that can be supported for one machine is two. (2 windows expected on Windows, one on Linux and two on MacOS).
 		* - returns : whether at least one window was successfully created.
 		*
 		*/
-		bool MakeWindows(struct GLFWwindow**);
+		bool MakeWindows();
 
 		/**
 		* Creates or recreates a swapchain associated with the window given in parameter.
 		* - returns : whether at least one window was successfully created.
 		*
 		*/
-		bool MakeSwapChain(struct GLFWwindow* toAssociateWindow, int32_t width, int32_t height);
+		bool ResizeSwapChain(NumberedArray<class Scene*>& ScenesToChange);
 
 
 	/*===== END GRAPHICS API WINDOW AND DEVICE  =====*/

@@ -12,7 +12,7 @@ class Scene
 public:
 	virtual void Prepare(class GraphicsAPIManager& GAPI) = 0;
 
-	virtual void Resize(class GraphicsAPIManager& GAPI, int32_t width, int32_t height) = 0;
+	virtual void Resize(class GraphicsAPIManager& GAPI, int32_t old_width, int32_t old_height, uint32_t old_nb_frames) = 0;
 
 	virtual void Act(struct AppWideContext& AppContext) = 0;
 

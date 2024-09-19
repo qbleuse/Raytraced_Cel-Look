@@ -30,11 +30,11 @@ struct vec2
 		y{ _y }
 	{
 	}
-	vec2(ImVec2 imvec) :
-		x{ imvec.x },
-		y{ imvec.y }
-	{
-	}
+	//vec2(struct ImVec2 imvec) :
+	//	x{ imvec.x },
+	//	y{ imvec.y }
+	//{
+	//}
 
 	/* accessor */
 
@@ -141,8 +141,16 @@ struct vec4
 			float b;
 			float a;
 		};
-		vec2 xy;
-		vec2 rg;
+		struct
+		{
+			vec2 xy;
+			vec2 zw;
+		};
+		struct 
+		{
+			vec2 rg;
+			vec2 ba;
+		};
 		vec3 xyz;
 		vec3 rgb;
 	};
@@ -156,13 +164,13 @@ struct vec4
 	{
 	}
 
-	vec4(ImVec4 imvec) :
-		x{ imvec.x },
-		y{ imvec.y },
-		z{ imvec.z },
-		w {imvec.w}
-	{
-	}
+	//vec4(struct ImVec4 imvec) :
+	//	x{ imvec.x },
+	//	y{ imvec.y },
+	//	z{ imvec.z },
+	//	w {imvec.w}
+	//{
+	//}
 
 	/* accessor */
 

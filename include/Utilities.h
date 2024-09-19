@@ -43,22 +43,22 @@ public:
 
 	/*===== Accessor =====*/
 
-	T& operator[](int32_t i)
+	__forceinline T& operator[](int32_t i)
 	{
 		return _raw_data[i];
 	}
 
-	const T& operator[](int32_t i)const
+	__forceinline const T& operator[](int32_t i)const
 	{
 		return _raw_data[i];
 	}
 
-	T** operator&()
+	__forceinline T** operator&()const
 	{
 		return &_raw_data;
 	}
 
-	T* operator*()
+	__forceinline T* operator*()const
 	{
 		return _raw_data;
 	}
@@ -67,34 +67,86 @@ public:
 
 	T* operator=(T* raw_data)
 	{
+		_raw_data = raw_data;
 		return _raw_data;
 	}
 
 	/*===== Comparison =====*/
 
-	bool operator== (T* to_compare)
+	__forceinline bool operator== (T* to_compare)const
 	{
 		return _raw_data == to_compare;
 	}
 
-	bool operator!= (T* to_compare)
+	__forceinline bool operator!= (T* to_compare)const
 	{
 		return _raw_data != to_compare;
 	}
 
 	/*===== Memory Management =====*/
 	
-	void Clear()
+	virtual void Clear()
 	{
 		if (_raw_data)
 			free(_raw_data);
 		_raw_data = nullptr;
 	}
 
-	void Alloc(uint32_t nb)
+	virtual void Alloc(uint32_t nb)
 	{
 		_raw_data = (T*)malloc(nb * sizeof(T));
 		memset(_raw_data, 0, nb * sizeof(T));
+	}
+
+};
+
+
+template<typename T>
+class NumberedArray : public SimpleArray<T>
+{
+private:
+	uint32_t _nb{0};
+
+public:
+	/*===== Constructor =====*/
+
+	NumberedArray(T* raw_data) = delete;
+
+	NumberedArray(T* raw_data, uint32_t nb):
+		SimpleArray<T>(raw_data),
+		_nb{nb}
+		
+	{
+
+	}
+
+	NumberedArray(uint32_t nb) :
+		SimpleArray<T>(nb),
+		_nb{nb}
+	{
+	}
+
+	/*===== Accessor =====*/
+
+	__forceinline const uint32_t& Nb()const { return _nb; }
+
+	/*===== Assignement =====*/
+
+	T* operator=(T* raw_data) = delete;
+
+
+	/*===== Memory Management =====*/
+
+	virtual void Clear()override
+	{
+		SimpleArray<T>::Clear();
+		_nb = 0;
+	}
+
+	virtual void Alloc(uint32_t nb)override
+	{
+		SimpleArray<T>::Alloc(nb);
+		_nb = nb;
 	}
 
 };

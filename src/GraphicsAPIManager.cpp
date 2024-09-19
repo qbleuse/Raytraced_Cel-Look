@@ -4,6 +4,9 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 	
+//project include
+#include "Scene.h"
+
 //printf include
 #include <cstdio>
 
@@ -42,6 +45,8 @@ GraphicsAPIManager::~GraphicsAPIManager()
 	vkDestroyDevice(VulkanDevice, nullptr);
 	vkDestroySurfaceKHR(VulkanInterface, VulkanSurface, nullptr);
 	vkDestroyInstance(VulkanInterface, nullptr);
+
+	glfwDestroyWindow(VulkanWindow);
 }
 
 
@@ -383,11 +388,8 @@ bool GraphicsAPIManager::CreateHardwareInterfaces()
 }
 
 
-bool GraphicsAPIManager::MakeWindows(GLFWwindow** windows)
+bool GraphicsAPIManager::MakeWindows()
 {
-	//the windows we'll return
-	*windows = (GLFWwindow*)_malloca(sizeof(GLFWwindow*)*2);
-	memset(*windows, 0, sizeof(GLFWwindow*) * 2);
 	//the number of initialized window until now
 	char nb_window_init = 0;
 	//the name of the window to initialize
@@ -425,12 +427,14 @@ bool GraphicsAPIManager::MakeWindows(GLFWwindow** windows)
 			}
 		}
 
+		glfwGetFramebufferSize(VulkanWindow, &VulkanWidth, &VulkanHeight);
+		ResizeVulkanSwapChain(VulkanWidth, VulkanHeight);
 
 		//window creation was successful, let's get surface info so that we'll be able to use it when needing to recreate the framebuffer
 		//in case of resize for example.
 		if (result == VK_SUCCESS)
 		{
-			windows[nb_window_init++] = VulkanWindow;
+			nb_window_init++;
 		}
 	}
 
@@ -443,7 +447,7 @@ bool GraphicsAPIManager::MakeWindows(GLFWwindow** windows)
 
 	if (DX12_supported)
 	{
-		windows[nb_window_init++] = glfwCreateWindow(800, 600, window_name, nullptr, nullptr);
+		//windows[nb_window_init++] = glfwCreateWindow(800, 600, window_name, nullptr, nullptr);
 	}
 
 	/* Metal Support */
@@ -456,13 +460,13 @@ bool GraphicsAPIManager::MakeWindows(GLFWwindow** windows)
 
 	if (metal_supported)
 	{
-		windows[nb_window_init++] = glfwCreateWindow(800, 600, window_name, nullptr, nullptr);
+		//windows[nb_window_init++] = glfwCreateWindow(800, 600, window_name, nullptr, nullptr);
 	}
 
-	return windows[0] != nullptr || windows[1] != nullptr;
+	return nb_window_init > 0;
 }
 
-bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
+bool GraphicsAPIManager::ResizeVulkanSwapChain(int32_t width, int32_t height)
 {
 	vkDeviceWaitIdle(VulkanDevice);
 
@@ -519,6 +523,8 @@ bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
 	//get back the number of frames the swapchain was able to create
 	VK_CALL_PRINT(vkGetSwapchainImagesKHR(VulkanDevice, VulkanSwapchain, &NbVulkanFrames, nullptr));
 	RuntimeHandle.NbVulkanFrames = NbVulkanFrames;
+	VulkanWidth = width;
+	VulkanHeight = height;
 	VulkanBackBuffers.Alloc(NbVulkanFrames);
 	// get back the actual frames
 	VK_CALL_PRINT(vkGetSwapchainImagesKHR(VulkanDevice, VulkanSwapchain, &NbVulkanFrames, *VulkanBackBuffers));
@@ -588,14 +594,29 @@ bool GraphicsAPIManager::CreateVulkanSwapChain(int32_t width, int32_t height)
 	return result == VK_SUCCESS;
 }
 
-bool GraphicsAPIManager::MakeSwapChain(GLFWwindow* toAssociateWindow, int32_t width, int32_t height)
+bool GraphicsAPIManager::ResizeSwapChain(NumberedArray<Scene*>& SceneToChange)
 {
 	/* Vulkan Support */
 
+	if (vulkan_supported)
+	{
+		int32_t old_width = VulkanWidth;
+		int32_t old_height = VulkanHeight;
+		uint32_t oldNbFrames = NbVulkanFrames;
 
-	if (toAssociateWindow == VulkanWindow)
-		return CreateVulkanSwapChain(width, height);
+		glfwGetFramebufferSize(VulkanWindow, &VulkanWidth, &VulkanHeight);
+		
+		bool toReturn = ResizeVulkanSwapChain(VulkanWidth, VulkanHeight);
 
+		if (toReturn)
+			for (uint32_t i = 0; i < SceneToChange.Nb(); i++)
+				SceneToChange[i]->Resize(*this, old_width, old_height, oldNbFrames);
+
+		return toReturn;
+		
+	}
+
+	return false;
 }
 
 /*===== Graphics API Queues and Command =====*/
@@ -604,21 +625,27 @@ bool GraphicsAPIManager::GetVulkanNextFrame()
 {
 	VkResult result = VK_SUCCESS;
 
+	{
+		//if we already looped through all the frames in our swapchain, but this one did not finish drawing, we have no other choice than wait
+		vkWaitForFences(VulkanDevice, 1, &RuntimeHandle.VulkanIsDrawingFence[RuntimeHandle.VulkanFrameIndex], VK_TRUE, UINT64_MAX);
+
+		//if we did not wait or 
+		vkResetFences(VulkanDevice, 1, &RuntimeHandle.VulkanIsDrawingFence[RuntimeHandle.VulkanFrameIndex]);
+	}
+
 	VK_CALL_PRINT(vkAcquireNextImageKHR(VulkanDevice, VulkanSwapchain, UINT64_MAX, RuntimeHandle.VulkanCanPresentSemaphore[RuntimeHandle.VulkanCurrentFrame], VK_NULL_HANDLE, &RuntimeHandle.VulkanFrameIndex));
 
 	if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
 		return false;
 
-	//if we already looped through all the frames in our swapchain, but this one did not finish drawing, we have no other choice than wait
-	vkWaitForFences(VulkanDevice, 1, &RuntimeHandle.VulkanIsDrawingFence[RuntimeHandle.VulkanFrameIndex], VK_TRUE, UINT64_MAX);
-
-	//if we did not wait or 
-	vkResetFences(VulkanDevice, 1, &RuntimeHandle.VulkanIsDrawingFence[RuntimeHandle.VulkanFrameIndex]);
-
 	//VK_CALL_PRINT(vkResetCommandPool(VulkanDevice, VulkanCommandPool[0], 0));
 	//VK_CALL_PRINT(vkResetCommandPool(VulkanDevice, VulkanCommandPool[1], 0));
 
-	return true;
+	int32_t width, height {0};
+
+	glfwGetFramebufferSize(VulkanWindow, &width, &height);
+
+	return VulkanWidth == width && VulkanHeight == height;
 }
 
 bool GraphicsAPIManager::GetNextFrame()

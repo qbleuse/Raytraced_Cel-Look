@@ -1,5 +1,5 @@
-#ifndef __RASTER_TRIANGLE_H__
-#define __RASTER_TRIANGLE_H__
+#ifndef __RASTER_OBJECT_H__
+#define __RASTER_OBJECT_H__
 
 
 //include parent
@@ -18,16 +18,8 @@
 /**
 * This class is the beginning and first scene of all good Graphics Project : a Rasterized Triangle !
 */
-class RasterTriangle : public Scene
+class RasterObject : public Scene
 {
-
-	struct UniformBuffer
-	{
-		vec4 first;
-		vec4 second;
-		vec4 third;
-		vec4 padding;
-	};
 
 #pragma region GRAPHICS API
 private:
@@ -36,26 +28,23 @@ private:
 	/* Vulkan */
 
 	//the viewport of this scene (can change at runtime, as window can be resized)
-	VkViewport					triangleViewport{};
-	VkRect2D					triangleScissors{};
-	VkRenderPass				triangleRenderPass{};
-	VkDescriptorSetLayout		triangleVertexDescriptorLayout{};
-	//VkDescriptorSetLayout		trianglePixelDescriptorLayout{};
-	VkDescriptorPool			triangleDescriptorPool{};
-	VkPipelineLayout			triangleLayout{};
-	VkPipeline					trianglePipeline{};
-	SimpleArray<VkFramebuffer>	triangleOutput;
-	SimpleArray<VkDescriptorSet>		triangleVertexDescriptorSet;
+	VkViewport					objectViewport{};
+	VkRect2D					objectScissors{};
+	VkRenderPass				objectRenderPass{};
+	VkDescriptorSetLayout		objectVertexDescriptorLayout{};
+	VkDescriptorPool			objectDescriptorPool{};
+	VkPipelineLayout			objectLayout{};
+	VkPipeline					objectPipeline{};
 
+	SimpleArray<VkFramebuffer>		objectOutput;
+	SimpleArray<VkDescriptorSet>	triangleVertexDescriptorSet;
 
-	UniformBufferHandle	trianglePointsHandle;
-	UniformBufferHandle	triangleColourHandle;
-
+	UniformBufferHandle matBufferHandle;
 
 
 	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
 	void PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
-	void ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t old_width, int32_t old_height, uint32_t old_nb_frames);
+	void ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height);
 
 
 	/* DirectX */
@@ -83,12 +72,6 @@ public:
 	virtual void Close(class GraphicsAPIManager& GAPI)final;
 
 
-	bool changed = true;
-
-	UniformBuffer pointBuffer;
-	UniformBuffer colorBuffer;
-
-
 
 	/*===== END Scene Interface =====*/
 #pragma endregion 
@@ -96,4 +79,4 @@ public:
 
 };
 
-#endif //__RASTER_TRIANGLE_H__
+#endif //__RASTER_OBJECT_H__
