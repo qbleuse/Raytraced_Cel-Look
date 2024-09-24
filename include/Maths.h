@@ -9,7 +9,7 @@ struct vec2
 {
 	union
 	{
-		float array[2];
+		float scalar[2];
 		struct
 		{
 			float x;
@@ -24,22 +24,18 @@ struct vec2
 
 	};
 
-	vec2() = default;
-	vec2(float _x, float _y) :
-		x{ _x },
-		y{ _y }
-	{
-	}
-	//vec2(struct ImVec2 imvec) :
-	//	x{ imvec.x },
-	//	y{ imvec.y }
+	//vec2() = default;
+	//vec2(const vec2&) = default;
+	//vec2(float _x, float _y) :
+	//	x{ _x },
+	//	y{ _y }
 	//{
 	//}
 
 	/* accessor */
 
-	__forceinline float& operator[] (uint32_t idx) { return array[idx]; }
-	__forceinline float  operator[] (uint32_t idx) const { return array[idx]; }
+	__forceinline float& operator[] (uint32_t idx) { return scalar[idx]; }
+	__forceinline float  operator[] (uint32_t idx) const { return scalar[idx]; }
 
 	/* math operation */
 
@@ -67,7 +63,7 @@ struct vec3
 {
 	union
 	{
-		float array[3];
+		float scalar[3];
 		struct
 		{
 			float x;
@@ -85,18 +81,19 @@ struct vec3
 		vec2 rg;
 	};
 
-	vec3() = default;
-	vec3(float _x, float _y, float _z) :
-		x{ _x },
-		y{ _y },
-		z{_z}
-	{
-	}
+	//vec3() = default;
+	//vec3(const vec3&) = default;
+	//vec3(float _x, float _y, float _z) :
+	//	x{ _x },
+	//	y{ _y },
+	//	z{_z}
+	//{
+	//}
 
 	/* accessor */
 
-	__forceinline float& operator[] (uint32_t idx) { return array[idx]; }
-	__forceinline float  operator[] (uint32_t idx) const { return array[idx]; }
+	__forceinline float& operator[] (uint32_t idx) { return scalar[idx]; }
+	__forceinline float  operator[] (uint32_t idx) const { return scalar[idx]; }
 
 	/* math operation */
 
@@ -125,7 +122,7 @@ struct vec4
 {
 	union
 	{
-		float array[4];
+		float scalar[4];
 		struct
 		{
 			float x;
@@ -155,27 +152,20 @@ struct vec4
 		vec3 rgb;
 	};
 
-	vec4() = default;
-	vec4(float _x, float _y, float _z, float _w) :
-		x{ _x },
-		y{ _y },
-		z{ _z },
-		w{ _w }
-	{
-	}
-
-	//vec4(struct ImVec4 imvec) :
-	//	x{ imvec.x },
-	//	y{ imvec.y },
-	//	z{ imvec.z },
-	//	w {imvec.w}
+	//vec4() = default;
+	//vec4(const vec4&) = default;
+	//vec4(float _x, float _y, float _z, float _w) :
+	//	x{ _x },
+	//	y{ _y },
+	//	z{ _z },
+	//	w{ _w }
 	//{
 	//}
 
 	/* accessor */
 
-	__forceinline float& operator[] (uint32_t idx) { return array[idx]; }
-	__forceinline float  operator[] (uint32_t idx) const { return array[idx]; }
+	__forceinline float& operator[] (uint32_t idx) { return scalar[idx]; }
+	__forceinline float  operator[] (uint32_t idx) const { return scalar[idx]; }
 
 	/* math operation */
 
@@ -204,7 +194,8 @@ struct mat4
 {
 	union
 	{
-		vec4 array[4];
+		float scalar[16];
+		vec4 vector[4];
 		struct
 		{
 			vec4 x;
@@ -215,9 +206,35 @@ struct mat4
 		};
 	};
 
-	mat4() = default;
+	//mat4() = default;
+	//mat4(const mat4&) = default;
+
+
+	/* accessor */
+
+	__forceinline float& operator[] (uint32_t idx) { return scalar[idx]; }
+	__forceinline float  operator[] (uint32_t idx) const { return scalar[idx]; }
 
 };
 
+__forceinline mat4 co_translate(const vec3& pos)
+{
+	return {{
+		1.0f, 0.0f, 0.0f, pos.x,
+		0.0f, 1.0f, 0.0f, pos.y,
+		0.0f, 0.0f, 1.0f, pos.z,
+		0.0f, 0.0f, 0.0f, 1.0f
+	}};
+}
+
+__forceinline mat4 ro_translate(const vec3& pos)
+{
+	return { {
+		1.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 1.0f, 0.0f,
+		pos.x, pos.y, pos.z, 1.0f
+	} };
+}
 
 #endif //__MATHS_H__
