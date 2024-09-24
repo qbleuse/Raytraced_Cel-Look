@@ -39,6 +39,7 @@
 
 /* forward def */
 class GraphicsAPIManager;
+struct GAPIHandle;
 
 
 /* Shaders */
@@ -68,5 +69,27 @@ bool CreateUniformBufferHandle(GraphicsAPIManager& GAPI, UniformBufferHandle& bu
 /* Asks for de-allocation of all allocated resources for this UniformBufferHandle, on CPU and GPU*/
 void ClearUniformBufferHandle(GraphicsAPIManager& GAPI, UniformBufferHandle& bufferHandle);
 
+/**
+* A struct representing a static and unique buffer on the GPU. You would use this type of buffer for data that will not change between frames such as vertex buffers.
+* include the staging buffer and the static buffer.
+*/
+struct StaticBufferHandle
+{
+	VkBuffer		StaticGPUBuffer;
+	VkDeviceMemory	StaticGPUMemoryHandle;
+	
+	VkBuffer		StagingGPUBuffer;
+	VkDeviceMemory	StagingGPUMemoryHandle;
+};
+
+/* Creates all the pointers and handle vulkan needs to create a buffer on the GPU and creates a staging buffer to send the data */
+bool CreateStaticBufferHandle(GraphicsAPIManager& GAPI, StaticBufferHandle& bufferHandle, VkDeviceSize size,
+	VkBufferUsageFlags staticBufferUsage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VkMemoryPropertyFlags staticBufferProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+/* sends the data through the staging buffer to the static buffer */
+bool UploadStaticBufferHandle(GraphicsAPIManager& GAPI, StaticBufferHandle& bufferHandle, void* data, VkDeviceSize size, bool releaseStagingBuffer = true);
+
+/* Asks for de-allocation of all allocated resources for this StaticBufferHandle on GPU */
+void ClearStaticBufferHandle(GraphicsAPIManager& GAPI, StaticBufferHandle& bufferHandle);
 
 #endif //__VULKAN_HELPER_H__

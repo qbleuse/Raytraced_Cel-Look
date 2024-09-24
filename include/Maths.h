@@ -199,4 +199,25 @@ __forceinline float length(const vec4& vec) { return vec.x + vec.y + vec.z + vec
 __forceinline vec4	normalize(const vec4& vec) { float l = length(vec); return l == 0 ? vec4(0.0f, 0.0f, 0.0f, 0.0f) : vec4(vec.x / l, vec.y / l, vec.z / l, vec.w / l); }
 __forceinline vec4	cross(const vec4& lhs, const vec4& rhs) { return vec4(lhs.y * rhs.z - lhs.z * rhs.y, lhs.z * rhs.w - lhs.w * rhs.z, lhs.w * rhs.x - lhs.x * rhs.w, lhs.x * rhs.y - lhs.y * rhs.x); }
 
+/* struct representing a mathematical 4 dimensional vector. it has been made to resemble the one you may encounter in glsl or hlsl. */
+struct mat4
+{
+	union
+	{
+		vec4 array[4];
+		struct
+		{
+			vec4 x;
+			vec4 y;
+			vec4 z;
+			vec4 w;
+
+		};
+	};
+
+	mat4() = default;
+
+};
+
+
 #endif //__MATHS_H__

@@ -116,7 +116,7 @@ bool CreateVulkanBuffer(GraphicsAPIManager& GAPI, VkDeviceSize size, VkBufferUsa
 	
 	VkMemoryAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	allocInfo.allocationSize = size;
+	allocInfo.allocationSize = memRequirements.size;
 	
 	VkPhysicalDeviceMemoryProperties memProperties;
 	vkGetPhysicalDeviceMemoryProperties(GAPI.VulkanGPU, &memProperties);
@@ -167,4 +167,87 @@ void ClearUniformBufferHandle(GraphicsAPIManager& GAPI, UniformBufferHandle& buf
 	VK_CLEAR_ARRAY(bufferHandle.GPUBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
 	VK_CLEAR_ARRAY(bufferHandle.GPUMemoryHandle, GAPI.NbVulkanFrames, vkFreeMemory, GAPI.VulkanDevice);
 	bufferHandle.CPUMemoryHandle.Clear();
+}
+
+
+bool CreateStaticBufferHandle(GraphicsAPIManager& GAPI, StaticBufferHandle& bufferHandle, VkDeviceSize size, VkBufferUsageFlags staticBufferUsage, VkMemoryPropertyFlags staticBufferProperties)
+{
+	//creating the static buffer
+	bool toReturn = CreateVulkanBuffer(GAPI, size, staticBufferUsage, staticBufferProperties, bufferHandle.StaticGPUBuffer, bufferHandle.StaticGPUMemoryHandle);
+
+	//creating the staging buffer. properties make it easy to send data from GPU to.
+	return toReturn && CreateVulkanBuffer(GAPI, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, bufferHandle.StagingGPUBuffer, bufferHandle.StagingGPUMemoryHandle);
+}
+
+/* sends the data through the staging buffer to the static buffer */
+bool UploadStaticBufferHandle(GraphicsAPIManager& GAPI, StaticBufferHandle& bufferHandle, void* data, VkDeviceSize size, bool releaseStagingBuffer)
+{
+	
+	VkResult result = VK_SUCCESS;
+
+	void* CPUHandle;
+
+	VK_CALL_PRINT(vkMapMemory(GAPI.VulkanDevice, bufferHandle.StagingGPUMemoryHandle, 0, size, 0, &CPUHandle));
+	memcpy(CPUHandle, data, size);
+	vkUnmapMemory(GAPI.VulkanDevice, bufferHandle.StagingGPUMemoryHandle);
+
+
+	VkCommandBufferAllocateInfo allocInfo{};
+	allocInfo.sType					= VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocInfo.level					= VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.commandPool			= GAPI.VulkanCommandPool[0];
+	allocInfo.commandBufferCount	= 1;
+
+	VkCommandBuffer commandBuffer;
+	VK_CALL_PRINT(vkAllocateCommandBuffers(GAPI.VulkanDevice, &allocInfo, &commandBuffer));
+
+	VkCommandBufferBeginInfo beginInfo{};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+	VK_CALL_PRINT(vkBeginCommandBuffer(commandBuffer, &beginInfo));
+
+	VkBufferCopy copyRegion{};
+	copyRegion.srcOffset = 0; // Optional
+	copyRegion.dstOffset = 0; // Optional
+	copyRegion.size = size;
+	vkCmdCopyBuffer(commandBuffer, bufferHandle.StagingGPUBuffer, bufferHandle.StaticGPUBuffer, 1, &copyRegion);
+
+	VK_CALL_PRINT(vkEndCommandBuffer(commandBuffer));
+
+	VkSubmitInfo submitInfo{};
+	submitInfo.sType				= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.commandBufferCount	= 1;
+	submitInfo.pCommandBuffers		= &commandBuffer;
+
+	VK_CALL_PRINT(vkQueueSubmit(GAPI.RuntimeHandle.VulkanQueues[0], 1, &submitInfo, VK_NULL_HANDLE));
+	VK_CALL_PRINT(vkQueueWaitIdle(GAPI.RuntimeHandle.VulkanQueues[0]));
+
+	vkFreeCommandBuffers(GAPI.VulkanDevice, GAPI.VulkanCommandPool[0], 1, &commandBuffer);
+
+	if (releaseStagingBuffer)
+	{
+		vkDestroyBuffer(GAPI.VulkanDevice, bufferHandle.StagingGPUBuffer, nullptr);
+		bufferHandle.StagingGPUBuffer = nullptr;
+		vkFreeMemory(GAPI.VulkanDevice, bufferHandle.StagingGPUMemoryHandle, nullptr);
+		bufferHandle.StagingGPUMemoryHandle = nullptr;
+	}
+
+	return result == VK_SUCCESS;
+}
+
+void ClearStaticBufferHandle(GraphicsAPIManager& GAPI, StaticBufferHandle& bufferHandle)
+{
+	if (bufferHandle.StagingGPUBuffer != nullptr)
+		vkDestroyBuffer(GAPI.VulkanDevice, bufferHandle.StagingGPUBuffer, nullptr);
+	bufferHandle.StagingGPUBuffer = nullptr;
+	if (bufferHandle.StagingGPUMemoryHandle != nullptr)
+		vkFreeMemory(GAPI.VulkanDevice, bufferHandle.StagingGPUMemoryHandle, nullptr);
+	bufferHandle.StagingGPUMemoryHandle = nullptr;
+	if (bufferHandle.StaticGPUBuffer != nullptr)
+		vkDestroyBuffer(GAPI.VulkanDevice, bufferHandle.StaticGPUBuffer, nullptr);
+	bufferHandle.StaticGPUBuffer = nullptr;
+	if (bufferHandle.StaticGPUMemoryHandle != nullptr)
+		vkFreeMemory(GAPI.VulkanDevice, bufferHandle.StaticGPUMemoryHandle, nullptr);
+	bufferHandle.StaticGPUMemoryHandle = nullptr;
 }

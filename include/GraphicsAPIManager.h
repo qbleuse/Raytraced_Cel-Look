@@ -23,7 +23,7 @@ struct GAPIHandle
 	/*
 	* Returns the command buffer currently used for this frame to record commands
 	*/
-	__forceinline const VkCommandBuffer& GetCurrentVulkanCommand()const { return VulkanCommand[VulkanFrameIndex]; }
+	__forceinline const VkCommandBuffer& GetCurrentVulkanCommand()const { return VulkanCommand[VulkanCurrentFrame]; }
 
 	/*
 	* Returns the semaphore currently used for this frame to track if we can preesent
@@ -38,7 +38,7 @@ struct GAPIHandle
 	/*
 	* Returns the fence currently used for this frame to track if GPU is still executing command
 	*/
-	__forceinline const VkFence& GetCurrentIsDrawingFence()const { return VulkanIsDrawingFence[VulkanFrameIndex]; }
+	__forceinline const VkFence& GetCurrentIsDrawingFence()const { return VulkanIsDrawingFence[VulkanCurrentFrame]; }
 
 };
 

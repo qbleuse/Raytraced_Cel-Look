@@ -339,12 +339,10 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 
 		VkWriteDescriptorSet write[2] = { descriptorWrite, colordescriptorWrite };
 		vkUpdateDescriptorSets(GAPI.VulkanDevice, 2, write, 0, nullptr);
-
-	
 	}
 
 
-
+	changed = true;
 }
 
 
@@ -458,7 +456,7 @@ void RasterTriangle::Show(GAPIHandle& RuntimeGAPIHandle)
 
 		err = vkEndCommandBuffer(commandBuffer);
 		//check_vk_result(err);
-		err = vkQueueSubmit(RuntimeGAPIHandle.VulkanQueues[0], 1, &info, RuntimeGAPIHandle.VulkanIsDrawingFence[RuntimeGAPIHandle.VulkanFrameIndex]);
+		err = vkQueueSubmit(RuntimeGAPIHandle.VulkanQueues[0], 1, &info, nullptr);
 		//check_vk_result(err);
 	}
 

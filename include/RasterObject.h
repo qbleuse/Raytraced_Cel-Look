@@ -40,11 +40,12 @@ private:
 	SimpleArray<VkDescriptorSet>	triangleVertexDescriptorSet;
 
 	UniformBufferHandle matBufferHandle;
+	StaticBufferHandle	vertexBufferHandle;
 
 
 	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
 	void PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
-	void ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height);
+	void ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames);
 
 
 	/* DirectX */
@@ -71,6 +72,8 @@ public:
 
 	virtual void Close(class GraphicsAPIManager& GAPI)final;
 
+
+	mat4 objectTransform;
 
 
 	/*===== END Scene Interface =====*/

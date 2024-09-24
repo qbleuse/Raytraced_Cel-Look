@@ -627,10 +627,10 @@ bool GraphicsAPIManager::GetVulkanNextFrame()
 
 	{
 		//if we already looped through all the frames in our swapchain, but this one did not finish drawing, we have no other choice than wait
-		vkWaitForFences(VulkanDevice, 1, &RuntimeHandle.VulkanIsDrawingFence[RuntimeHandle.VulkanFrameIndex], VK_TRUE, UINT64_MAX);
+		vkWaitForFences(VulkanDevice, 1, &RuntimeHandle.VulkanIsDrawingFence[RuntimeHandle.VulkanCurrentFrame], VK_TRUE, UINT64_MAX);
 
 		//if we did not wait or 
-		vkResetFences(VulkanDevice, 1, &RuntimeHandle.VulkanIsDrawingFence[RuntimeHandle.VulkanFrameIndex]);
+		vkResetFences(VulkanDevice, 1, &RuntimeHandle.VulkanIsDrawingFence[RuntimeHandle.VulkanCurrentFrame]);
 	}
 
 	VK_CALL_PRINT(vkAcquireNextImageKHR(VulkanDevice, VulkanSwapchain, UINT64_MAX, RuntimeHandle.VulkanCanPresentSemaphore[RuntimeHandle.VulkanCurrentFrame], VK_NULL_HANDLE, &RuntimeHandle.VulkanFrameIndex));

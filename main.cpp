@@ -19,6 +19,7 @@
 #include "AppWideContext.h"
 #include "Scene.h"
 #include "RasterTriangle.h"
+#include "RasterObject.h"
 
 #include <cstdio>
 
@@ -55,7 +56,7 @@ void FramePresent(GraphicsAPIManager& GAPI, ImGuiResource& imgui, AppWideContext
 	info.swapchainCount			= 1;
 	info.pSwapchains			= &GAPI.VulkanSwapchain;
 	info.pImageIndices			= &GAPI.RuntimeHandle.VulkanFrameIndex;
-	VkResult err = vkQueuePresentKHR(GAPI.RuntimeHandle.VulkanQueues[1], &info);
+	VkResult err = vkQueuePresentKHR(GAPI.RuntimeHandle.VulkanQueues[0], &info);
 	if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR)
 	{
 		//imgui.SwapChainRebuild = true;
@@ -163,8 +164,9 @@ int main()
 
 		//resources for main loop
 		AppWideContext AppContext;
-		NumberedArray<Scene*> scenes(1);
+		NumberedArray<Scene*> scenes(2);
 		scenes[0] = new RasterTriangle();
+		scenes[1] = new RasterObject();
 
 		//init our scenes
 		for (uint32_t i = 0; i < scenes.Nb(); i++)
