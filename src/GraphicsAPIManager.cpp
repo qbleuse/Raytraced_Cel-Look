@@ -3,7 +3,7 @@
 //glfw include
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
-	
+
 //project include
 #include "Scene.h"
 
@@ -57,7 +57,7 @@ bool GraphicsAPIManager::FindAPISupported()
 	/* Vulkan Support */
 
 	//variable used to gauge if a vulkan call went wrong.
-	VkResult result = VK_SUCCESS; 
+	VkResult result = VK_SUCCESS;
 
 	//work as already been done so we'll piggy back on glfw method to find out if we Vulkan is supported
 	//then for each scene we'll check on scene by scene basis.
@@ -75,7 +75,7 @@ bool GraphicsAPIManager::FindAPISupported()
 
 	for (uint32_t i = 0; i < vk_extension_count; i++)
 	{
-		printf("%s.\n", vk_extensions[i]);
+		printf("%s.\n", vk_extensions[i].extensionName);
 	}
 
 	/* DX12 Support */
@@ -248,7 +248,7 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 		if (i == 0)
 			currentType = deviceProperty.properties.deviceType;
 
-		//the number of devices extensions 
+		//the number of devices extensions
 		uint32_t deviceExtensionNb = 0;
 		VK_CALL_PRINT(vkEnumerateDeviceExtensionProperties(devices[i], nullptr, &deviceExtensionNb, nullptr))
 
@@ -283,7 +283,7 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 		}
 
 		// 3 - discrete GPU > everything else.
-		if (swapchainsupport && raytracingSupported 
+		if (swapchainsupport && raytracingSupported
 			&& deviceProperty.properties.deviceType == VkPhysicalDeviceType::VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
 			&& currentType != VkPhysicalDeviceType::VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
 			currentDeviceID = i;
@@ -291,7 +291,7 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 
 	VulkanGPU = devices[currentDeviceID];
 
-	//the number of queue family this GPU is capable of 
+	//the number of queue family this GPU is capable of
 	//(this entails being able to run compute shader, or if the GPU has video decode/encode cores)
 	//Raytracing is considered as a graphic queue, same as rasterizer.
 	uint32_t queueFamilyNb = 0;
@@ -328,7 +328,7 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
 	deviceCreateInfo.queueCreateInfoCount = 1;
-	
+
 	const char* deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_acceleration_structure" , "VK_KHR_ray_tracing_pipeline", "VK_KHR_ray_query", "VK_KHR_deferred_host_operations" };
 	deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
 	if (vulkan_rt_supported)
@@ -342,7 +342,7 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 
 	//Vulkan Physical Device chosen
 	VK_CALL_PRINT(vkCreateDevice(VulkanGPU, &deviceCreateInfo, nullptr, &VulkanDevice))
-	
+
 	//announce what GPU we end up with
 	{
 		VkPhysicalDeviceProperties2 deviceProperty{};
@@ -357,7 +357,7 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	VkDeviceQueueInfo2 QueueInfo{};
 	QueueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2;
 	vkGetDeviceQueue2(VulkanDevice, &QueueInfo, &RuntimeHandle.VulkanQueues[0]);
-	
+
 	//getting back the second queue
 	QueueInfo.queueIndex = 1;
 	vkGetDeviceQueue2(VulkanDevice, &QueueInfo, &RuntimeHandle.VulkanQueues[1]);
@@ -374,7 +374,7 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 		//making the second command pool
 		VK_CALL_PRINT(vkCreateCommandPool(VulkanDevice, &poolInfo, nullptr, &VulkanCommandPool[1]));
 	}
-	
+
 
 	free(devices);
 	return true;
@@ -405,7 +405,7 @@ bool GraphicsAPIManager::MakeWindows()
 		window_name = "Vulkan w/ RT\0";
 	else if (vulkan_supported)
 		window_name = "Vulkan No RT\0";
-	
+
 	if (vulkan_supported)
 	{
 		VulkanWindow = glfwCreateWindow(1080, 600, window_name, nullptr, nullptr);
@@ -504,7 +504,7 @@ bool GraphicsAPIManager::ResizeVulkanSwapChain(int32_t width, int32_t height)
 	createinfo.minImageCount			= SurfaceCapabilities.maxImageCount;
 	createinfo.imageFormat				= VulkanSurfaceFormat.format;
 	createinfo.imageColorSpace			= VulkanSurfaceFormat.colorSpace;
-	createinfo.imageExtent				= VkExtent2D(width, height);
+	createinfo.imageExtent				= VkExtent2D{(uint32_t)width, (uint32_t)height};
 	createinfo.imageUsage				= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 	createinfo.queueFamilyIndexCount	= VulkanQueueFamily;
 	createinfo.imageArrayLayers			= 1;
@@ -531,7 +531,7 @@ bool GraphicsAPIManager::ResizeVulkanSwapChain(int32_t width, int32_t height)
 
 	//recreate the array of framebuffers associated with the swapchain's frames.
 	VulkanBackColourBuffers.Alloc(NbVulkanFrames);
-	
+
 	//describe the ImageView (FrameBuffers) associated with the Frames of the swap chain we want to create
 	VkImageViewCreateInfo frameBufferInfo{};
 	frameBufferInfo.sType						= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -605,7 +605,7 @@ bool GraphicsAPIManager::ResizeSwapChain(NumberedArray<Scene*>& SceneToChange)
 		uint32_t oldNbFrames = NbVulkanFrames;
 
 		glfwGetFramebufferSize(VulkanWindow, &VulkanWidth, &VulkanHeight);
-		
+
 		bool toReturn = ResizeVulkanSwapChain(VulkanWidth, VulkanHeight);
 
 		if (toReturn)
@@ -613,7 +613,7 @@ bool GraphicsAPIManager::ResizeSwapChain(NumberedArray<Scene*>& SceneToChange)
 				SceneToChange[i]->Resize(*this, old_width, old_height, oldNbFrames);
 
 		return toReturn;
-		
+
 	}
 
 	return false;
@@ -629,7 +629,7 @@ bool GraphicsAPIManager::GetVulkanNextFrame()
 		//if we already looped through all the frames in our swapchain, but this one did not finish drawing, we have no other choice than wait
 		vkWaitForFences(VulkanDevice, 1, &RuntimeHandle.VulkanIsDrawingFence[RuntimeHandle.VulkanCurrentFrame], VK_TRUE, UINT64_MAX);
 
-		//if we did not wait or 
+		//if we did not wait or
 		vkResetFences(VulkanDevice, 1, &RuntimeHandle.VulkanIsDrawingFence[RuntimeHandle.VulkanCurrentFrame]);
 	}
 

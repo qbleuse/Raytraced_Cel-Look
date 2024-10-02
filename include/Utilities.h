@@ -1,6 +1,10 @@
 #ifndef __UTILITIES_H__
 #define __UTILITIES_H__
 
+#ifndef _WIN32
+#define __forceinline inline
+#endif
+
 #include <stdint.h>
 #include <stdlib.h>
 #include <memory.h>
@@ -84,7 +88,7 @@ public:
 	}
 
 	/*===== Memory Management =====*/
-	
+
 	virtual void Clear()
 	{
 		if (_raw_data)
@@ -115,7 +119,7 @@ public:
 	NumberedArray(T* raw_data, uint32_t nb):
 		SimpleArray<T>(raw_data),
 		_nb{nb}
-		
+
 	{
 
 	}

@@ -11,7 +11,7 @@
 void RasterTriangle::PrepareVulkanScripts(GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader)
 {
 	//define vertex shader
-	const char* vertex_shader = 
+	const char* vertex_shader =
 		R"(#version 450
 
 			layout(binding = 0) uniform PointBufferObject
@@ -30,7 +30,7 @@ void RasterTriangle::PrepareVulkanScripts(GraphicsAPIManager& GAPI, VkShaderModu
 			{
 				gl_Position = vec4(point_ubo.points[gl_VertexIndex].xy,  0.0, 1.0);
 				fragColor = color_ubo.points[gl_VertexIndex].rgb;
-				
+
 			})";
 
 	const char* fragment_shader =
@@ -52,14 +52,14 @@ void RasterTriangle::PrepareVulkanScripts(GraphicsAPIManager& GAPI, VkShaderModu
 
 void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader)
 {
-	//describe vertex shader stage 
+	//describe vertex shader stage
 	VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 	vertShaderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	vertShaderStageInfo.stage  = VK_SHADER_STAGE_VERTEX_BIT;
 	vertShaderStageInfo.module = VertexShader;
 	vertShaderStageInfo.pName  = "main";
 
-	//describe vertex shader stage 
+	//describe vertex shader stage
 	VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
 	fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -142,7 +142,7 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	subpass.colorAttachmentCount	= 1;
 	subpass.pColorAttachments		= &frameColourBufferAttachmentRef;
 
-	//describing our renderpass 
+	//describing our renderpass
 	VkRenderPassCreateInfo renderPassInfo{};
 	renderPassInfo.sType			= VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 	renderPassInfo.attachmentCount	= 1;
@@ -189,7 +189,7 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	VkGraphicsPipelineCreateInfo pipelineInfo{};
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 
-	//putting our two shader stages 
+	//putting our two shader stages
 	VkPipelineShaderStageCreateInfo stages[2] = {vertShaderStageInfo, fragShaderStageInfo};
 	pipelineInfo.pStages	= stages;
 	pipelineInfo.stageCount = 2;
@@ -210,7 +210,7 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	pipelineInfo.basePipelineIndex		= -1;
 
 	VK_CALL_PRINT(vkCreateGraphicsPipelines(GAPI.VulkanDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &trianglePipeline));
-	
+
 	vkDestroyShaderModule(GAPI.VulkanDevice, FragmentShader, nullptr);
 	vkDestroyShaderModule(GAPI.VulkanDevice, VertexShader, nullptr);
 }
@@ -221,13 +221,13 @@ void RasterTriangle::Prepare(GraphicsAPIManager& GAPI)
 	//the Shaders needed.
 	VkShaderModule vertexShader{}, fragmentShader{};
 
-	pointBuffer.first	= vec4(0.0f, -1.0f, 0.0f, 0.0f);
-	pointBuffer.second	= vec4(0.5f, 0.5f, 0.0f, 0.0f);
-	pointBuffer.third	= vec4(-0.5f, 0.5f, 0.0f, 0.0f);
+	pointBuffer.first	= vec4{0.0f, -1.0f, 0.0f, 0.0f};
+	pointBuffer.second	= vec4{0.5f, 0.5f, 0.0f, 0.0f};
+	pointBuffer.third	= vec4{-0.5f, 0.5f, 0.0f, 0.0f};
 
-	colorBuffer.first = vec4(1.0f, 0.0f, 0.0f, 0.0f);
-	colorBuffer.second = vec4(0.0f, 1.0f, 0.0f, 0.0f);
-	colorBuffer.third = vec4(0.0f, 0.0f, 1.0f, 0.0f);
+	colorBuffer.first = vec4{1.0f, 0.0f, 0.0f, 0.0f};
+	colorBuffer.second = vec4{0.0f, 1.0f, 0.0f, 0.0f};
+	colorBuffer.third = vec4{0.0f, 0.0f, 1.0f, 0.0f};
 
 
 	//compile the shaders here
@@ -326,7 +326,7 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 		colorbufferInfo.buffer = triangleColourHandle.GPUBuffer[i];
 		colorbufferInfo.offset = 0;
 		colorbufferInfo.range = sizeof(UniformBuffer);
-		
+
 		VkWriteDescriptorSet colordescriptorWrite{};
 		colordescriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		colordescriptorWrite.dstSet = triangleVertexDescriptorSet[i];
@@ -377,14 +377,14 @@ void RasterTriangle::Act(AppWideContext& AppContext)
 	}
 
 	//UI update
-	{	
-		changed |= ImGui::SliderFloat2("First Point", pointBuffer.first.xy.array, -1.0f, 1.0f);
-		changed |= ImGui::SliderFloat2("Second Point", pointBuffer.second.xy.array, -1.0f, 1.0f);
-		changed |= ImGui::SliderFloat2("Third Point", pointBuffer.third.xy.array, -1.0f, 1.0f);
-	
-		changed |= ImGui::ColorPicker4("First Point Color", colorBuffer.first.array);
-		changed |= ImGui::ColorPicker4("Second Point Color", colorBuffer.second.array);
-		changed |= ImGui::ColorPicker4("Third Point Color", colorBuffer.third.array);
+	{
+		changed |= ImGui::SliderFloat2("First Point", pointBuffer.first.xy.scalar, -1.0f, 1.0f);
+		changed |= ImGui::SliderFloat2("Second Point", pointBuffer.second.xy.scalar, -1.0f, 1.0f);
+		changed |= ImGui::SliderFloat2("Third Point", pointBuffer.third.xy.scalar, -1.0f, 1.0f);
+
+		changed |= ImGui::ColorPicker4("First Point Color", colorBuffer.first.scalar);
+		changed |= ImGui::ColorPicker4("Second Point Color", colorBuffer.second.scalar);
+		changed |= ImGui::ColorPicker4("Third Point Color", colorBuffer.third.scalar);
 	}
 }
 

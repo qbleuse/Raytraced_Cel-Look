@@ -14,14 +14,14 @@ void RasterObject::PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderMo
 
 	/*===== SHADER ======*/
 
-	//describe vertex shader stage 
+	//describe vertex shader stage
 	VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 	vertShaderStageInfo.sType	= VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	vertShaderStageInfo.stage	= VK_SHADER_STAGE_VERTEX_BIT;
 	vertShaderStageInfo.module	= VertexShader;
 	vertShaderStageInfo.pName	= "main";
 
-	//describe fragment shader stage 
+	//describe fragment shader stage
 	VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
 	fragShaderStageInfo.sType	= VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	fragShaderStageInfo.stage	= VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -130,7 +130,7 @@ void RasterObject::PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderMo
 	subpass.colorAttachmentCount	= 1;
 	subpass.pColorAttachments		= &frameColourBufferAttachmentRef;
 
-	//describing our renderpass 
+	//describing our renderpass
 	VkRenderPassCreateInfo renderPassInfo{};
 	renderPassInfo.sType			= VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 	renderPassInfo.attachmentCount	= 1;
@@ -178,7 +178,7 @@ void RasterObject::PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderMo
 	VkGraphicsPipelineCreateInfo pipelineInfo{};
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 
-	//putting our two shader stages 
+	//putting our two shader stages
 	VkPipelineShaderStageCreateInfo stages[2] = { vertShaderStageInfo, fragShaderStageInfo };
 	pipelineInfo.pStages = stages;
 	pipelineInfo.stageCount = 2;
@@ -217,12 +217,12 @@ void RasterObject::PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderMo
 	};
 
 	Object obj;
-	obj.one = vec3(-1.0f, 1.0f, 0.0f);//1
-	obj.two = vec3(1.0f, 1.0f, 0.0f);//2
-	obj.three = vec3(1.0f, -1.0f, 0.0f);//3
-	obj.four = vec3(-1.0f, 1.0f, 0.0f);//1
-	obj.five = vec3(1.0f, -1.0f, 0.0f);//3
-	obj.six = vec3(-1.0f, -1.0f, 0.0f);//4
+	obj.one = vec3{-1.0f, 1.0f, 0.0f};//1
+	obj.two = vec3{1.0f, 1.0f, 0.0f};//2
+	obj.three = vec3{1.0f, -1.0f, 0.0f};//3
+	obj.four = vec3{-1.0f, 1.0f, 0.0f};//1
+	obj.five = vec3{1.0f, -1.0f, 0.0f};//3
+	obj.six = vec3{-1.0f, -1.0f, 0.0f};//4
 
 
 	CreateStaticBufferHandle(GAPI, vertexBufferHandle, sizeof(Object));
@@ -248,7 +248,7 @@ void RasterObject::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShader
 			{
 				gl_Position = vec4(positions, 1.0);
 				fragColor = vec3(1.0,0.5,0.2);
-				
+
 			})";
 
 	const char* fragment_shader =

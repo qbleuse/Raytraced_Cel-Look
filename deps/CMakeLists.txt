@@ -21,11 +21,18 @@ target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/GLFW/")
 
 #define lib
 add_library(GLFW SHARED IMPORTED)
-set_target_properties(GLFW PROPERTIES IMPORTED_LOCATION "${DEPS_BIN}/GLFW/glfw3.dll" )
-set_target_properties(GLFW PROPERTIES IMPORTED_IMPLIB "${DEPS_LIBS}/GLFW/glfw3dll.lib" )
+
+if (WIN32)
+    set_target_properties(GLFW PROPERTIES IMPORTED_LOCATION "${DEPS_BIN}/GLFW/glfw3.dll" )
+    set_target_properties(GLFW PROPERTIES IMPORTED_IMPLIB "${DEPS_LIBS}/GLFW/glfw3dll.lib" )
+elseif(APPLE)
+    set_target_properties(GLFW PROPERTIES IMPORTED_LOCATION "${DEPS_BIN}/GLFW/libglfw.3.dylib" )
+    set(CMAKE_BUILD_RPATH "${DEPS_BIN}/GLFW/libglfw.3.dylib")
+    #set_target_properties(GLFW PROPERTIES IMPORTED_IMPLIB "${DEPS_LIBS}/GLFW/libglfw3.a" )
+endif()
 
 # Add libraries
 target_link_libraries(VulkanLearning PUBLIC "GLFW")
 
-target_sources(VulkanLearning PUBLIC ${DEPS_SRC_FILES})
 
+target_sources(VulkanLearning PUBLIC ${DEPS_SRC_FILES})
