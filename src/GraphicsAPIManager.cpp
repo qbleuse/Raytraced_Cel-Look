@@ -138,8 +138,14 @@ bool GraphicsAPIManager::CreateVulkanInterface()
 	const char** glfwExtensions;
 	glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 
-	//create a new variable to add the extensions we want other than those glfw needs
+#ifdef __APPLE__
+    //create a new variable to add the extensions we want other than those glfw needs
+	const char** allExtensions = (const char**)malloc((glfwExtensionCount + 2) * sizeof(const char*));
+    allExtensions[glfwExtensionCount + 1] = "VK_KHR_portability_enumeration";
+#else
+    //create a new variable to add the extensions we want other than those glfw needs
 	const char** allExtensions = (const char**)malloc((glfwExtensionCount + 1) * sizeof(const char*));
+#endif
 
 	//fill up the extensions with the glfw ones
 	for (uint32_t extCount = 0; extCount < glfwExtensionCount; extCount++)
@@ -148,7 +154,6 @@ bool GraphicsAPIManager::CreateVulkanInterface()
 #ifndef NDEBUG
 	//add our debug extensions
 	allExtensions[glfwExtensionCount] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-
 
 	//get the number of validation layers
 	uint32_t layer_count;
@@ -183,12 +188,12 @@ bool GraphicsAPIManager::CreateVulkanInterface()
 #endif
 
 	//fill the create struct
-	createInfo.enabledExtensionCount	= glfwExtensionCount + 1;
+	createInfo.enabledExtensionCount	= glfwExtensionCount + 2;
 	createInfo.ppEnabledExtensionNames	= allExtensions;
-
+	createInfo.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 
 	printf("\nEnabled Extensions:\n");
-	for (uint32_t i = 0; i < glfwExtensionCount + 1; i++)
+	for (uint32_t i = 0; i < glfwExtensionCount + 2; i++)
 	{
 		printf("%s.\n", allExtensions[i]);
 	}
@@ -329,7 +334,11 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
 	deviceCreateInfo.queueCreateInfoCount = 1;
 
+#ifdef __APPLE__
+    const char* deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_portability_subset",  "VK_KHR_acceleration_structure" , "VK_KHR_ray_tracing_pipeline", "VK_KHR_ray_query", "VK_KHR_deferred_host_operations"};
+#else
 	const char* deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_acceleration_structure" , "VK_KHR_ray_tracing_pipeline", "VK_KHR_ray_query", "VK_KHR_deferred_host_operations" };
+#endif
 	deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
 	if (vulkan_rt_supported)
 	{
@@ -339,6 +348,10 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	{
 		deviceCreateInfo.enabledExtensionCount = 1;
 	}
+
+#ifdef __APPLE__
+    deviceCreateInfo.enabledExtensionCount++;
+#endif
 
 	//Vulkan Physical Device chosen
 	VK_CALL_PRINT(vkCreateDevice(VulkanGPU, &deviceCreateInfo, nullptr, &VulkanDevice))
