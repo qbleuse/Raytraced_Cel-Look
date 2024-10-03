@@ -142,10 +142,15 @@ bool GraphicsAPIManager::CreateVulkanInterface()
     //create a new variable to add the extensions we want other than those glfw needs
 	const char** allExtensions = (const char**)malloc((glfwExtensionCount + 2) * sizeof(const char*));
     allExtensions[glfwExtensionCount + 1] = "VK_KHR_portability_enumeration";
+	createInfo.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+	createInfo.enabledExtensionCount = glfwExtensionCount + 2;
 #else
     //create a new variable to add the extensions we want other than those glfw needs
 	const char** allExtensions = (const char**)malloc((glfwExtensionCount + 1) * sizeof(const char*));
+	createInfo.enabledExtensionCount = glfwExtensionCount + 1;
 #endif
+	createInfo.ppEnabledExtensionNames = allExtensions;
+
 
 	//fill up the extensions with the glfw ones
 	for (uint32_t extCount = 0; extCount < glfwExtensionCount; extCount++)
@@ -188,12 +193,9 @@ bool GraphicsAPIManager::CreateVulkanInterface()
 #endif
 
 	//fill the create struct
-	createInfo.enabledExtensionCount	= glfwExtensionCount + 2;
-	createInfo.ppEnabledExtensionNames	= allExtensions;
-	createInfo.flags = VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 
 	printf("\nEnabled Extensions:\n");
-	for (uint32_t i = 0; i < glfwExtensionCount + 2; i++)
+	for (uint32_t i = 0; i < glfwExtensionCount + 1; i++)
 	{
 		printf("%s.\n", allExtensions[i]);
 	}

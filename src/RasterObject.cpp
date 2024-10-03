@@ -1,5 +1,8 @@
 #include "RasterObject.h"
 
+//imgui include
+#include "imgui.h"
+
 //include app class
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
@@ -239,14 +242,16 @@ void RasterObject::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShader
 
 			layout(binding = 0) uniform Transform
 			{
-				mat4 modelTransform;
+				mat4 model;
+				mat4 view;
+				mat4 proj;
 			};
 
 			layout(location = 0) out vec3 fragColor;
 
 			void main()
 			{
-				gl_Position = vec4(positions, 1.0);
+				gl_Position =  proj * view * model * vec4(positions, 1.0);
 				fragColor = vec3(1.0,0.5,0.2);
 
 			})";
@@ -273,6 +278,9 @@ void RasterObject::Prepare(class GraphicsAPIManager& GAPI)
 
 	PrepareVulkanScripts(GAPI, VertexShader, FragmentShader);
 	PrepareVulkanProps(GAPI, VertexShader, FragmentShader);
+
+	oData.scale = vec3{ 1.0f, 1.0f, 1.0f };
+	oData.pos = vec3{ 0.0f, 0.0f, 1.0f };
 }
 
 /*===== Resize =====*/
@@ -334,7 +342,7 @@ void RasterObject::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t 
 	VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI.VulkanDevice, &allocInfo, *triangleVertexDescriptorSet));
 
 	//recreate the uniform bufferx
-	CreateUniformBufferHandle(GAPI, matBufferHandle, GAPI.NbVulkanFrames, sizeof(mat4));
+	CreateUniformBufferHandle(GAPI, matBufferHandle, GAPI.NbVulkanFrames, sizeof(mat4) * 3);
 	//CreateUniformBufferHandle(GAPI, triangleColourHandle, GAPI.NbVulkanFrames, sizeof(UniformBuffer));
 
 
@@ -349,7 +357,7 @@ void RasterObject::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t 
 		VkDescriptorBufferInfo bufferInfo{};
 		bufferInfo.buffer = matBufferHandle.GPUBuffer[i];
 		bufferInfo.offset = 0;
-		bufferInfo.range = sizeof(mat4);
+		bufferInfo.range = sizeof(mat4) * 3;
 
 		VkWriteDescriptorSet descriptorWrite{};
 		descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -374,6 +382,23 @@ void RasterObject::Resize(class GraphicsAPIManager& GAPI, int32_t old_width, int
 
 void RasterObject::Act(struct AppWideContext& AppContext)
 {
+
+	oData.euler_angles.y += AppContext.delta_time;
+
+	//it will change every frame
+	{
+		matBuffer.proj = AppContext.proj_mat;
+		matBuffer.view = AppContext.view_mat;
+		matBuffer.model = scale(oData.scale.x, oData.scale.y, oData.scale.z) * ro_intrinsic_rot(oData.euler_angles.x, oData.euler_angles.y, oData.euler_angles.z) * ro_translate(oData.pos);
+	}
+
+	//UI update
+	if (SceneCanShowUI(AppContext))
+	{
+		ImGui::SliderFloat3("Object Postion", oData.pos.scalar, -100.0f, 100.0f);
+		ImGui::SliderFloat3("Object Rotation", oData.euler_angles.scalar, -180.0f, 180.0f);
+		ImGui::SliderFloat3("Object Scale", oData.scale.scalar, 0.0f, 100.0f);
+	}
 
 }
 
@@ -409,6 +434,10 @@ void RasterObject::Show(GAPIHandle& GAPIHandle)
 		//info.pClearValues				= &imgui.ImGuiWindow.ClearValue;
 		vkCmdBeginRenderPass(commandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
 	}
+
+	//the buffer will change every frame as the object rotates every frame
+	memcpy(matBufferHandle.CPUMemoryHandle[GAPIHandle.VulkanCurrentFrame], (void*)&matBuffer, sizeof(mat4) * 3);
+
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objectPipeline);
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objectLayout, 0, 1, &triangleVertexDescriptorSet[GAPIHandle.VulkanFrameIndex], 0, nullptr);

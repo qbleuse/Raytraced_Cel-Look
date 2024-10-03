@@ -66,6 +66,8 @@ public:
 
 	virtual void Resize(class GraphicsAPIManager& GAPI, int32_t old_width, int32_t old_height, uint32_t old_nb_frames)final;
 
+	__forceinline virtual const char* Name()override { return "Raster Object"; }
+
 	virtual void Act(struct AppWideContext& AppContext)final;
 
 	virtual void Show(GAPIHandle& GAPIHandle)final;
@@ -73,7 +75,21 @@ public:
 	virtual void Close(class GraphicsAPIManager& GAPI)final;
 
 
-	mat4 objectTransform;
+	struct ObjectData
+	{
+		vec3 pos;
+		vec3 euler_angles;
+		vec3 scale;
+	};
+	ObjectData oData;
+
+	struct UniformBuffer
+	{
+		mat4 model;
+		mat4 view;
+		mat4 proj;
+	};
+	UniformBuffer matBuffer;
 
 
 	/*===== END Scene Interface =====*/

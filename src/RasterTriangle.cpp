@@ -377,6 +377,7 @@ void RasterTriangle::Act(AppWideContext& AppContext)
 	}
 
 	//UI update
+	if (SceneCanShowUI(AppContext))
 	{
 		changed |= ImGui::SliderFloat2("First Point", pointBuffer.first.xy.scalar, -1.0f, 1.0f);
 		changed |= ImGui::SliderFloat2("Second Point", pointBuffer.second.xy.scalar, -1.0f, 1.0f);

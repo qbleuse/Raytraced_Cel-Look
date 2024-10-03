@@ -6,6 +6,8 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_vulkan.h"
 
+//app include
+#include "Scene.h"
 #include "GraphicsAPIManager.h"
 
 /*===== Init =====*/
@@ -150,10 +152,57 @@ bool ResetImGuiResource(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiReso
 
 void BeginDrawUIWindow(const GraphicsAPIManager& GAPI, NumberedArray<class Scene*>& scenes, AppWideContext& AppContext)
 {
+	if (!AppContext.ui_visible)
+		return;
+
 	//open the app wide control panel
-	if (!ImGui::Begin("Raytraced-CelShading Control Panel", &AppContext.ui_visible))
+	if (!ImGui::Begin("Raytraced-CelShading Control Panel", &AppContext.ui_visible, ImGuiWindowFlags_MenuBar))
 	{
 		ImGui::End();
+		return;
+	}
+
+	ImGui::Text("%f FPS", 1.0f / AppContext.delta_time);
+
+	if (ImGui::BeginMenuBar())
+	{
+		if (ImGui::BeginMenu("Current Scene"))
+		{
+			for (uint32_t i = 0; i < scenes.Nb(); i++)
+			{
+				if (ImGui::MenuItem(scenes[i]->Name(), NULL))
+				{
+					AppContext.scene_index = i;
+					AppContext.in_camera_menu = false;
+				}
+			}
+
+			ImGui::EndMenu();
+		}
+		if (ImGui::BeginMenu("Settings"))
+		{
+			ImGui::MenuItem("Camera Setings", NULL, &AppContext.in_camera_menu);
+			ImGui::EndMenu();
+		}
+
+		ImGui::EndMenuBar();
+	}
+
+	if (AppContext.in_camera_menu)
+	{
+		bool camera_changed = false;
+
+		camera_changed |= ImGui::SliderAngle("Camera Field Of View", &AppContext.fov, 0.0f, 180.0f);
+		camera_changed |= ImGui::SliderFloat("Near Plane", &AppContext.near_plane, 0.0f, 4000.0f);
+		camera_changed |= ImGui::SliderFloat("Far Plane", &AppContext.far_plane, 0.0f, 4000.0f);
+		camera_changed |= ImGui::SliderFloat("Cam Translate Speed", &AppContext.camera_translate_speed, 0.1f, 1000.0f);
+		camera_changed |= ImGui::SliderFloat("Cam Rot Speed", &AppContext.camera_rotational_speed, 0.1f, 1000.0f);
+
+		if (camera_changed)
+		{
+			AppContext.proj_mat = ro_perspective_proj(GAPI.VulkanWidth, GAPI.VulkanHeight, AppContext.fov * RADIANS_TO_DEGREES, AppContext.near_plane, AppContext.far_plane);
+		}
+		return;
 	}
 
 	// 1. allow to change scene
@@ -165,22 +214,15 @@ void BeginDrawUIWindow(const GraphicsAPIManager& GAPI, NumberedArray<class Scene
 	if (ImGui::Button(">"))
 		AppContext.scene_index = ++AppContext.scene_index % scenes.Nb();
 
+	//special case : window was opened but this frame it closes, we still need to render the last frame of the UI window
+	if (!AppContext.ui_visible)
+		ImGui::End();
+
 }
 
 
 void FinishDrawUIWindow(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResource, AppWideContext& AppContext)
 {
-	ImGui::End();
-
-	ImGui::Render();
-	ImDrawData* draw_data = ImGui::GetDrawData();
-
-	if (draw_data->DisplaySize.x <= 0 && draw_data->DisplaySize.y <= 0)
-	{
-		AppContext.ui_visible = false;
-		return;
-	}
-
 	VkResult err;
 
 	{
@@ -204,8 +246,22 @@ void FinishDrawUIWindow(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiReso
 		vkCmdBeginRenderPass(ImGuiResource.ImGuiCommandBuffer[GAPI.RuntimeHandle.VulkanCurrentFrame], &info, VK_SUBPASS_CONTENTS_INLINE);
 	}
 
+
+	if (AppContext.ui_visible)
+		ImGui::End();
+
+	ImGui::Render();
+	ImDrawData* draw_data = ImGui::GetDrawData();
+
+	if (draw_data->DisplaySize.x <= 0 && draw_data->DisplaySize.y <= 0)
+	{
+		AppContext.ui_visible = false;
+		return;
+	}
+
 	// Record dear imgui primitives into command buffer
 	ImGui_ImplVulkan_RenderDrawData(draw_data, ImGuiResource.ImGuiCommandBuffer[GAPI.RuntimeHandle.VulkanCurrentFrame]);
+
 
 	// Submit command buffer
 	vkCmdEndRenderPass(ImGuiResource.ImGuiCommandBuffer[GAPI.RuntimeHandle.VulkanCurrentFrame]);

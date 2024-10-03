@@ -77,6 +77,7 @@ void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppCo
 	//2. Get Mouse Pos
 	{
 		ImVec2 MousePos = ImGui::GetMousePos();
+		AppContext.prev_mouse_pos = AppContext.mouse_pos;
 		AppContext.mouse_pos = { MousePos.x, MousePos.y };
 	}
 
@@ -111,6 +112,71 @@ void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppCo
 		//same as above, for the moment we only have one window so it will be half empty
 		AppContext.window_mouse_pos = { (mouse_pos.x / GAPI.VulkanWidth) * 2.0f - 1.0f, (mouse_pos.y / GAPI.VulkanHeight) * 2.0f - 1.0f , 0.0f, 0.0f};
 	}
+
+	AppContext.delta_time = ImGui::GetIO().DeltaTime;
+
+	/* Camera Controls */
+
+	//1. camera mode
+	if (ImGui::IsKeyReleased(ImGuiKey_Escape))
+	{
+		AppContext.in_camera_mode = !AppContext.in_camera_mode;
+
+		glfwSetInputMode(GAPI.VulkanWindow, GLFW_CURSOR, AppContext.in_camera_mode ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+	}
+
+	if (AppContext.in_camera_mode)
+	{
+		//2. camera position
+		{
+			vec3 right = normalize(vec3{ {AppContext.view_mat[0], AppContext.view_mat[4], AppContext.view_mat[8]} });
+			vec3 up = normalize(vec3{ {AppContext.view_mat[1], AppContext.view_mat[5], AppContext.view_mat[9]} });
+			vec3 forward = normalize(vec3{ {AppContext.view_mat[2], AppContext.view_mat[6], AppContext.view_mat[10]} });
+
+			if (ImGui::IsKeyDown(ImGuiKey_W))
+			{
+				AppContext.camera_pos += forward * AppContext.camera_translate_speed * AppContext.delta_time;
+			}
+			if (ImGui::IsKeyDown(ImGuiKey_S))
+			{
+				AppContext.camera_pos -= forward * AppContext.camera_translate_speed * AppContext.delta_time;
+			}
+			if (ImGui::IsKeyDown(ImGuiKey_D))
+			{
+				AppContext.camera_pos -= right * AppContext.camera_translate_speed * AppContext.delta_time;
+			}
+			if (ImGui::IsKeyDown(ImGuiKey_A))
+			{
+				AppContext.camera_pos += right * AppContext.camera_translate_speed * AppContext.delta_time;
+			}
+			if (ImGui::IsKeyDown(ImGuiKey_Q))
+			{
+				AppContext.camera_pos -= up * AppContext.camera_translate_speed * AppContext.delta_time;
+			}
+			if (ImGui::IsKeyDown(ImGuiKey_E))
+			{
+				AppContext.camera_pos += up * AppContext.camera_translate_speed * AppContext.delta_time;
+			}
+		}
+
+		//3. camera rotation
+		{
+			vec2 mouse_move = AppContext.mouse_pos - AppContext.prev_mouse_pos;
+
+			AppContext.camera_rot.y += mouse_move.x * AppContext.camera_rotational_speed * AppContext.delta_time;
+			AppContext.camera_rot.x += mouse_move.y * AppContext.camera_rotational_speed * AppContext.delta_time;
+		}
+
+		//4. create corresponding view matrix
+
+		AppContext.view_mat = ro_translate(AppContext.camera_pos) * ro_extrinsic_rot(AppContext.camera_rot.x, AppContext.camera_rot.y, 0.0f);
+
+		//it is faster to put it by hand
+		//AppContext.view_mat[12] = AppContext.camera_pos.x;
+		//AppContext.view_mat[13] = AppContext.camera_pos.y;
+		//AppContext.view_mat[14] = AppContext.camera_pos.z;
+	}
+
 }
 
 int main()
@@ -174,6 +240,7 @@ int main()
 			scenes[i]->Prepare(GAPI);
 			scenes[i]->Resize(GAPI,GAPI.VulkanWidth,GAPI.VulkanHeight,GAPI.NbVulkanFrames);
 		}
+		AppContext.proj_mat = ro_perspective_proj(GAPI.VulkanWidth, GAPI.VulkanHeight, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
 
 		while (!glfwWindowShouldClose(GAPI.VulkanWindow))
 		{
@@ -184,6 +251,7 @@ int main()
 			{
 				GAPI.ResizeSwapChain(scenes);
 				ResetImGuiResource(GAPI, imguiResource);
+				AppContext.proj_mat = ro_perspective_proj(GAPI.VulkanWidth, GAPI.VulkanHeight, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
 				continue;
 			}
 
@@ -207,12 +275,9 @@ int main()
 
 			//5. draw the ui
 			FinishDrawUIWindow(GAPI, imguiResource, AppContext);
-			
 
 			//6. present
 			FramePresent(GAPI,imguiResource, AppContext);
-			
-
 
 			if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
 			{
