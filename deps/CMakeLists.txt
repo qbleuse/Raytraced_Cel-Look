@@ -18,6 +18,10 @@ set (DEPS_SRC_FILES
 target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/")
 target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/imgui/")
 target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/GLFW/")
+target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/tiny/")
+target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/stb/")
+target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/rapidjson/")
+
 
 #define lib
 add_library(GLFW SHARED IMPORTED)

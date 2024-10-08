@@ -114,6 +114,8 @@ private:
 public:
 	/*===== Constructor =====*/
 
+	NumberedArray() = default;
+
 	NumberedArray(T* raw_data) = delete;
 
 	NumberedArray(T* raw_data, uint32_t nb):

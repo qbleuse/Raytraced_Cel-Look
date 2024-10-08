@@ -7,8 +7,8 @@
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
 
-
-
+//include loader app
+#include "tiny_obj_loader.h"
 
 /*==== Prepare =====*/
 
@@ -209,27 +209,30 @@ void RasterObject::PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderMo
 
 	/*===== VERTEX BUFFER =====*/
 
-	struct Object
-	{
-		vec3 one;
-		vec3 two;
-		vec3 three;
-		vec3 four;
-		vec3 five;
-		vec3 six;
-	};
+	//struct Object
+	//{
+	//	vec3 one;
+	//	vec3 two;
+	//	vec3 three;
+	//	vec3 four;
+	//};
+	//
+	//Object obj;
+	//obj.one = vec3{-1.0f, 1.0f, 0.0f};//1
+	//obj.two = vec3{1.0f, 1.0f, 0.0f};//2
+	//obj.three = vec3{1.0f, -1.0f, 0.0f};//3
+	//obj.four = vec3{-1.0f, -1.0f, 0.0f};//4
+	//
+	//
+	//CreateStaticBufferHandle(GAPI, vertexBufferHandle, sizeof(Object));
+	//UploadStaticBufferHandle(GAPI, vertexBufferHandle, (void*)&obj, sizeof(obj));
+	//
+	//uint32_t indexArray[] = {0, 1, 2, 0, 2, 3};
+	//
+	//CreateStaticBufferHandle(GAPI, indexBufferHandle, sizeof(int32_t) * 6, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+	//UploadStaticBufferHandle(GAPI, indexBufferHandle, (void*)&indexArray, sizeof(int32_t) * 6);
 
-	Object obj;
-	obj.one = vec3{-1.0f, 1.0f, 0.0f};//1
-	obj.two = vec3{1.0f, 1.0f, 0.0f};//2
-	obj.three = vec3{1.0f, -1.0f, 0.0f};//3
-	obj.four = vec3{-1.0f, 1.0f, 0.0f};//1
-	obj.five = vec3{1.0f, -1.0f, 0.0f};//3
-	obj.six = vec3{-1.0f, -1.0f, 0.0f};//4
-
-
-	CreateStaticBufferHandle(GAPI, vertexBufferHandle, sizeof(Object));
-	UploadStaticBufferHandle(GAPI, vertexBufferHandle, (void*)&obj, sizeof(obj));
+	LoadObjFile(GAPI, "../../../media/teapot/teapot.obj",vertexBufferHandle,indexBufferHandle);
 }
 
 void RasterObject::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader)
@@ -281,6 +284,11 @@ void RasterObject::Prepare(class GraphicsAPIManager& GAPI)
 
 	oData.scale = vec3{ 1.0f, 1.0f, 1.0f };
 	oData.pos = vec3{ 0.0f, 0.0f, 1.0f };
+}
+
+void LoadObj(const char* objFileName)
+{
+
 }
 
 /*===== Resize =====*/
@@ -447,7 +455,8 @@ void RasterObject::Show(GAPIHandle& GAPIHandle)
 	vkCmdSetScissor(commandBuffer, 0, 1, &objectScissors);
 	VkDeviceSize offset = 0;
 	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBufferHandle.StaticGPUBuffer, &offset);
-	vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+	vkCmdBindIndexBuffer(commandBuffer,indexBufferHandle[0].StaticGPUBuffer, 0, VK_INDEX_TYPE_UINT32);
+	vkCmdDrawIndexed(commandBuffer, 9480, 1, 0, 0, 0);
 
 	// Submit command buffer
 	vkCmdEndRenderPass(commandBuffer);
@@ -478,6 +487,8 @@ void RasterObject::Close(class GraphicsAPIManager& GAPI)
 
 	ClearUniformBufferHandle(GAPI, matBufferHandle);
 	ClearStaticBufferHandle(GAPI, vertexBufferHandle);
+	for (int32_t i = 0; i < indexBufferHandle.Nb(); i++)
+		ClearStaticBufferHandle(GAPI, indexBufferHandle[i]);
 
 	vkDestroyDescriptorPool(GAPI.VulkanDevice, objectDescriptorPool, nullptr);
 

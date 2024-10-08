@@ -5,6 +5,11 @@
 //vulkan shader compiler
 #include "shaderc/shaderc.h"
 
+//loader include
+#define TINYOBJLOADER_IMPLEMENTATION
+#include "tiny_obj_loader.h"
+
+
 /*===== SHADERS =====*/
 
 bool CreateVulkanShaders(GraphicsAPIManager& GAPI, VkShaderModule& shader, VkShaderStageFlagBits shaderStage, const char* shaderSource, const char* shader_name, const char* entryPoint)
@@ -250,4 +255,41 @@ void ClearStaticBufferHandle(GraphicsAPIManager& GAPI, StaticBufferHandle& buffe
 	if (bufferHandle.StaticGPUMemoryHandle != nullptr)
 		vkFreeMemory(GAPI.VulkanDevice, bufferHandle.StaticGPUMemoryHandle, nullptr);
 	bufferHandle.StaticGPUMemoryHandle = nullptr;
+}
+
+
+void LoadObjFile(GraphicsAPIManager& GAPI, const char* fileName, StaticBufferHandle& vertexBuffer, NumberedArray<StaticBufferHandle>& indexBuffer)
+{
+	// setup obj reader
+	tinyobj::ObjReader reader{};
+	tinyobj::ObjReaderConfig config{};
+	config.triangulate = true;// we ask for triangulate as it will be easier to process
+
+	//read obj
+	reader.ParseFromFile(fileName, config);
+
+	//get back data
+	const tinyobj::attrib_t& objAttrib = reader.GetAttrib();
+	const std::vector<tinyobj::shape_t>& objShape = reader.GetShapes();
+
+
+	// 1. creating and uploading the vertex buffer
+	CreateStaticBufferHandle(GAPI, vertexBuffer, sizeof(tinyobj::real_t)*objAttrib.vertices.size());
+	UploadStaticBufferHandle(GAPI, vertexBuffer, (void*)objAttrib.vertices.data(), sizeof(tinyobj::real_t) * objAttrib.vertices.size());
+
+
+	//allocate buffer
+	indexBuffer.Alloc(objShape.size());
+
+	for (int32_t i = 0; i < objShape.size(); i++)
+	{
+		//as ee triangulated, teh number of vertices
+		uint32_t indexNb = objShape[i].mesh.indices.size();
+		SimpleArray<uint32_t> indices{ indexNb };
+		for (int32_t j = 0; j < indexNb; j++)
+			indices[j] = objShape[i].mesh.indices[j].vertex_index;
+
+		CreateStaticBufferHandle(GAPI, indexBuffer[i], indexNb * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+		UploadStaticBufferHandle(GAPI, indexBuffer[i], (void*)*indices, indexNb * sizeof(uint32_t));
+	}
 }

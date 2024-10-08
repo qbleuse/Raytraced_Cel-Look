@@ -41,6 +41,7 @@ private:
 
 	UniformBufferHandle matBufferHandle;
 	StaticBufferHandle	vertexBufferHandle;
+	NumberedArray<StaticBufferHandle>	indexBufferHandle;
 
 
 	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
@@ -90,6 +91,9 @@ public:
 		mat4 proj;
 	};
 	UniformBuffer matBuffer;
+
+
+	void LoadObj(const char* objFileName);
 
 
 	/*===== END Scene Interface =====*/

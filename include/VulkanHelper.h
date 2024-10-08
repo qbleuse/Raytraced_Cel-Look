@@ -92,4 +92,7 @@ bool UploadStaticBufferHandle(GraphicsAPIManager& GAPI, StaticBufferHandle& buff
 /* Asks for de-allocation of all allocated resources for this StaticBufferHandle on GPU */
 void ClearStaticBufferHandle(GraphicsAPIManager& GAPI, StaticBufferHandle& bufferHandle);
 
+/* uses tiny obj to load to static buffers into Vulkan */
+void LoadObjFile(GraphicsAPIManager& GAPI, const char* fileName, StaticBufferHandle& vertexBuffer, NumberedArray<StaticBufferHandle>& indexBuffer);
+
 #endif //__VULKAN_HELPER_H__
