@@ -11,10 +11,10 @@ struct GAPIHandle
 {
 	/* Vulkan */
 	VkQueue	VulkanQueues[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
-	SimpleArray<VkCommandBuffer>	VulkanCommand;
-	SimpleArray<VkSemaphore>		VulkanCanPresentSemaphore;
-	SimpleArray<VkSemaphore>		VulkanHasPresentedSemaphore;
-	SimpleArray<VkFence>			VulkanIsDrawingFence;
+	HeapMemory<VkCommandBuffer>	VulkanCommand;
+	HeapMemory<VkSemaphore>		VulkanCanPresentSemaphore;
+	HeapMemory<VkSemaphore>		VulkanHasPresentedSemaphore;
+	HeapMemory<VkFence>			VulkanIsDrawingFence;
 
 	uint32_t VulkanCurrentFrame = 0;
 	uint32_t VulkanFrameIndex = 0;
@@ -135,10 +135,10 @@ public:
 		VkSurfaceFormatKHR VulkanSurfaceFormat{};
 		
 		//The actual frames of the swapchain. this is an array containing a number of VkImage (with a minimum of 3)
-		SimpleArray<VkImage> VulkanBackBuffers;
+		HeapMemory<VkImage> VulkanBackBuffers;
 		//The actual frames buffers of the swapchain. this is an array containing a number of VkImageViews equal to the number of frames.
 		//This is the interface that will allow us to write into the actual frames we want to present to the screen.
-		SimpleArray<VkImageView> VulkanBackColourBuffers;
+		HeapMemory<VkImageView> VulkanBackColourBuffers;
 		//The nb of actual Vulkan framebuffers in the Vulkan swapchain at any given time (this can change between hardware)
 		uint32_t NbVulkanFrames{ 0 };
 
@@ -197,7 +197,7 @@ public:
 		* - returns : whether at least one window was successfully created.
 		*
 		*/
-		bool ResizeSwapChain(NumberedArray<class Scene*>& ScenesToChange);
+		bool ResizeSwapChain(LoopArray<class Scene*>& ScenesToChange);
 
 
 	/*===== END GRAPHICS API WINDOW AND DEVICE  =====*/

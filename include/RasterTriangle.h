@@ -44,8 +44,8 @@ private:
 	VkDescriptorPool			triangleDescriptorPool{};
 	VkPipelineLayout			triangleLayout{};
 	VkPipeline					trianglePipeline{};
-	SimpleArray<VkFramebuffer>	triangleOutput;
-	SimpleArray<VkDescriptorSet>		triangleVertexDescriptorSet;
+	HeapMemory<VkFramebuffer>	triangleOutput;
+	HeapMemory<VkDescriptorSet>		triangleVertexDescriptorSet;
 
 
 	UniformBufferHandle	trianglePointsHandle;

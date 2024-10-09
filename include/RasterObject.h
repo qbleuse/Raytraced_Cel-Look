@@ -36,12 +36,11 @@ private:
 	VkPipelineLayout			objectLayout{};
 	VkPipeline					objectPipeline{};
 
-	SimpleArray<VkFramebuffer>		objectOutput;
-	SimpleArray<VkDescriptorSet>	triangleVertexDescriptorSet;
+	HeapMemory<VkFramebuffer>		objectOutput;
+	HeapMemory<VkDescriptorSet>	triangleVertexDescriptorSet;
 
 	UniformBufferHandle matBufferHandle;
-	StaticBufferHandle	vertexBufferHandle;
-	NumberedArray<StaticBufferHandle>	indexBufferHandle;
+	LoopArray<Mesh>	meshBuffer;
 
 
 	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
@@ -91,9 +90,6 @@ public:
 		mat4 proj;
 	};
 	UniformBuffer matBuffer;
-
-
-	void LoadObj(const char* objFileName);
 
 
 	/*===== END Scene Interface =====*/

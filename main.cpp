@@ -169,7 +169,7 @@ void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppCo
 
 		//4. create corresponding view matrix
 
-		AppContext.view_mat = ro_translate(AppContext.camera_pos) * ro_extrinsic_rot(AppContext.camera_rot.x, AppContext.camera_rot.y, 0.0f);
+		AppContext.view_mat = ro_translate(AppContext.camera_pos) * ro_extrinsic_rot(0.0f, AppContext.camera_rot.y, AppContext.camera_rot.x);
 
 		//it is faster to put it by hand
 		//AppContext.view_mat[12] = AppContext.camera_pos.x;
@@ -230,7 +230,7 @@ int main()
 
 		//resources for main loop
 		AppWideContext AppContext;
-		NumberedArray<Scene*> scenes(2);
+		LoopArray<Scene*> scenes(2);
 		scenes[0] = new RasterTriangle();
 		scenes[1] = new RasterObject();
 

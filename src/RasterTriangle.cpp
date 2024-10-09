@@ -434,7 +434,7 @@ void RasterTriangle::Show(GAPIHandle& RuntimeGAPIHandle)
 	}
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, triangleLayout, 0, 1, &triangleVertexDescriptorSet[RuntimeGAPIHandle.VulkanFrameIndex], 0, nullptr);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, triangleLayout, 0, 1, &triangleVertexDescriptorSet[RuntimeGAPIHandle.VulkanCurrentFrame], 0, nullptr);
 
 
 	vkCmdSetViewport(commandBuffer, 0, 1, &triangleViewport);

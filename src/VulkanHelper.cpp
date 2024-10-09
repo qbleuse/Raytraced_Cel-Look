@@ -5,6 +5,8 @@
 //vulkan shader compiler
 #include "shaderc/shaderc.h"
 
+#include "Maths.h"
+
 //loader include
 #define TINYOBJLOADER_IMPLEMENTATION
 #include "tiny_obj_loader.h"
@@ -258,7 +260,7 @@ void ClearStaticBufferHandle(GraphicsAPIManager& GAPI, StaticBufferHandle& buffe
 }
 
 
-void LoadObjFile(GraphicsAPIManager& GAPI, const char* fileName, StaticBufferHandle& vertexBuffer, NumberedArray<StaticBufferHandle>& indexBuffer)
+void LoadObjFile(GraphicsAPIManager& GAPI, const char* fileName, LoopArray<Mesh>& meshes)
 {
 	// setup obj reader
 	tinyobj::ObjReader reader{};
@@ -272,24 +274,57 @@ void LoadObjFile(GraphicsAPIManager& GAPI, const char* fileName, StaticBufferHan
 	const tinyobj::attrib_t& objAttrib = reader.GetAttrib();
 	const std::vector<tinyobj::shape_t>& objShape = reader.GetShapes();
 
+	//allocate for mesh
+	meshes.Alloc(objShape.size());
 
-	// 1. creating and uploading the vertex buffer
-	CreateStaticBufferHandle(GAPI, vertexBuffer, sizeof(tinyobj::real_t)*objAttrib.vertices.size());
-	UploadStaticBufferHandle(GAPI, vertexBuffer, (void*)objAttrib.vertices.data(), sizeof(tinyobj::real_t) * objAttrib.vertices.size());
-
-
-	//allocate buffer
-	indexBuffer.Alloc(objShape.size());
-
-	for (int32_t i = 0; i < objShape.size(); i++)
+	//loop through all the meshes
+	for (uint32_t i = 0; i < objShape.size(); i++)
 	{
-		//as ee triangulated, teh number of vertices
-		uint32_t indexNb = objShape[i].mesh.indices.size();
-		SimpleArray<uint32_t> indices{ indexNb };
-		for (int32_t j = 0; j < indexNb; j++)
-			indices[j] = objShape[i].mesh.indices[j].vertex_index;
+		//get the size of the array
+		uint32_t nbVertices = objAttrib.vertices.size()/3;
+		uint32_t indexNb	= objShape[i].mesh.indices.size();
 
-		CreateStaticBufferHandle(GAPI, indexBuffer[i], indexNb * sizeof(uint32_t), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-		UploadStaticBufferHandle(GAPI, indexBuffer[i], (void*)*indices, indexNb * sizeof(uint32_t));
+		//allocate for the vertices buffers
+		HeapMemory<float> tex_coords{ nbVertices * 2 };
+		HeapMemory<float> normals{ nbVertices * 3 };
+		HeapMemory<uint32_t> indices{ indexNb };
+
+		//make the indices, texcoords and normal
+		for (uint32_t j = 0; j < indexNb; j++)
+		{
+			const tinyobj::index_t& j_index = objShape[i].mesh.indices[j];
+			indices[j] = j_index.vertex_index;
+
+			tex_coords[indices[j]]	= objAttrib.texcoords[j_index.texcoord_index];
+			normals[indices[j]]		= objAttrib.normals[j_index.normal_index];
+		}
+
+		// 1. creating and uploading the postion buffer
+		CreateStaticBufferHandle(GAPI, meshes[i].postions, sizeof(vec3)* nbVertices);
+		UploadStaticBufferHandle(GAPI, meshes[i].postions, (void*)objAttrib.vertices.data(), sizeof(vec3) * nbVertices);
+
+		// 2. creating and uploading the indices buffer
+		CreateStaticBufferHandle(GAPI, meshes[i].indices, sizeof(uint32_t) * indexNb, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+		UploadStaticBufferHandle(GAPI, meshes[i].indices, (void*)*indices, sizeof(uint32_t) * indexNb);
+
+		// 3. creating and uploading the uvs buffer
+		CreateStaticBufferHandle(GAPI, meshes[i].uvs, sizeof(vec2) * nbVertices);
+		UploadStaticBufferHandle(GAPI, meshes[i].uvs, (void*)*tex_coords, sizeof(vec2) * nbVertices);
+
+		// 4. creating and uploading the normal buffer
+		CreateStaticBufferHandle(GAPI, meshes[i].normals, sizeof(vec3) * nbVertices);
+		UploadStaticBufferHandle(GAPI, meshes[i].normals, (void*)*normals, sizeof(vec3) * nbVertices);
+
+		// 5. set the number of indices to allow drawing of mesh
+		meshes[i].indicesNb = indexNb;
 	}
+}
+
+void ClearMesh(GraphicsAPIManager& GAPI, Mesh& mesh)
+{
+	ClearStaticBufferHandle(GAPI, mesh.indices);
+	ClearStaticBufferHandle(GAPI, mesh.postions);
+	ClearStaticBufferHandle(GAPI, mesh.normals);
+	ClearStaticBufferHandle(GAPI, mesh.uvs);
+	ClearStaticBufferHandle(GAPI, mesh.tangents);
 }

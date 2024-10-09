@@ -11,12 +11,12 @@
 
 
 /**
-* A simple class representing a simple array.
+* A simple class representing an allocated RAM memory block.
 * You may ask, why use the standard library, and things such as vector ?
 * You can definetely do that, it is just personal preference.
 */
 template<typename T>
-class SimpleArray
+class HeapMemory
 {
 private:
 	T* _raw_data{nullptr};
@@ -25,21 +25,21 @@ public:
 
 	/*===== Constructor =====*/
 
-	SimpleArray() = default;
+	HeapMemory() = default;
 
-	SimpleArray(T* raw_data) :
+	HeapMemory(T* raw_data) :
 		_raw_data{ raw_data }
 	{
 
 	}
 
-	SimpleArray(uint32_t nb) :
+	HeapMemory(uint32_t nb) :
 		_raw_data{ (T*)malloc(nb*sizeof(T))}
 	{
 		memset(_raw_data, 0, nb * sizeof(T));
 	}
 
-	~SimpleArray()
+	~HeapMemory()
 	{
 		if (_raw_data)
 			free(_raw_data);
@@ -104,9 +104,11 @@ public:
 
 };
 
-
+/**
+* A simple class representing a simple array of data you would need to loop through.
+*/
 template<typename T>
-class NumberedArray : public SimpleArray<T>
+class LoopArray : public HeapMemory<T>
 {
 private:
 	uint32_t _nb{0};
@@ -114,20 +116,20 @@ private:
 public:
 	/*===== Constructor =====*/
 
-	NumberedArray() = default;
+	LoopArray() = default;
 
-	NumberedArray(T* raw_data) = delete;
+	LoopArray(T* raw_data) = delete;
 
-	NumberedArray(T* raw_data, uint32_t nb):
-		SimpleArray<T>(raw_data),
+	LoopArray(T* raw_data, uint32_t nb):
+		HeapMemory<T>(raw_data),
 		_nb{nb}
 
 	{
 
 	}
 
-	NumberedArray(uint32_t nb) :
-		SimpleArray<T>(nb),
+	LoopArray(uint32_t nb) :
+		HeapMemory<T>(nb),
 		_nb{nb}
 	{
 	}
@@ -145,13 +147,13 @@ public:
 
 	virtual void Clear()override
 	{
-		SimpleArray<T>::Clear();
+		HeapMemory<T>::Clear();
 		_nb = 0;
 	}
 
 	virtual void Alloc(uint32_t nb)override
 	{
-		SimpleArray<T>::Alloc(nb);
+		HeapMemory<T>::Alloc(nb);
 		_nb = nb;
 	}
 

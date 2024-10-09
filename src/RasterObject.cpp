@@ -33,24 +33,50 @@ void RasterObject::PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderMo
 
 	/*===== VERTEX INPUT ======*/
 
-	VkVertexInputBindingDescription inputBinding = {};
-	inputBinding.binding	= 0;//in the shader this comes at binding = 0
-	inputBinding.inputRate	= VK_VERTEX_INPUT_RATE_VERTEX;
-	inputBinding.stride		= sizeof(vec3);
+	VkVertexInputBindingDescription positionBinding = {};
+	positionBinding.binding	= 0;//in the shader this comes at binding = 0
+	positionBinding.inputRate	= VK_VERTEX_INPUT_RATE_VERTEX;
+	positionBinding.stride		= sizeof(vec3);
 
-	VkVertexInputAttributeDescription inputAttribute = {};
-	inputAttribute.binding	= 0;
-	inputAttribute.format	= VK_FORMAT_R32G32B32_SFLOAT;
-	inputAttribute.location = 0;
-	inputAttribute.offset	= 0;
+	VkVertexInputBindingDescription texCoordBinding = {};
+	texCoordBinding.binding = 1;//in the shader this comes at binding = 1
+	texCoordBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	texCoordBinding.stride = sizeof(vec2);
+
+	VkVertexInputBindingDescription normalBinding = {};
+	normalBinding.binding	= 2;//in the shader this comes at binding = 2
+	normalBinding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	normalBinding.stride	= sizeof(vec3);
+
+	VkVertexInputBindingDescription inputBinding[3] = { positionBinding , texCoordBinding, normalBinding };
+
+	VkVertexInputAttributeDescription positionAttribute = {};
+	positionAttribute.binding	= 0;
+	positionAttribute.format	= VK_FORMAT_R32G32B32_SFLOAT;
+	positionAttribute.location	= 0;
+	positionAttribute.offset	= 0;
+
+	VkVertexInputAttributeDescription texCoordAttribute = {};
+	texCoordAttribute.binding = 1;
+	texCoordAttribute.format	= VK_FORMAT_R32G32_SFLOAT;
+	texCoordAttribute.location = 1;
+	texCoordAttribute.offset = 0;
+
+	VkVertexInputAttributeDescription normalAttribute = {};
+	normalAttribute.binding = 2;
+	normalAttribute.format = VK_FORMAT_R32G32B32_SFLOAT;
+	normalAttribute.location = 2;
+	normalAttribute.offset	= 0;
+
+	VkVertexInputAttributeDescription inputAttribute[3] = {positionAttribute, texCoordAttribute, normalAttribute};
 
 	//the vertex input for the input assembly stage. in this scene, there will not be any vertices, so we'll fill it up with nothing.
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 	vertexInputInfo.sType							= VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount	= 1;
-	vertexInputInfo.pVertexBindingDescriptions		= &inputBinding; // Optional
-	vertexInputInfo.vertexAttributeDescriptionCount = 1;
-	vertexInputInfo.pVertexAttributeDescriptions	= &inputAttribute; // Optional
+	vertexInputInfo.vertexBindingDescriptionCount	= 3;
+	vertexInputInfo.pVertexBindingDescriptions		= inputBinding; // Optional
+	vertexInputInfo.vertexAttributeDescriptionCount = 3;
+	vertexInputInfo.pVertexAttributeDescriptions	= inputAttribute; // Optional
 
 	//the description of the input assembly stage. by the fact we won't have any vertex, the input assembly will basically only give the indices (basically 0,1,2 if we ask for a draw command of three vertices)
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
@@ -209,30 +235,7 @@ void RasterObject::PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderMo
 
 	/*===== VERTEX BUFFER =====*/
 
-	//struct Object
-	//{
-	//	vec3 one;
-	//	vec3 two;
-	//	vec3 three;
-	//	vec3 four;
-	//};
-	//
-	//Object obj;
-	//obj.one = vec3{-1.0f, 1.0f, 0.0f};//1
-	//obj.two = vec3{1.0f, 1.0f, 0.0f};//2
-	//obj.three = vec3{1.0f, -1.0f, 0.0f};//3
-	//obj.four = vec3{-1.0f, -1.0f, 0.0f};//4
-	//
-	//
-	//CreateStaticBufferHandle(GAPI, vertexBufferHandle, sizeof(Object));
-	//UploadStaticBufferHandle(GAPI, vertexBufferHandle, (void*)&obj, sizeof(obj));
-	//
-	//uint32_t indexArray[] = {0, 1, 2, 0, 2, 3};
-	//
-	//CreateStaticBufferHandle(GAPI, indexBufferHandle, sizeof(int32_t) * 6, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-	//UploadStaticBufferHandle(GAPI, indexBufferHandle, (void*)&indexArray, sizeof(int32_t) * 6);
-
-	LoadObjFile(GAPI, "../../../media/teapot/teapot.obj",vertexBufferHandle,indexBufferHandle);
+	LoadObjFile(GAPI, "../../../media/teapot/teapot.obj",meshBuffer);
 }
 
 void RasterObject::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader)
@@ -242,6 +245,9 @@ void RasterObject::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShader
 		R"(#version 450
 
 			layout(location = 0) in vec3 positions;
+			layout(location = 1) in vec2 inTexCoord;
+			layout(location = 2) in vec3 inNormal;
+
 
 			layout(binding = 0) uniform Transform
 			{
@@ -251,22 +257,40 @@ void RasterObject::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShader
 			};
 
 			layout(location = 0) out vec3 fragColor;
+			layout(location = 1) out vec3 vertPos;
+			layout(location = 2) out vec2 outTexCoord;
+			layout(location = 3) out vec3 outNormal;
 
 			void main()
 			{
 				gl_Position =  proj * view * model * vec4(positions, 1.0);
+				vertPos = (view * model * vec4(positions, 1.0)).xyz;
 				fragColor = vec3(1.0,0.5,0.2);
+				outTexCoord = inTexCoord;
+				outNormal = (model * vec4(inNormal, 0.0)).xyz;
 
 			})";
 
 	const char* fragment_shader =
 		R"(#version 450
 		layout(location = 0) in vec3 fragColor;
+		layout(location = 1) in vec3 vertPos;
+		layout(location = 2) in vec2 outTexCoord;
+		layout(location = 3) in vec3 outNormal;
+
 		layout(location = 0) out vec4 outColor;
 
 		void main()
 		{
-			outColor = vec4(fragColor,1.0);
+			vec3 lightDir = vec3(1.0,1.0,1.0);
+			vec3 viewDir = normalize(-vertPos);
+
+			vec3 halfDir = normalize(viewDir+lightDir);
+			float specAngle = max(dot(halfDir,outNormal), 0.0);
+			float specular = pow(specAngle,16.0);
+			float diffuse = max(dot(lightDir, outNormal),0.0);
+
+			outColor = (diffuse + specular) * vec4(fragColor,1.0);
 		}
 		)";
 
@@ -284,11 +308,6 @@ void RasterObject::Prepare(class GraphicsAPIManager& GAPI)
 
 	oData.scale = vec3{ 1.0f, 1.0f, 1.0f };
 	oData.pos = vec3{ 0.0f, 0.0f, 1.0f };
-}
-
-void LoadObj(const char* objFileName)
-{
-
 }
 
 /*===== Resize =====*/
@@ -351,7 +370,6 @@ void RasterObject::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t 
 
 	//recreate the uniform bufferx
 	CreateUniformBufferHandle(GAPI, matBufferHandle, GAPI.NbVulkanFrames, sizeof(mat4) * 3);
-	//CreateUniformBufferHandle(GAPI, triangleColourHandle, GAPI.NbVulkanFrames, sizeof(UniformBuffer));
 
 
 
@@ -448,15 +466,22 @@ void RasterObject::Show(GAPIHandle& GAPIHandle)
 
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objectPipeline);
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objectLayout, 0, 1, &triangleVertexDescriptorSet[GAPIHandle.VulkanFrameIndex], 0, nullptr);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objectLayout, 0, 1, &triangleVertexDescriptorSet[GAPIHandle.VulkanCurrentFrame], 0, nullptr);
 
 
 	vkCmdSetViewport(commandBuffer, 0, 1, &objectViewport);
 	vkCmdSetScissor(commandBuffer, 0, 1, &objectScissors);
-	VkDeviceSize offset = 0;
-	vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertexBufferHandle.StaticGPUBuffer, &offset);
-	vkCmdBindIndexBuffer(commandBuffer,indexBufferHandle[0].StaticGPUBuffer, 0, VK_INDEX_TYPE_UINT32);
-	vkCmdDrawIndexed(commandBuffer, 9480, 1, 0, 0, 0);
+
+	//draw all meshes
+	for (int32_t i = 0; i < meshBuffer.Nb(); i++)
+	{
+		VkDeviceSize offset[3] = {0,0,0};
+		VkBuffer GPUBuffer[3] = { meshBuffer[i].postions.StaticGPUBuffer, meshBuffer[i].uvs.StaticGPUBuffer, meshBuffer[i].normals.StaticGPUBuffer };
+		vkCmdBindVertexBuffers(commandBuffer, 0, 3, GPUBuffer, offset);
+		vkCmdBindIndexBuffer(commandBuffer, meshBuffer[i].indices.StaticGPUBuffer, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexed(commandBuffer, meshBuffer[i].indicesNb, 1, 0, 0, 0);
+	}
+
 
 	// Submit command buffer
 	vkCmdEndRenderPass(commandBuffer);
@@ -464,6 +489,7 @@ void RasterObject::Show(GAPIHandle& GAPIHandle)
 		VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 		VkSubmitInfo info = {};
 		info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
 		info.waitSemaphoreCount = 1;
 		info.pWaitSemaphores = &waitSemaphore;
 		info.pWaitDstStageMask = &wait_stage;
@@ -486,9 +512,8 @@ void RasterObject::Close(class GraphicsAPIManager& GAPI)
 	VK_CLEAR_ARRAY(objectOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
 
 	ClearUniformBufferHandle(GAPI, matBufferHandle);
-	ClearStaticBufferHandle(GAPI, vertexBufferHandle);
-	for (int32_t i = 0; i < indexBufferHandle.Nb(); i++)
-		ClearStaticBufferHandle(GAPI, indexBufferHandle[i]);
+	for (int32_t i = 0; i < meshBuffer.Nb(); i++)
+		ClearMesh(GAPI, meshBuffer[i]);
 
 	vkDestroyDescriptorPool(GAPI.VulkanDevice, objectDescriptorPool, nullptr);
 

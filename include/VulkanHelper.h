@@ -53,9 +53,9 @@ bool CreateVulkanShaders(GraphicsAPIManager& GAPI, VkShaderModule& shader, VkSha
 */
 struct UniformBufferHandle
 {
-	SimpleArray<VkBuffer>		GPUBuffer;
-	SimpleArray<VkDeviceMemory>	GPUMemoryHandle;
-	SimpleArray<void*>			CPUMemoryHandle;
+	HeapMemory<VkBuffer>		GPUBuffer;
+	HeapMemory<VkDeviceMemory>	GPUMemoryHandle;
+	HeapMemory<void*>			CPUMemoryHandle;
 };
 
 /* Creates a one dimensionnal buffer of any usage and the association between CPU and GPU */
@@ -92,7 +92,29 @@ bool UploadStaticBufferHandle(GraphicsAPIManager& GAPI, StaticBufferHandle& buff
 /* Asks for de-allocation of all allocated resources for this StaticBufferHandle on GPU */
 void ClearStaticBufferHandle(GraphicsAPIManager& GAPI, StaticBufferHandle& bufferHandle);
 
+/* a struct representing a single mesh. this only represent vertex data meaning it contains : 
+ * - positions
+ * - texture coordinates (uv)
+ * - normals
+ * - tangents
+ * - indices
+ * Only positions and indices are assumed to always be correct, other vertex data can be empty.
+ */
+struct Mesh
+{
+	StaticBufferHandle postions;
+	StaticBufferHandle indices;
+	StaticBufferHandle uvs;
+	StaticBufferHandle normals;
+	StaticBufferHandle tangents;
+
+	uint32_t indicesNb;
+};
+
 /* uses tiny obj to load to static buffers into Vulkan */
-void LoadObjFile(GraphicsAPIManager& GAPI, const char* fileName, StaticBufferHandle& vertexBuffer, NumberedArray<StaticBufferHandle>& indexBuffer);
+void LoadObjFile(GraphicsAPIManager& GAPI, const char* fileName, LoopArray<Mesh>& Meshes);
+
+/* Asks for de-allocation of all allocated resources for this mesh on GPU */
+void ClearMesh(GraphicsAPIManager& GAPI, Mesh& mesh);
 
 #endif //__VULKAN_HELPER_H__

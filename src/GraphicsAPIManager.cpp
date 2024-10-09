@@ -321,7 +321,7 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 			(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT))
 			break;
 	}
-
+	
 	//create the queues associated with the device
 	VkDeviceQueueCreateInfo queueCreateInfo{};
 	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
@@ -526,7 +526,7 @@ bool GraphicsAPIManager::ResizeVulkanSwapChain(int32_t width, int32_t height)
 	createinfo.compositeAlpha			= VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 	createinfo.imageSharingMode			= VK_SHARING_MODE_EXCLUSIVE;
 	createinfo.clipped					= VK_TRUE;
-	createinfo.presentMode				= VK_PRESENT_MODE_FIFO_KHR;//for now v_sync
+	createinfo.presentMode				= VK_PRESENT_MODE_MAILBOX_KHR;//for now v_sync
 	createinfo.oldSwapchain				= tempSwapchain;
 	createinfo.preTransform				= VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 
@@ -609,7 +609,7 @@ bool GraphicsAPIManager::ResizeVulkanSwapChain(int32_t width, int32_t height)
 	return result == VK_SUCCESS;
 }
 
-bool GraphicsAPIManager::ResizeSwapChain(NumberedArray<Scene*>& SceneToChange)
+bool GraphicsAPIManager::ResizeSwapChain(LoopArray<Scene*>& SceneToChange)
 {
 	/* Vulkan Support */
 
