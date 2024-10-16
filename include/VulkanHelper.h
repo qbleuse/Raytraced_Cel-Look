@@ -102,13 +102,15 @@ void ClearStaticBufferHandle(GraphicsAPIManager& GAPI, StaticBufferHandle& buffe
  */
 struct Mesh
 {
-	StaticBufferHandle postions;
+	StaticBufferHandle positions;
 	StaticBufferHandle indices;
 	StaticBufferHandle uvs;
 	StaticBufferHandle normals;
 	StaticBufferHandle tangents;
 
 	uint32_t indicesNb;
+	uint32_t indicesOffset;
+
 };
 
 /* uses tiny obj to load to static buffers into Vulkan */
@@ -116,5 +118,14 @@ void LoadObjFile(GraphicsAPIManager& GAPI, const char* fileName, LoopArray<Mesh>
 
 /* Asks for de-allocation of all allocated resources for this mesh on GPU */
 void ClearMesh(GraphicsAPIManager& GAPI, Mesh& mesh);
+
+
+/* Images */
+
+bool CreateImage(GraphicsAPIManager& GAPI, VkImage& imageToMake, VkDeviceMemory& imageMemory, uint32_t width, uint32_t height, uint32_t depth, VkImageType imagetype, VkFormat format, VkImageUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+bool UploadImage(GraphicsAPIManager& GAPI, VkImage& imageToUploadTo, void* imageContent, uint32_t width, uint32_t height, uint32_t channels, uint32_t depth = 1);
+
+
+bool LoadTexture(GraphicsAPIManager& GAPI, const char* fileName, VkImage& imageToMake, VkDeviceMemory& imageMemory);
 
 #endif //__VULKAN_HELPER_H__

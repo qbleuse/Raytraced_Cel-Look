@@ -109,7 +109,7 @@ void RasterObject::PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderMo
 	rasterizer.sType			= VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 	rasterizer.depthClampEnable = VK_FALSE;
 	rasterizer.polygonMode		= VK_POLYGON_MODE_FILL;
-	rasterizer.cullMode			= VK_CULL_MODE_NONE;
+	rasterizer.cullMode			= VK_CULL_MODE_BACK_BIT;
 	rasterizer.frontFace		= VK_FRONT_FACE_CLOCKWISE;
 	rasterizer.lineWidth		= 1.0f;
 
@@ -256,33 +256,30 @@ void RasterObject::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShader
 				mat4 proj;
 			};
 
-			layout(location = 0) out vec3 fragColor;
-			layout(location = 1) out vec3 vertPos;
-			layout(location = 2) out vec2 outTexCoord;
-			layout(location = 3) out vec3 outNormal;
+			layout(location = 0) out vec3 vertPos;
+			layout(location = 1) out vec2 outTexCoord;
+			layout(location = 2) out vec3 outNormal;
 
 			void main()
 			{
 				gl_Position =  proj * view * model * vec4(positions, 1.0);
 				vertPos = (view * model * vec4(positions, 1.0)).xyz;
-				fragColor = vec3(1.0,0.5,0.2);
 				outTexCoord = inTexCoord;
-				outNormal = (model * vec4(inNormal, 0.0)).xyz;
+				outNormal = ( model * vec4(inNormal,0.0)).xyz;
 
 			})";
 
 	const char* fragment_shader =
 		R"(#version 450
-		layout(location = 0) in vec3 fragColor;
-		layout(location = 1) in vec3 vertPos;
-		layout(location = 2) in vec2 outTexCoord;
-		layout(location = 3) in vec3 outNormal;
+		layout(location = 0) in vec3 vertPos;
+		layout(location = 1) in vec2 outTexCoord;
+		layout(location = 2) in vec3 outNormal;
 
 		layout(location = 0) out vec4 outColor;
 
 		void main()
 		{
-			vec3 lightDir = vec3(1.0,1.0,1.0);
+			vec3 lightDir = normalize(vec3(1.0,1.0,1.0));
 			vec3 viewDir = normalize(-vertPos);
 
 			vec3 halfDir = normalize(viewDir+lightDir);
@@ -290,7 +287,7 @@ void RasterObject::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShader
 			float specular = pow(specAngle,16.0);
 			float diffuse = max(dot(lightDir, outNormal),0.0);
 
-			outColor = (diffuse + specular) * vec4(fragColor,1.0);
+			outColor = vec4((diffuse + specular) * outNormal,1.0);
 		}
 		)";
 
@@ -316,7 +313,7 @@ void RasterObject::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t 
 {
 	VkResult result = VK_SUCCESS;
 
-	VK_CLEAR_ARRAY(objectOutput, old_nb_frames, vkDestroyFramebuffer, GAPI.VulkanDevice);
+	VK_CLEAR_ARRAY(objectOutput, (uint32_t)old_nb_frames, vkDestroyFramebuffer, GAPI.VulkanDevice);
 	vkDestroyDescriptorPool(GAPI.VulkanDevice, objectDescriptorPool, nullptr);
 
 
@@ -423,7 +420,7 @@ void RasterObject::Act(struct AppWideContext& AppContext)
 	{
 		ImGui::SliderFloat3("Object Postion", oData.pos.scalar, -100.0f, 100.0f);
 		ImGui::SliderFloat3("Object Rotation", oData.euler_angles.scalar, -180.0f, 180.0f);
-		ImGui::SliderFloat3("Object Scale", oData.scale.scalar, 0.0f, 100.0f);
+		ImGui::SliderFloat3("Object Scale", oData.scale.scalar, 0.0f, 100.0f, "%0.01f");
 	}
 
 }
@@ -451,8 +448,8 @@ void RasterObject::Show(GAPIHandle& GAPIHandle)
 		info.sType						= VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 		info.renderPass					= objectRenderPass;
 		info.framebuffer				= objectOutput[GAPIHandle.VulkanFrameIndex];
-		info.renderArea.extent.width	= objectViewport.width;
-		info.renderArea.extent.height	= objectViewport.height;
+		info.renderArea.extent.width	= (uint32_t)objectViewport.width;
+		info.renderArea.extent.height	= (uint32_t)objectViewport.height;
 		info.clearValueCount = 1;
 		VkClearValue clearValue{};
 		clearValue.color = { 0.2f, 0.2f, 0.2f, 1.0f };
@@ -473,13 +470,13 @@ void RasterObject::Show(GAPIHandle& GAPIHandle)
 	vkCmdSetScissor(commandBuffer, 0, 1, &objectScissors);
 
 	//draw all meshes
-	for (int32_t i = 0; i < meshBuffer.Nb(); i++)
+	for (uint32_t i = 0; i < meshBuffer.Nb(); i++)
 	{
 		VkDeviceSize offset[3] = {0,0,0};
-		VkBuffer GPUBuffer[3] = { meshBuffer[i].postions.StaticGPUBuffer, meshBuffer[i].uvs.StaticGPUBuffer, meshBuffer[i].normals.StaticGPUBuffer };
+		VkBuffer GPUBuffer[3] = { meshBuffer[i].positions.StaticGPUBuffer, meshBuffer[i].uvs.StaticGPUBuffer, meshBuffer[i].normals.StaticGPUBuffer };
 		vkCmdBindVertexBuffers(commandBuffer, 0, 3, GPUBuffer, offset);
 		vkCmdBindIndexBuffer(commandBuffer, meshBuffer[i].indices.StaticGPUBuffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdDrawIndexed(commandBuffer, meshBuffer[i].indicesNb, 1, 0, 0, 0);
+		vkCmdDrawIndexed(commandBuffer, meshBuffer[i].indicesNb, 1, meshBuffer[i].indicesOffset, 0, 0);
 	}
 
 
@@ -512,8 +509,8 @@ void RasterObject::Close(class GraphicsAPIManager& GAPI)
 	VK_CLEAR_ARRAY(objectOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
 
 	ClearUniformBufferHandle(GAPI, matBufferHandle);
-	for (int32_t i = 0; i < meshBuffer.Nb(); i++)
-		ClearMesh(GAPI, meshBuffer[i]);
+	//for (uint32_t i = 0; i < meshBuffer.Nb(); i++)
+	ClearMesh(GAPI, meshBuffer[0]);//they all use the same buffers
 
 	vkDestroyDescriptorPool(GAPI.VulkanDevice, objectDescriptorPool, nullptr);
 

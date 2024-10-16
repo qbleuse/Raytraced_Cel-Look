@@ -10,8 +10,8 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-#define DEGREES_TO_RADIANS M_PI/180.0f
-#define RADIANS_TO_DEGREES 180.0f/M_PI
+#define DEGREES_TO_RADIANS static_cast<float>(M_PI)/180.0f
+#define RADIANS_TO_DEGREES 180.0f/static_cast<float>(M_PI)
 
 /* struct representing a mathematical 2 dimensional vector. it has been made to resemble the one you may encounter in glsl or hlsl. */
 struct vec2
