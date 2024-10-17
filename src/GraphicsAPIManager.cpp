@@ -623,15 +623,41 @@ bool GraphicsAPIManager::ResizeSwapChain(LoopArray<Scene*>& SceneToChange)
 
 		bool toReturn = ResizeVulkanSwapChain(VulkanWidth, VulkanHeight);
 
+		PrepareForUpload();
+
 		if (toReturn)
 			for (uint32_t i = 0; i < SceneToChange.Nb(); i++)
 				SceneToChange[i]->Resize(*this, old_width, old_height, oldNbFrames);
+
+		SubmitUpload();
 
 		return toReturn;
 
 	}
 
 	return false;
+}
+
+
+bool GraphicsAPIManager::PrepareForUpload()
+{
+	bool success = true;
+
+	/* vulkan */
+	success &= VulkanHelper::StartUploader(*this, VulkanUploader);
+
+	return success;
+}
+
+
+bool GraphicsAPIManager::SubmitUpload()
+{
+	bool success = true;
+
+	/* vulkan */
+	success &= VulkanHelper::SubmitUploader(VulkanUploader);
+
+	return success;
 }
 
 /*===== Graphics API Queues and Command =====*/

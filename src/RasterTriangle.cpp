@@ -45,8 +45,8 @@ void RasterTriangle::PrepareVulkanScripts(GraphicsAPIManager& GAPI, VkShaderModu
 		)";
 
 
-	CreateVulkanShaders(GAPI, VertexShader, VK_SHADER_STAGE_VERTEX_BIT, vertex_shader, "Raster Triangle Vertex");
-	CreateVulkanShaders(GAPI, FragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_shader, "Raster Triangle Frag");
+	CreateVulkanShaders(GAPI.VulkanUploader, VertexShader, VK_SHADER_STAGE_VERTEX_BIT, vertex_shader, "Raster Triangle Vertex");
+	CreateVulkanShaders(GAPI.VulkanUploader, FragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_shader, "Raster Triangle Frag");
 
 }
 
@@ -296,8 +296,8 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 	VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI.VulkanDevice, &allocInfo, *triangleVertexDescriptorSet));
 
 	//recreate the uniform bufferx
-	CreateUniformBufferHandle(GAPI, trianglePointsHandle, GAPI.NbVulkanFrames, sizeof(UniformBuffer));
-	CreateUniformBufferHandle(GAPI, triangleColourHandle, GAPI.NbVulkanFrames, sizeof(UniformBuffer));
+	CreateUniformBufferHandle(GAPI.VulkanUploader, trianglePointsHandle, GAPI.NbVulkanFrames, sizeof(UniformBuffer));
+	CreateUniformBufferHandle(GAPI.VulkanUploader, triangleColourHandle, GAPI.NbVulkanFrames, sizeof(UniformBuffer));
 
 
 
@@ -469,8 +469,8 @@ void RasterTriangle::Close(class GraphicsAPIManager& GAPI)
 {
 	VK_CLEAR_ARRAY(triangleOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
 
-	ClearUniformBufferHandle(GAPI, trianglePointsHandle);
-	ClearUniformBufferHandle(GAPI, triangleColourHandle);
+	VulkanHelper::ClearUniformBufferHandle(GAPI.VulkanDevice, trianglePointsHandle);
+	VulkanHelper::ClearUniformBufferHandle(GAPI.VulkanDevice, triangleColourHandle);
 
 	//vkFreeDescriptorSets(GAPI.VulkanDevice, triangleDescriptorPool, GAPI.NbVulkanFrames, triangleVertexDescriptorSet);
 	//free(triangleVertexDescriptorSet);

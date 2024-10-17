@@ -31,16 +31,16 @@ private:
 	VkViewport					objectViewport{};
 	VkRect2D					objectScissors{};
 	VkRenderPass				objectRenderPass{};
-	VkDescriptorSetLayout		objectVertexDescriptorLayout{};
+	VkDescriptorSetLayout		objectDescriptorLayout{};
 	VkDescriptorPool			objectDescriptorPool{};
 	VkPipelineLayout			objectLayout{};
 	VkPipeline					objectPipeline{};
 
 	HeapMemory<VkFramebuffer>		objectOutput;
-	HeapMemory<VkDescriptorSet>	triangleVertexDescriptorSet;
+	HeapMemory<VkDescriptorSet>		objectDescriptorSet;
 
-	UniformBufferHandle matBufferHandle;
-	LoopArray<Mesh>	meshBuffer;
+	VulkanHelper::UniformBufferHandle	matBufferHandle;
+	VulkanHelper::Model					meshBuffer;
 
 
 	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);

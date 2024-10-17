@@ -55,7 +55,7 @@ public:
 
 	~GraphicsAPIManager();
 
-	GAPIHandle RuntimeHandle;
+	GAPIHandle				RuntimeHandle;
 
 	/*===== END GRAPHICS API MANAGER =====*/
 #pragma endregion
@@ -75,6 +75,8 @@ public:
 		//the vulkan is supported, the array of extension supported by the current machine.
 		//this will be a C-array that you will be able to go through usin vk_extension_count.
 		struct VkExtensionProperties* vk_extensions = nullptr;
+		//an helper object to upload resources to GPU
+		VulkanHelper::Uploader VulkanUploader;
 		
 		/**
 		* Finds if raytracing extensions is supported by the Vulkan on the specified Physical Device.
@@ -198,6 +200,20 @@ public:
 		*
 		*/
 		bool ResizeSwapChain(LoopArray<class Scene*>& ScenesToChange);
+
+		/**
+		* Creates any platform specific interface needed to upload resources to GPU
+		* - returns : if interfaces were created
+		*/
+		bool PrepareForUpload();
+
+		/**
+		* Upload resources to GPU
+		* - returns : submit was launched (/!\ we don't know if it was successful /!\)
+		*/
+		bool SubmitUpload();
+
+
 
 
 	/*===== END GRAPHICS API WINDOW AND DEVICE  =====*/

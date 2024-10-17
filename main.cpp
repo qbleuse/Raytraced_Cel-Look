@@ -235,11 +235,13 @@ int main()
 		scenes[1] = new RasterObject();
 
 		//init our scenes
+		GAPI.PrepareForUpload();
 		for (uint32_t i = 0; i < scenes.Nb(); i++)
 		{
 			scenes[i]->Prepare(GAPI);
 			scenes[i]->Resize(GAPI,GAPI.VulkanWidth,GAPI.VulkanHeight,GAPI.NbVulkanFrames);
 		}
+		GAPI.SubmitUpload();
 		AppContext.proj_mat = ro_perspective_proj(GAPI.VulkanWidth, GAPI.VulkanHeight, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
 
 		while (!glfwWindowShouldClose(GAPI.VulkanWindow))

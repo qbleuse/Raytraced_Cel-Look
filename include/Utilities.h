@@ -159,6 +159,155 @@ public:
 
 };
 
+/**
+* A simple class representing the familiar list container.
+* an uncontiguous memory container, linking node with pointer from one to the next.
+*/
+template<typename T>
+class List
+{
+public:
+	struct ListNode
+	{
+		T data;
+
+		ListNode* prev{nullptr};
+		ListNode* next{nullptr};
+
+		ListNode* operator++()
+		{
+			return next;
+		}
+
+		ListNode* operator--()
+		{
+			return prev;
+		}
+
+		bool operator==(const ListNode& rhs)
+		{
+			return data == rhs;
+		}
+	};
+
+private:
+	ListNode*	head{nullptr};//first node
+	ListNode*	toe{ nullptr };//last node
+
+	uint32_t	nb{0};
+public:
+
+	/*===== Manipulation =====*/
+
+	__forceinline void Add(const T& data)
+	{
+		ListNode* newNode = static_cast<ListNode*>(malloc(sizeof(ListNode)));
+		memset(newNode, 0, sizeof(ListNode));
+		newNode->data = data;
+
+		Add(newNode);
+	}
+
+	__forceinline void Add(ListNode* newNode)
+	{
+		if (head == nullptr)
+		{
+			head = newNode;
+			toe = newNode;
+		}
+		else if (toe != nullptr)
+		{
+			toe->next = newNode;
+			newNode->prev = toe;
+			toe = newNode;
+		}
+		nb++;
+	}
+
+	__forceinline void Remove(ListNode* node, bool clearData = true)
+	{
+		if (node == head)
+		{
+			if (node->next != nullptr)
+			{
+				head = node->next;
+			}
+			else
+			{
+				head = nullptr;
+			}
+
+			if (clearData)
+				free(head);
+
+			nb--;
+			return;
+		}
+
+		ListNode* iNode = head;
+		for (uint32_t i = 0; i < nb; i++)
+		{
+			if (iNode == node)
+			{
+				if (iNode->prev != nullptr)
+				{
+					iNode->prev->next = iNode->next;
+				}
+				if (iNode->next != nullptr)
+				{
+					iNode->next->prev = iNode->prev;
+				}
+
+				if (clearData)
+					free(&iNode);
+
+				break;
+			}
+
+			iNode++;
+		}
+
+		nb--;
+	}
+
+	/*===== Accessor =====*/
+
+	__forceinline ListNode* GetHead()const
+	{
+		return head;
+	}
+
+	__forceinline ListNode* GetToe()const
+	{
+		return toe;
+	}
+
+	__forceinline uint32_t GetNb()const
+	{
+		return nb;
+	}
+
+	/*===== Memory Management =====*/
+
+	__forceinline void Clear()
+	{
+		if (toe == nullptr)
+			return;
+
+		//going from back
+		ListNode* iNode = toe;
+		do
+		{
+			//getting back next node to clear
+			ListNode* prevNode = iNode->prev;
+			//freeing current node
+			free(iNode);
+			//make next node to clear current node
+			iNode = prevNode;
+		} while (iNode != nullptr);
+	}
+};
+
 
 
 

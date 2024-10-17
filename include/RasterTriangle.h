@@ -48,8 +48,8 @@ private:
 	HeapMemory<VkDescriptorSet>		triangleVertexDescriptorSet;
 
 
-	UniformBufferHandle	trianglePointsHandle;
-	UniformBufferHandle	triangleColourHandle;
+	VulkanHelper::UniformBufferHandle	trianglePointsHandle;
+	VulkanHelper::UniformBufferHandle	triangleColourHandle;
 
 
 

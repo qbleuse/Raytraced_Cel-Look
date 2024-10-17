@@ -12,9 +12,8 @@
 
 /*==== Prepare =====*/
 
-void RasterObject::PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader)
+void RasterObject::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader)
 {
-
 	/*===== SHADER ======*/
 
 	//describe vertex shader stage
@@ -179,24 +178,24 @@ void RasterObject::PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderMo
 	vertexUniformLayoutBinding.descriptorCount = 1;
 	vertexUniformLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-	VkDescriptorSetLayoutBinding pixelUniformLayoutBinding{};
-	pixelUniformLayoutBinding.binding = 1;
-	pixelUniformLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	pixelUniformLayoutBinding.descriptorCount = 1;
-	pixelUniformLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+	samplerLayoutBinding.binding = 1;
+	samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	samplerLayoutBinding.descriptorCount = 1;
+	samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
 	VkDescriptorSetLayoutCreateInfo layoutInfo{};
 	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 	layoutInfo.bindingCount = 2;
-	VkDescriptorSetLayoutBinding uniformLayoutBinding[2] = { vertexUniformLayoutBinding, pixelUniformLayoutBinding };
-	layoutInfo.pBindings = uniformLayoutBinding;
+	VkDescriptorSetLayoutBinding layouts[2] = { vertexUniformLayoutBinding, samplerLayoutBinding };
+	layoutInfo.pBindings = layouts;
 
-	VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI.VulkanDevice, &layoutInfo, nullptr, &objectVertexDescriptorLayout));
+	VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI.VulkanDevice, &layoutInfo, nullptr, &objectDescriptorLayout));
 
 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 	pipelineLayoutInfo.sType		= VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.pSetLayouts	= &objectVertexDescriptorLayout;
+	pipelineLayoutInfo.pSetLayouts	= &objectDescriptorLayout;
 	pipelineLayoutInfo.setLayoutCount = 1;
 
 	VK_CALL_PRINT(vkCreatePipelineLayout(GAPI.VulkanDevice, &pipelineLayoutInfo, nullptr, &objectLayout));
@@ -235,7 +234,7 @@ void RasterObject::PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderMo
 
 	/*===== VERTEX BUFFER =====*/
 
-	LoadObjFile(GAPI, "../../../media/teapot/teapot.obj",meshBuffer);
+	VulkanHelper::LoadGLTFFile(GAPI.VulkanUploader, "../../../media/Duck/Duck.gltf",meshBuffer);
 }
 
 void RasterObject::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader)
@@ -277,6 +276,8 @@ void RasterObject::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShader
 
 		layout(location = 0) out vec4 outColor;
 
+		layout(binding = 1) uniform sampler2D texSampler;
+
 		void main()
 		{
 			vec3 lightDir = normalize(vec3(1.0,1.0,1.0));
@@ -287,13 +288,13 @@ void RasterObject::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShader
 			float specular = pow(specAngle,16.0);
 			float diffuse = max(dot(lightDir, outNormal),0.0);
 
-			outColor = vec4((diffuse + specular) * outNormal,1.0);
+			outColor = vec4((diffuse + specular) * texture(texSampler,outTexCoord).rgb,1.0);
 		}
 		)";
 
 
-	CreateVulkanShaders(GAPI, VertexShader, VK_SHADER_STAGE_VERTEX_BIT, vertex_shader, "Raster Triangle Vertex");
-	CreateVulkanShaders(GAPI, FragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_shader, "Raster Triangle Frag");
+	CreateVulkanShaders(GAPI.VulkanUploader, VertexShader, VK_SHADER_STAGE_VERTEX_BIT, vertex_shader, "Raster Triangle Vertex");
+	CreateVulkanShaders(GAPI.VulkanUploader, FragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_shader, "Raster Triangle Frag");
 }
 
 void RasterObject::Prepare(class GraphicsAPIManager& GAPI)
@@ -338,14 +339,18 @@ void RasterObject::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t 
 	objectOutput.Alloc(GAPI.NbVulkanFrames);
 
 	//create the descriptor pool
-	VkDescriptorPoolSize poolSize{};
-	poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolSize.descriptorCount = GAPI.NbVulkanFrames;
+	VkDescriptorPoolSize poolUniformSize{};
+	poolUniformSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	poolUniformSize.descriptorCount = GAPI.NbVulkanFrames;
+
+	VkDescriptorPoolSize poolSamplerSize{};
+	poolSamplerSize.type = VK_DESCRIPTOR_TYPE_SAMPLER;
+	poolSamplerSize.descriptorCount = GAPI.NbVulkanFrames;
 
 	VkDescriptorPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	poolInfo.poolSizeCount = 2;
-	VkDescriptorPoolSize doublePoolSize[2] = { poolSize, poolSize };
+	VkDescriptorPoolSize doublePoolSize[2] = { poolUniformSize, poolSamplerSize};
 	poolInfo.pPoolSizes = doublePoolSize;
 	poolInfo.maxSets = GAPI.NbVulkanFrames;
 
@@ -358,17 +363,15 @@ void RasterObject::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t 
 	allocInfo.descriptorSetCount = GAPI.NbVulkanFrames;
 	VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*)alloca(GAPI.NbVulkanFrames * sizeof(VkDescriptorSetLayout));
 	for (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
-		memcpy(&layouts[i], &objectVertexDescriptorLayout, sizeof(VkDescriptorSetLayout));
+		memcpy(&layouts[i], &objectDescriptorLayout, sizeof(VkDescriptorSetLayout));
 	allocInfo.pSetLayouts = layouts;
 
-	triangleVertexDescriptorSet.Alloc(GAPI.NbVulkanFrames);
+	objectDescriptorSet.Alloc(GAPI.NbVulkanFrames);
 	//trianglePixelDescriptorSet = (VkDescriptorSet*)malloc(sizeof(VkDescriptorSet) * GAPI.NbVulkanFrames);
-	VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI.VulkanDevice, &allocInfo, *triangleVertexDescriptorSet));
+	VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI.VulkanDevice, &allocInfo, *objectDescriptorSet));
 
 	//recreate the uniform bufferx
-	CreateUniformBufferHandle(GAPI, matBufferHandle, GAPI.NbVulkanFrames, sizeof(mat4) * 3);
-
-
+	CreateUniformBufferHandle(GAPI.VulkanUploader, matBufferHandle, GAPI.NbVulkanFrames, sizeof(mat4) * 3);
 
 	for (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
 	{
@@ -382,16 +385,32 @@ void RasterObject::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t 
 		bufferInfo.offset = 0;
 		bufferInfo.range = sizeof(mat4) * 3;
 
+
+		VkDescriptorImageInfo samplerInfo{};
+		samplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		samplerInfo.imageView	= meshBuffer.textures[0].imageView;
+		samplerInfo.sampler		= meshBuffer.textures[0].sampler;
+
 		VkWriteDescriptorSet descriptorWrite{};
-		descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrite.dstSet = triangleVertexDescriptorSet[i];
-		descriptorWrite.dstBinding = 0;
+		descriptorWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrite.dstSet			= objectDescriptorSet[i];
+		descriptorWrite.dstBinding		= 0;
 		descriptorWrite.dstArrayElement = 0;
-		descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrite.descriptorType	= VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		descriptorWrite.descriptorCount = 1;
 		descriptorWrite.pBufferInfo = &bufferInfo;
 
-		vkUpdateDescriptorSets(GAPI.VulkanDevice, 1, &descriptorWrite, 0, nullptr);
+		VkWriteDescriptorSet samplerWrite{};
+		samplerWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		samplerWrite.dstSet = objectDescriptorSet[i];
+		samplerWrite.dstBinding = 1;
+		samplerWrite.dstArrayElement = 0;
+		samplerWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		samplerWrite.descriptorCount = 1;
+		samplerWrite.pImageInfo = &samplerInfo;
+
+		VkWriteDescriptorSet toWrite[2] = {descriptorWrite , samplerWrite};
+		vkUpdateDescriptorSets(GAPI.VulkanDevice, 2, toWrite, 0, nullptr);
 	}
 }
 
@@ -463,20 +482,20 @@ void RasterObject::Show(GAPIHandle& GAPIHandle)
 
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objectPipeline);
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objectLayout, 0, 1, &triangleVertexDescriptorSet[GAPIHandle.VulkanCurrentFrame], 0, nullptr);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objectLayout, 0, 1, &objectDescriptorSet[GAPIHandle.VulkanCurrentFrame], 0, nullptr);
 
 
 	vkCmdSetViewport(commandBuffer, 0, 1, &objectViewport);
 	vkCmdSetScissor(commandBuffer, 0, 1, &objectScissors);
 
 	//draw all meshes
-	for (uint32_t i = 0; i < meshBuffer.Nb(); i++)
+	for (uint32_t i = 0; i < meshBuffer.meshes.Nb(); i++)
 	{
-		VkDeviceSize offset[3] = {0,0,0};
-		VkBuffer GPUBuffer[3] = { meshBuffer[i].positions.StaticGPUBuffer, meshBuffer[i].uvs.StaticGPUBuffer, meshBuffer[i].normals.StaticGPUBuffer };
-		vkCmdBindVertexBuffers(commandBuffer, 0, 3, GPUBuffer, offset);
-		vkCmdBindIndexBuffer(commandBuffer, meshBuffer[i].indices.StaticGPUBuffer, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdDrawIndexed(commandBuffer, meshBuffer[i].indicesNb, 1, meshBuffer[i].indicesOffset, 0, 0);
+		//VkDeviceSize offset[3] = {0,0,0};
+		//VkBuffer GPUBuffer[3] = { meshBuffer[i].positions.StaticGPUBuffer, meshBuffer[i].uvs.StaticGPUBuffer, meshBuffer[i].normals.StaticGPUBuffer };
+		vkCmdBindVertexBuffers(commandBuffer, 0, 3, meshBuffer.meshes[i].vertexBuffers, (VkDeviceSize*)meshBuffer.meshes[i].vertexOffsets);
+		vkCmdBindIndexBuffer(commandBuffer, meshBuffer.meshes[i].indices, 0, meshBuffer.meshes[i].indicesType);
+		vkCmdDrawIndexed(commandBuffer, meshBuffer.meshes[i].indicesNb, 1, meshBuffer.meshes[i].indicesOffset, 0, 0);
 	}
 
 
@@ -508,13 +527,13 @@ void RasterObject::Close(class GraphicsAPIManager& GAPI)
 {
 	VK_CLEAR_ARRAY(objectOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
 
-	ClearUniformBufferHandle(GAPI, matBufferHandle);
+	ClearUniformBufferHandle(GAPI.VulkanDevice, matBufferHandle);
 	//for (uint32_t i = 0; i < meshBuffer.Nb(); i++)
-	ClearMesh(GAPI, meshBuffer[0]);//they all use the same buffers
+	ClearModel(GAPI.VulkanDevice, meshBuffer);//they all use the same buffers
 
 	vkDestroyDescriptorPool(GAPI.VulkanDevice, objectDescriptorPool, nullptr);
 
-	vkDestroyDescriptorSetLayout(GAPI.VulkanDevice, objectVertexDescriptorLayout, nullptr);
+	vkDestroyDescriptorSetLayout(GAPI.VulkanDevice, objectDescriptorLayout, nullptr);
 	vkDestroyPipelineLayout(GAPI.VulkanDevice, objectLayout, nullptr);
 	vkDestroyPipeline(GAPI.VulkanDevice, objectPipeline, nullptr);
 	vkDestroyRenderPass(GAPI.VulkanDevice, objectRenderPass, nullptr);
