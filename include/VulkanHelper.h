@@ -23,7 +23,7 @@
 	{\
 		for (uint32_t i = 0; i < size; i++)\
 			call(device, raw_array[i], nullptr);\
-		free(raw_array);\
+		delete [] raw_array;\
 	}\
 
 #define VK_CLEAR_ARRAY(_array, size, call, device) \
@@ -122,7 +122,7 @@ namespace VulkanHelper
 		VkBufferUsageFlags staticBufferUsage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VkMemoryPropertyFlags staticBufferProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	/* sends the data through the staging buffer to the static buffer */
-	bool UploadStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, void* data, VkDeviceSize size, bool releaseStagingBuffer = true);
+	bool UploadStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, const void* data, VkDeviceSize size, bool releaseStagingBuffer = true);
 
 	/* Asks for de-allocation of all allocated resources for this StaticBufferHandle on GPU */
 	void ClearStaticBufferHandle(const VkDevice& VulkanDevice, StaticBufferHandle& bufferHandle);
@@ -187,9 +187,14 @@ namespace VulkanHelper
 	struct Model
 	{
 		LoopArray<Mesh>				meshes;
+		HeapMemory<uint32_t>		materialIndex;//same length as mesh
+
 		LoopArray<VkDeviceMemory>	buffersHandle;
 
-		LoopArray<struct Texture> textures;
+		LoopArray<struct Texture>	textures;
+		LoopArray<VkSampler>		samplers;
+
+		LoopArray<struct Material>	materials;
 	};
 
 	bool LoadGLTFFile(Uploader& VulkanUploader, const char* fileName, Model& Meshes);
@@ -204,20 +209,34 @@ namespace VulkanHelper
 	* a struct representing a single texture. it contains everything a shader would need to use said texture meaning :
 	* - An Image
 	* - An Image View
-	* - A Sampler
+	* - A sampler (this is user's responsability)
+	* Texture is considered a 2D image
 	*/
 	struct Texture
 	{
-		VkImage			image;
-		VkDeviceMemory	imageMemory;
-		VkImageView		imageView;
-		VkSampler		sampler;
+		VkImage				image;
+		VkDeviceMemory		imageMemory;
+		VkImageView			imageView;
+		VkSampler			sampler;
 	};
 
 	bool LoadTexture(Uploader& VulkanUploader, const char* fileName, Texture& texture);
-	bool LoadTexture(Uploader& VulkanUploader, void* pixels, uint32_t width, uint32_t height, VkFormat format, Texture& texture);
+	bool LoadTexture(Uploader& VulkanUploader, const void* pixels, uint32_t width, uint32_t height, VkFormat format, Texture& texture);
 
 	void ClearTexture(const VkDevice& VulkanDevice, Texture& texture);
+
+
+	/*
+	* a struct representing an arbitrary material. It contains a texture and the associated descriptor and sampler.
+	* Descriptors creation are of the responsability of the pipeline, as you need to have layout to actually use them.
+	* You may not actually need to clear as textures and sampler may be the property of other 
+	*/
+	struct Material
+	{
+		LoopArray<Texture>			textures;
+
+		VkDescriptorSet				textureDescriptors;
+	};
 
 };
 

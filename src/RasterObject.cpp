@@ -14,6 +14,8 @@
 
 void RasterObject::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader)
 {
+	VkResult result = VK_SUCCESS;
+
 	/*===== SHADER ======*/
 
 	//describe vertex shader stage
@@ -147,58 +149,67 @@ void RasterObject::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& 
 
 	/*===== SUBPASS DESCRIPTION ======*/
 
-	//describing the output in the subpass
-	VkAttachmentReference frameColourBufferAttachmentRef{};
-	frameColourBufferAttachmentRef.attachment	= 0;
-	frameColourBufferAttachmentRef.layout		= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	{
+		//describing the output in the subpass
+		VkAttachmentReference frameColourBufferAttachmentRef{};
+		frameColourBufferAttachmentRef.attachment = 0;
+		frameColourBufferAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-	//describing the subpass of our main renderpass
-	VkSubpassDescription subpass{};
-	subpass.pipelineBindPoint		= VK_PIPELINE_BIND_POINT_GRAPHICS;
-	subpass.colorAttachmentCount	= 1;
-	subpass.pColorAttachments		= &frameColourBufferAttachmentRef;
+		//describing the subpass of our main renderpass
+		VkSubpassDescription subpass{};
+		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount = 1;
+		subpass.pColorAttachments = &frameColourBufferAttachmentRef;
 
-	//describing our renderpass
-	VkRenderPassCreateInfo renderPassInfo{};
-	renderPassInfo.sType			= VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	renderPassInfo.attachmentCount	= 1;
-	renderPassInfo.pAttachments		= &frameColourBufferAttachment;
-	renderPassInfo.subpassCount		= 1;
-	renderPassInfo.pSubpasses		= &subpass;
+		//describing our renderpass
+		VkRenderPassCreateInfo renderPassInfo{};
+		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		renderPassInfo.attachmentCount = 1;
+		renderPassInfo.pAttachments = &frameColourBufferAttachment;
+		renderPassInfo.subpassCount = 1;
+		renderPassInfo.pSubpasses = &subpass;
 
-	VkResult result = VK_SUCCESS;
-	VK_CALL_PRINT(vkCreateRenderPass(GAPI.VulkanDevice, &renderPassInfo, nullptr, &objectRenderPass));
+		VK_CALL_PRINT(vkCreateRenderPass(GAPI.VulkanDevice, &renderPassInfo, nullptr, &objectRenderPass));
+	}
 
 	/*===== SUBPASS ATTACHEMENT ======*/
 
-	//creating our uniform buffer
-	VkDescriptorSetLayoutBinding vertexUniformLayoutBinding{};
-	vertexUniformLayoutBinding.binding = 0;
-	vertexUniformLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	vertexUniformLayoutBinding.descriptorCount = 1;
-	vertexUniformLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	{
+		//creating our uniform buffer
+		VkDescriptorSetLayoutBinding vertexUniformLayoutBinding{};
+		vertexUniformLayoutBinding.binding = 0;
+		vertexUniformLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		vertexUniformLayoutBinding.descriptorCount = 1;
+		vertexUniformLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-	VkDescriptorSetLayoutBinding samplerLayoutBinding{};
-	samplerLayoutBinding.binding = 1;
-	samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	samplerLayoutBinding.descriptorCount = 1;
-	samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		VkDescriptorSetLayoutCreateInfo layoutInfo{};
+		layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		layoutInfo.bindingCount = 1;
+		layoutInfo.pBindings = &vertexUniformLayoutBinding;
 
-	VkDescriptorSetLayoutCreateInfo layoutInfo{};
-	layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.bindingCount = 2;
-	VkDescriptorSetLayoutBinding layouts[2] = { vertexUniformLayoutBinding, samplerLayoutBinding };
-	layoutInfo.pBindings = layouts;
+		VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI.VulkanDevice, &layoutInfo, nullptr, &objectDescriptorLayout));
 
-	VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI.VulkanDevice, &layoutInfo, nullptr, &objectDescriptorLayout));
+		VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+		samplerLayoutBinding.binding = 1;
+		samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		samplerLayoutBinding.descriptorCount = 1;
+		samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+		layoutInfo.pBindings = &samplerLayoutBinding;
 
-	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-	pipelineLayoutInfo.sType		= VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.pSetLayouts	= &objectDescriptorLayout;
-	pipelineLayoutInfo.setLayoutCount = 1;
+		VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI.VulkanDevice, &layoutInfo, nullptr, &samplerDescriptorLayout));
 
-	VK_CALL_PRINT(vkCreatePipelineLayout(GAPI.VulkanDevice, &pipelineLayoutInfo, nullptr, &objectLayout));
+	}
+
+	{
+		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		VkDescriptorSetLayout layouts[2] = {objectDescriptorLayout, samplerDescriptorLayout};
+		pipelineLayoutInfo.pSetLayouts = layouts;
+		pipelineLayoutInfo.setLayoutCount = 2;
+
+		VK_CALL_PRINT(vkCreatePipelineLayout(GAPI.VulkanDevice, &pipelineLayoutInfo, nullptr, &objectLayout));
+	}
 
 	/*===== PIPELINE ======*/
 
@@ -235,6 +246,58 @@ void RasterObject::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& 
 	/*===== VERTEX BUFFER =====*/
 
 	VulkanHelper::LoadGLTFFile(GAPI.VulkanUploader, "../../../media/Duck/Duck.gltf",meshBuffer);
+
+	//create descriptor for samplers
+	VkDescriptorPoolSize poolSamplerSize{};
+	poolSamplerSize.type			= VK_DESCRIPTOR_TYPE_SAMPLER;
+	poolSamplerSize.descriptorCount = 3;//we only support PBR with albedo, PBR and normal texture
+
+	VkDescriptorPoolCreateInfo poolInfo{};
+	poolInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	poolInfo.poolSizeCount	= 1;
+	poolInfo.pPoolSizes		= &poolSamplerSize;
+	poolInfo.maxSets		= meshBuffer.materials.Nb();
+
+	VK_CALL_PRINT(vkCreateDescriptorPool(GAPI.VulkanDevice, &poolInfo, nullptr, &meshDescriptorPool));
+
+	//describe a descriptor set for each of our framebuffer (a uniform bufer per frame)
+	VkDescriptorSetAllocateInfo allocInfo{};
+	allocInfo.sType					= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	allocInfo.descriptorPool		= meshDescriptorPool;
+	allocInfo.descriptorSetCount	= meshBuffer.materials.Nb();
+
+	VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*)alloca(meshBuffer.materials.Nb() * sizeof(VkDescriptorSetLayout));
+	for (uint32_t i = 0; i < meshBuffer.materials.Nb(); i++)
+		memcpy(&layouts[i], &samplerDescriptorLayout, sizeof(VkDescriptorSetLayout));
+	allocInfo.pSetLayouts = layouts;
+
+	meshDescriptorSet.Alloc(meshBuffer.materials.Nb());
+	VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI.VulkanDevice, &allocInfo, *meshDescriptorSet));
+
+	for (uint32_t i = 0; i < meshBuffer.materials.Nb(); i++)
+	{
+		for (uint32_t j = 0; j < meshBuffer.materials[i].textures.Nb(); j++)
+		{
+			VkDescriptorImageInfo samplerInfo{};
+			samplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			samplerInfo.imageView	= meshBuffer.materials[i].textures[j].imageView;
+			samplerInfo.sampler		= meshBuffer.materials[i].textures[j].sampler;
+
+			VkWriteDescriptorSet samplerWrite{};
+			samplerWrite.sType				= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+			samplerWrite.dstSet				= meshDescriptorSet[i];
+			samplerWrite.dstBinding			= 1;
+			samplerWrite.dstArrayElement	= j;
+			samplerWrite.descriptorType		= VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			samplerWrite.descriptorCount	= 1;
+			samplerWrite.pImageInfo			= &samplerInfo;
+
+			vkUpdateDescriptorSets(GAPI.VulkanDevice, 1, &samplerWrite, 0, nullptr);
+		}
+		meshBuffer.materials[i].textureDescriptors = meshDescriptorSet[i];
+		
+	}
+	
 }
 
 void RasterObject::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader)
@@ -276,7 +339,10 @@ void RasterObject::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShader
 
 		layout(location = 0) out vec4 outColor;
 
-		layout(binding = 1) uniform sampler2D texSampler;
+		layout(set = 1, binding = 1) uniform sampler2D albedo;
+		//layout(binding = 1, set = 1) uniform sampler2D pbr;
+		//layout(binding = 1, set = 2) uniform sampler2D normal;
+
 
 		void main()
 		{
@@ -288,7 +354,7 @@ void RasterObject::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShader
 			float specular = pow(specAngle,16.0);
 			float diffuse = max(dot(lightDir, outNormal),0.0);
 
-			outColor = vec4((diffuse + specular) * texture(texSampler,outTexCoord).rgb,1.0);
+			outColor = vec4((diffuse + specular) * texture(albedo,outTexCoord).rgb,1.0);
 		}
 		)";
 
@@ -341,23 +407,18 @@ void RasterObject::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t 
 	//create the descriptor pool
 	VkDescriptorPoolSize poolUniformSize{};
 	poolUniformSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolUniformSize.descriptorCount = GAPI.NbVulkanFrames;
-
-	VkDescriptorPoolSize poolSamplerSize{};
-	poolSamplerSize.type = VK_DESCRIPTOR_TYPE_SAMPLER;
-	poolSamplerSize.descriptorCount = GAPI.NbVulkanFrames;
+	poolUniformSize.descriptorCount = 1;
 
 	VkDescriptorPoolCreateInfo poolInfo{};
 	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolInfo.poolSizeCount = 2;
-	VkDescriptorPoolSize doublePoolSize[2] = { poolUniformSize, poolSamplerSize};
-	poolInfo.pPoolSizes = doublePoolSize;
+	poolInfo.poolSizeCount = 1;
+	poolInfo.pPoolSizes = &poolUniformSize;
 	poolInfo.maxSets = GAPI.NbVulkanFrames;
 
 	VK_CALL_PRINT(vkCreateDescriptorPool(GAPI.VulkanDevice, &poolInfo, nullptr, &objectDescriptorPool))
 
-		//describe a descriptor set for each of our framebuffer (a uniform bufer per frame)
-		VkDescriptorSetAllocateInfo allocInfo{};
+	//describe a descriptor set for each of our framebuffer (a uniform bufer per frame)
+	VkDescriptorSetAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	allocInfo.descriptorPool = objectDescriptorPool;
 	allocInfo.descriptorSetCount = GAPI.NbVulkanFrames;
@@ -367,7 +428,6 @@ void RasterObject::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t 
 	allocInfo.pSetLayouts = layouts;
 
 	objectDescriptorSet.Alloc(GAPI.NbVulkanFrames);
-	//trianglePixelDescriptorSet = (VkDescriptorSet*)malloc(sizeof(VkDescriptorSet) * GAPI.NbVulkanFrames);
 	VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI.VulkanDevice, &allocInfo, *objectDescriptorSet));
 
 	//recreate the uniform bufferx
@@ -385,12 +445,6 @@ void RasterObject::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t 
 		bufferInfo.offset = 0;
 		bufferInfo.range = sizeof(mat4) * 3;
 
-
-		VkDescriptorImageInfo samplerInfo{};
-		samplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		samplerInfo.imageView	= meshBuffer.textures[0].imageView;
-		samplerInfo.sampler		= meshBuffer.textures[0].sampler;
-
 		VkWriteDescriptorSet descriptorWrite{};
 		descriptorWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		descriptorWrite.dstSet			= objectDescriptorSet[i];
@@ -400,17 +454,7 @@ void RasterObject::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t 
 		descriptorWrite.descriptorCount = 1;
 		descriptorWrite.pBufferInfo = &bufferInfo;
 
-		VkWriteDescriptorSet samplerWrite{};
-		samplerWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		samplerWrite.dstSet = objectDescriptorSet[i];
-		samplerWrite.dstBinding = 1;
-		samplerWrite.dstArrayElement = 0;
-		samplerWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		samplerWrite.descriptorCount = 1;
-		samplerWrite.pImageInfo = &samplerInfo;
-
-		VkWriteDescriptorSet toWrite[2] = {descriptorWrite , samplerWrite};
-		vkUpdateDescriptorSets(GAPI.VulkanDevice, 2, toWrite, 0, nullptr);
+		vkUpdateDescriptorSets(GAPI.VulkanDevice, 1, &descriptorWrite, 0, nullptr);
 	}
 }
 
@@ -491,8 +535,7 @@ void RasterObject::Show(GAPIHandle& GAPIHandle)
 	//draw all meshes
 	for (uint32_t i = 0; i < meshBuffer.meshes.Nb(); i++)
 	{
-		//VkDeviceSize offset[3] = {0,0,0};
-		//VkBuffer GPUBuffer[3] = { meshBuffer[i].positions.StaticGPUBuffer, meshBuffer[i].uvs.StaticGPUBuffer, meshBuffer[i].normals.StaticGPUBuffer };
+		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, objectLayout, 1, 1, &meshBuffer.materials[meshBuffer.materialIndex[i]].textureDescriptors, 0, nullptr);
 		vkCmdBindVertexBuffers(commandBuffer, 0, 3, meshBuffer.meshes[i].vertexBuffers, (VkDeviceSize*)meshBuffer.meshes[i].vertexOffsets);
 		vkCmdBindIndexBuffer(commandBuffer, meshBuffer.meshes[i].indices, 0, meshBuffer.meshes[i].indicesType);
 		vkCmdDrawIndexed(commandBuffer, meshBuffer.meshes[i].indicesNb, 1, meshBuffer.meshes[i].indicesOffset, 0, 0);

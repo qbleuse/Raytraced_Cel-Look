@@ -32,12 +32,16 @@ private:
 	VkRect2D					objectScissors{};
 	VkRenderPass				objectRenderPass{};
 	VkDescriptorSetLayout		objectDescriptorLayout{};
+	VkDescriptorSetLayout		samplerDescriptorLayout{};
 	VkDescriptorPool			objectDescriptorPool{};
+	VkDescriptorPool			meshDescriptorPool{};
 	VkPipelineLayout			objectLayout{};
 	VkPipeline					objectPipeline{};
 
 	HeapMemory<VkFramebuffer>		objectOutput;
 	HeapMemory<VkDescriptorSet>		objectDescriptorSet;
+	HeapMemory<VkDescriptorSet>		meshDescriptorSet;
+
 
 	VulkanHelper::UniformBufferHandle	matBufferHandle;
 	VulkanHelper::Model					meshBuffer;

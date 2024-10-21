@@ -267,7 +267,7 @@ bool VulkanHelper::CreateStaticBufferHandle(Uploader& VulkanUploader, StaticBuff
 }
 
 /* sends the data through the staging buffer to the static buffer */
-bool VulkanHelper::UploadStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, void* data, VkDeviceSize size, bool releaseStagingBuffer)
+bool VulkanHelper::UploadStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, const void* data, VkDeviceSize size, bool releaseStagingBuffer)
 {	
 	VkResult result = VK_SUCCESS;
 
@@ -512,42 +512,41 @@ void VulkanHelper::ClearMesh(const VkDevice& VulkanDevice, Mesh& mesh)
 	VK_CLEAR_RAW_ARRAY(mesh.vertexBuffers, 5, vkDestroyBuffer, VulkanDevice);
 }
 
-bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* fileName, Model& model)
+
+bool LoadGLTFBuffersInGPU(Uploader& VulkanUploader, const tinygltf::Model& loadedModel, Model& model)
 {
-	tinygltf::TinyGLTF loader;
-	tinygltf::Model loadedModel;
-	std::string err;
-	std::string warnings;
+	bool noError = true;
 
-	//first load model
-	if (!loader.LoadASCIIFromFile(&loadedModel, &err, &warnings, fileName))
-	{
-		printf("error when reading %s :\nerror : %s\nwarning : %s", fileName, err.c_str(), warnings.c_str());
-		return false;
-	}
-
-	//1. loading every buffer into device memory
+	//loading every buffer into device memory
 	model.buffersHandle.Alloc(loadedModel.buffers.size());
 	for (uint32_t i = 0; i < loadedModel.buffers.size(); i++)
 	{
-		tinygltf::Buffer& buffer = loadedModel.buffers[i];
+		const tinygltf::Buffer& buffer = loadedModel.buffers[i];
 
 		//we're using a static because it is easier to upload with, but we actually only want to allocate and send data to device memory
 		StaticBufferHandle tmpBufferHandle;
-		CreateVulkanBuffer(VulkanUploader, buffer.data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+		noError &= CreateVulkanBuffer(VulkanUploader, buffer.data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tmpBufferHandle.StaticGPUBuffer, tmpBufferHandle.StaticGPUMemoryHandle, 0);
-		UploadStaticBufferHandle(VulkanUploader, tmpBufferHandle, buffer.data.data(), buffer.data.size());
+		noError &= UploadStaticBufferHandle(VulkanUploader, tmpBufferHandle, buffer.data.data(), buffer.data.size());
 
 		model.buffersHandle[i] = tmpBufferHandle.StaticGPUMemoryHandle;
 
 		vkDestroyBuffer(VulkanUploader.VulkanDevice, tmpBufferHandle.StaticGPUBuffer, nullptr);
 	}
 
-	//2. load every image in memory
+	return noError;
+}
+
+bool LoadGLTFMaterialInGPU(Uploader& VulkanUploader, const tinygltf::Model& loadedModel, Model& model)
+{
+	bool noError = true;
+	VkResult result = VK_SUCCESS;
+
+	//loading every image into device memory
 	model.textures.Alloc(loadedModel.images.size());
 	for (uint32_t i = 0; i < loadedModel.images.size(); i++)
 	{
-		tinygltf::Image& image = loadedModel.images[i];
+		const tinygltf::Image& image = loadedModel.images[i];
 
 		VkFormat imageFormat;
 		switch (image.component)
@@ -573,10 +572,170 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* fileName, 
 		LoadTexture(VulkanUploader, (void*)image.image.data(), (uint32_t)image.width, (uint32_t)image.height, imageFormat, model.textures[i]);
 	}
 
+	model.samplers.Alloc(loadedModel.samplers.size());
+	for (uint32_t i = 0; i < loadedModel.samplers.size(); i++)
+	{
+		const tinygltf::Sampler& sampler = loadedModel.samplers[i];
+
+		//create a sampler that can be used to sample this texture inside the shader
+		VkSamplerCreateInfo samplerCreateInfo{};
+		samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+
+		switch (sampler.magFilter)
+		{
+			case TINYGLTF_TEXTURE_FILTER_NEAREST :
+				samplerCreateInfo.magFilter = VK_FILTER_NEAREST;
+				samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+				break;
+			case TINYGLTF_TEXTURE_FILTER_LINEAR :
+				samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
+				samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+				break;
+			case TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_NEAREST :
+				samplerCreateInfo.magFilter = VK_FILTER_NEAREST;
+				samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+				break;
+			case TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_NEAREST :
+				samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
+				samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+				break;
+			case TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_LINEAR :
+				samplerCreateInfo.magFilter = VK_FILTER_NEAREST;
+				samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+				break;
+			case TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR :
+				samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
+				samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+				break;
+		}
+
+		switch (sampler.minFilter)
+		{
+		case TINYGLTF_TEXTURE_FILTER_NEAREST:
+			samplerCreateInfo.minFilter = VK_FILTER_NEAREST;
+			samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+			break;
+		case TINYGLTF_TEXTURE_FILTER_LINEAR:
+			samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
+			samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+			break;
+		case TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_NEAREST:
+			samplerCreateInfo.minFilter = VK_FILTER_NEAREST;
+			samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+			break;
+		case TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_NEAREST:
+			samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
+			samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+			break;
+		case TINYGLTF_TEXTURE_FILTER_NEAREST_MIPMAP_LINEAR:
+			samplerCreateInfo.minFilter = VK_FILTER_NEAREST;
+			samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+			break;
+		case TINYGLTF_TEXTURE_FILTER_LINEAR_MIPMAP_LINEAR:
+			samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
+			samplerCreateInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+			break;
+		}
+		switch (sampler.wrapS)
+		{
+		case TINYGLTF_TEXTURE_WRAP_REPEAT:
+			samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			break;
+		case TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE:
+			samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			break;
+		case TINYGLTF_TEXTURE_WRAP_MIRRORED_REPEAT:
+			samplerCreateInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+			break;
+		};
+
+		switch (sampler.wrapT)
+		{
+		case TINYGLTF_TEXTURE_WRAP_REPEAT:
+			samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+			break;
+		case TINYGLTF_TEXTURE_WRAP_CLAMP_TO_EDGE:
+			samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+			break;
+		case TINYGLTF_TEXTURE_WRAP_MIRRORED_REPEAT:
+			samplerCreateInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+			break;
+		};
+
+		VK_CALL_PRINT(vkCreateSampler(VulkanUploader.VulkanDevice, &samplerCreateInfo, nullptr, &model.samplers[i]))
+	}
+
+	model.materials.Alloc(loadedModel.materials.size());
+	for (uint32_t i = 0; i < loadedModel.materials.size(); i++)
+	{
+		const tinygltf::Material& material = loadedModel.materials[i];
+		Material& mat = model.materials[i];
+
+		uint32_t nb = (material.pbrMetallicRoughness.baseColorTexture.index >= 0)
+			+ (material.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0)
+			+ (material.normalTexture.index >= 0);
+		mat.textures.Alloc(nb);
+
+		uint32_t texIndex = 0;
+		if (material.pbrMetallicRoughness.baseColorTexture.index >= 0)
+		{
+			const tinygltf::Texture& texture = loadedModel.textures[material.pbrMetallicRoughness.baseColorTexture.index];
+
+			model.textures[texture.source].sampler = model.samplers[texture.sampler];
+			model.materials[i].textures[texIndex++] = model.textures[texture.source];
+		}
+		if (material.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0)
+		{
+			const tinygltf::Texture& texture = loadedModel.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index];
+
+			model.textures[texture.source].sampler = model.samplers[texture.sampler];
+			model.materials[i].textures[texIndex++] = model.textures[texture.source];
+		}
+		if (material.normalTexture.index >= 0)
+		{
+			const tinygltf::Texture& texture = loadedModel.textures[material.normalTexture.index];
+
+			model.textures[texture.source].sampler = model.samplers[texture.sampler];
+			model.materials[i].textures[texIndex++] = model.textures[texture.source];
+		}
+	}
+
+	return noError;
+}
+
+bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* fileName, Model& model)
+{
+	tinygltf::TinyGLTF loader;
+	tinygltf::Model loadedModel;
+	std::string err;
+	std::string warnings;
+
+	//first load model
+	if (!loader.LoadASCIIFromFile(&loadedModel, &err, &warnings, fileName))
+	{
+		printf("error when reading %s :\nerror : %s\nwarning : %s", fileName, err.c_str(), warnings.c_str());
+		return false;
+	}
+
+	//1. loading every buffer into device memory
+	if (!LoadGLTFBuffersInGPU(VulkanUploader, loadedModel, model))
+	{
+		printf("error loading %s's buffers in GPU.", fileName);
+		return false;
+	}
+
+	//2. load every image in memory
+	if (!LoadGLTFMaterialInGPU(VulkanUploader, loadedModel, model))
+	{
+		printf("error loading %s's buffers in GPU.", fileName);
+		return false;
+	}
+
 	uint32_t totalMeshNb = 0;
 	for (uint32_t i = 0; i < loadedModel.meshes.size(); i++)
 		totalMeshNb += loadedModel.meshes[i].primitives.size();
 	model.meshes.Alloc(totalMeshNb);
+	model.materialIndex.Alloc(totalMeshNb);
 
 	//2. creating vulkan buffer interface for meshes
 	uint32_t meshIndex = 0;
@@ -588,6 +747,7 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* fileName, 
 		for (uint32_t j = 0; j < indexMesh.primitives.size(); j++)
 		{
 			tinygltf::Primitive& jPrimitive = indexMesh.primitives[j];
+			model.materialIndex[j] = jPrimitive.material;
 
 			//create indices buffer from preallocated device memory
 			{
@@ -665,21 +825,8 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* fileName, 
 			meshIndex++;
 		}
 	}
-
-	//Models.meshes.Alloc(model.meshes.size());
-	//
-	//
-	//for (uint32_t i = 0; i < model.meshes.size(); i++)
-	//{
-	//	for (uint32_t j = 0; j < model.meshes[i].primitives.size(); j++)
-	//	{
-	//
-	//		model.meshes[i].primitives[j].indices;
-	//		//model.meshes[i].primitives[j].attributes["POSITION"]
-	//	}
-	//
-	//}
 	
+	return true;
 }
 
 void VulkanHelper::ClearModel(const VkDevice& VulkanDevice, Model& model)
@@ -828,7 +975,7 @@ bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const char* fileName, T
 
 #include "vulkan/utility/vk_format_utils.h"
 
-bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, void* pixels, uint32_t width, uint32_t height, VkFormat imageFormat, Texture& texture)
+bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const void* pixels, uint32_t width, uint32_t height, VkFormat imageFormat, Texture& texture)
 {
 	VkResult result = VK_SUCCESS;
 
@@ -884,13 +1031,13 @@ bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, void* pixels, uint32_t 
 
 	VK_CALL_PRINT(vkCreateImageView(VulkanUploader.VulkanDevice, &viewCreateInfo, nullptr, &texture.imageView));
 
-	//create a sampler that can be used to sample this texture inside the shader
-	VkSamplerCreateInfo samplerCreateInfo{};
-	samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-	samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
-	samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
-
-	VK_CALL_PRINT(vkCreateSampler(VulkanUploader.VulkanDevice, &samplerCreateInfo, nullptr, &texture.sampler))
+	////create a sampler that can be used to sample this texture inside the shader
+	//VkSamplerCreateInfo samplerCreateInfo{};
+	//samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	//samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
+	//samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
+	//
+	//VK_CALL_PRINT(vkCreateSampler(VulkanUploader.VulkanDevice, &samplerCreateInfo, nullptr, &texture.sampler))
 
 	return result == VK_SUCCESS;
 }
@@ -905,12 +1052,9 @@ void VulkanHelper::ClearTexture(const VkDevice& VulkanDevice, Texture& texture)
 		vkFreeMemory(VulkanDevice, texture.imageMemory, nullptr);
 	if (texture.imageView != nullptr)
 		vkDestroyImageView(VulkanDevice, texture.imageView, nullptr);
-	if (texture.sampler != nullptr)
-		vkDestroySampler(VulkanDevice, texture.sampler, nullptr);
 
 	//then memset 0
 	texture.image		= nullptr;
 	texture.imageMemory	= nullptr;
 	texture.imageView	= nullptr;
-	texture.sampler		= nullptr;
 }

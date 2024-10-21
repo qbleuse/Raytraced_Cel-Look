@@ -34,15 +34,15 @@ public:
 	}
 
 	HeapMemory(uint32_t nb) :
-		_raw_data{ (T*)malloc(nb*sizeof(T))}
+		_raw_data{ new T[nb]}
 	{
-		memset(_raw_data, 0, nb * sizeof(T));
+		//memset(_raw_data, 0, nb * sizeof(T));
 	}
 
 	~HeapMemory()
 	{
 		if (_raw_data)
-			free(_raw_data);
+			delete[] _raw_data;// free(_raw_data);
 	}
 
 	/*===== Accessor =====*/
@@ -57,7 +57,12 @@ public:
 		return _raw_data[i];
 	}
 
-	__forceinline T** operator&()const
+	__forceinline T** operator&()
+	{
+		return &_raw_data;
+	}
+
+	__forceinline T*const* operator&()const
 	{
 		return &_raw_data;
 	}
@@ -92,14 +97,15 @@ public:
 	virtual void Clear()
 	{
 		if (_raw_data)
-			free(_raw_data);
+			delete[] _raw_data;
+			//free(_raw_data);
 		_raw_data = nullptr;
 	}
 
 	virtual void Alloc(uint32_t nb)
 	{
-		_raw_data = (T*)malloc(nb * sizeof(T));
-		memset(_raw_data, 0, nb * sizeof(T));
+		_raw_data = new T[nb];//(T*)malloc(nb * sizeof(T));
+		//memset(_raw_data, 0, nb * sizeof(T));
 	}
 
 };
