@@ -194,7 +194,7 @@ namespace VulkanHelper
 		LoopArray<struct Texture>	textures;
 		LoopArray<VkSampler>		samplers;
 
-		LoopArray<struct Material>	materials;
+		SmartLoopArray<struct Material>	materials;
 	};
 
 	bool LoadGLTFFile(Uploader& VulkanUploader, const char* fileName, Model& Meshes);

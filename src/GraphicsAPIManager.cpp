@@ -20,8 +20,11 @@ GraphicsAPIManager::~GraphicsAPIManager()
 
 	//destroying old frames array (theoretically, the if is useless as free(nullptr) does nothing, but it apparently crashes on some OS)
 	VulkanBackBuffers.Clear();
+	VK_CLEAR_ARRAY(VulkanDepthBuffers, NbVulkanFrames, vkDestroyImage, VulkanDevice);
+	vkFreeMemory(VulkanDevice, VulkanDepthBufferMemory, nullptr);
 	//destroying old framesbuffers associated with frames
 	VK_CLEAR_ARRAY(VulkanBackColourBuffers, NbVulkanFrames, vkDestroyImageView, VulkanDevice);
+	VK_CLEAR_ARRAY(VulkanDepthBufferViews, NbVulkanFrames, vkDestroyImageView, VulkanDevice);
 	//destroy semaphores
 	VK_CLEAR_ARRAY(RuntimeHandle.VulkanCanPresentSemaphore, NbVulkanFrames, vkDestroySemaphore, VulkanDevice);
 	VK_CLEAR_ARRAY(RuntimeHandle.VulkanHasPresentedSemaphore, NbVulkanFrames, vkDestroySemaphore, VulkanDevice);
@@ -488,82 +491,159 @@ bool GraphicsAPIManager::ResizeVulkanSwapChain(int32_t width, int32_t height)
 	//to know if we succeeded
 	VkResult result = VK_SUCCESS;
 
-	//destroying old frames array (theoretically, the if is useless as free(nullptr) does nothing, but it apparently crashes on some OS)
-	VulkanBackBuffers.Clear();
-	//destroying old framesbuffers associated with frames
-	VK_CLEAR_ARRAY(VulkanBackColourBuffers, NbVulkanFrames, vkDestroyImageView, VulkanDevice);
-	//destroy semaphores
-	VK_CLEAR_ARRAY(RuntimeHandle.VulkanCanPresentSemaphore, NbVulkanFrames, vkDestroySemaphore, VulkanDevice);
-	VK_CLEAR_ARRAY(RuntimeHandle.VulkanHasPresentedSemaphore, NbVulkanFrames, vkDestroySemaphore, VulkanDevice);
-	//destroy fence
-	VK_CLEAR_ARRAY(RuntimeHandle.VulkanIsDrawingFence, NbVulkanFrames, vkDestroyFence, VulkanDevice);
-	//destroy command buffers (we want the same number of command buffer as backbuffers)
-	if (RuntimeHandle.VulkanCommand != nullptr)
+	//clear previous resources
 	{
-		vkFreeCommandBuffers(VulkanDevice, VulkanCommandPool[0], NbVulkanFrames, *RuntimeHandle.VulkanCommand);
-		RuntimeHandle.VulkanCommand.Clear();
+
+		//destroying old frames array (theoretically, the if is useless as free(nullptr) does nothing, but it apparently crashes on some OS)
+		VulkanBackBuffers.Clear();
+		VK_CLEAR_ARRAY(VulkanDepthBuffers, NbVulkanFrames, vkDestroyImage, VulkanDevice);
+		vkFreeMemory(VulkanDevice, VulkanDepthBufferMemory, nullptr);
+		//destroying old framesbuffers associated with frames
+		VK_CLEAR_ARRAY(VulkanBackColourBuffers, NbVulkanFrames, vkDestroyImageView, VulkanDevice);
+		VK_CLEAR_ARRAY(VulkanDepthBufferViews, NbVulkanFrames, vkDestroyImageView, VulkanDevice);
+		//destroy semaphores
+		VK_CLEAR_ARRAY(RuntimeHandle.VulkanCanPresentSemaphore, NbVulkanFrames, vkDestroySemaphore, VulkanDevice);
+		VK_CLEAR_ARRAY(RuntimeHandle.VulkanHasPresentedSemaphore, NbVulkanFrames, vkDestroySemaphore, VulkanDevice);
+		//destroy fence
+		VK_CLEAR_ARRAY(RuntimeHandle.VulkanIsDrawingFence, NbVulkanFrames, vkDestroyFence, VulkanDevice);
+		//destroy command buffers (we want the same number of command buffer as backbuffers)
+		if (RuntimeHandle.VulkanCommand != nullptr)
+		{
+			vkFreeCommandBuffers(VulkanDevice, VulkanCommandPool[0], NbVulkanFrames, *RuntimeHandle.VulkanCommand);
+			RuntimeHandle.VulkanCommand.Clear();
+		}
+
 	}
 
-	//the struct allowing us to know the display capabilities of our hardware
-	VkSurfaceCapabilitiesKHR SurfaceCapabilities{};
-
-	//gettting back our display capabilities
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VulkanGPU, VulkanSurface, &SurfaceCapabilities);
-
-	VkSwapchainKHR tempSwapchain{ VulkanSwapchain };
-
-	//creating the swap chain
-	VkSwapchainCreateInfoKHR createinfo{};
-	createinfo.sType					= VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-	createinfo.surface					= VulkanSurface;
-	createinfo.minImageCount			= SurfaceCapabilities.maxImageCount;
-	createinfo.imageFormat				= VulkanSurfaceFormat.format;
-	createinfo.imageColorSpace			= VulkanSurfaceFormat.colorSpace;
-	createinfo.imageExtent				= VkExtent2D{(uint32_t)width, (uint32_t)height};
-	createinfo.imageUsage				= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-	createinfo.queueFamilyIndexCount	= VulkanQueueFamily;
-	createinfo.imageArrayLayers			= 1;
-	createinfo.compositeAlpha			= VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-	createinfo.imageSharingMode			= VK_SHARING_MODE_EXCLUSIVE;
-	createinfo.clipped					= VK_TRUE;
-	createinfo.presentMode				= VK_PRESENT_MODE_MAILBOX_KHR;//for now v_sync
-	createinfo.oldSwapchain				= tempSwapchain;
-	createinfo.preTransform				= VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-
-	//creating the swapchain
-	VK_CALL_PRINT(vkCreateSwapchainKHR(VulkanDevice, &createinfo, nullptr, &VulkanSwapchain))
-
-	vkDestroySwapchainKHR(VulkanDevice, tempSwapchain, nullptr);
-
-	//get back the number of frames the swapchain was able to create
-	VK_CALL_PRINT(vkGetSwapchainImagesKHR(VulkanDevice, VulkanSwapchain, &NbVulkanFrames, nullptr));
-	RuntimeHandle.NbVulkanFrames = NbVulkanFrames;
-	VulkanWidth = width;
-	VulkanHeight = height;
-	VulkanBackBuffers.Alloc(NbVulkanFrames);
-	// get back the actual frames
-	VK_CALL_PRINT(vkGetSwapchainImagesKHR(VulkanDevice, VulkanSwapchain, &NbVulkanFrames, *VulkanBackBuffers));
-
-	//recreate the array of framebuffers associated with the swapchain's frames.
-	VulkanBackColourBuffers.Alloc(NbVulkanFrames);
-
-	//describe the ImageView (FrameBuffers) associated with the Frames of the swap chain we want to create
-	VkImageViewCreateInfo frameBufferInfo{};
-	frameBufferInfo.sType						= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	frameBufferInfo.components					= { VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY };
-	frameBufferInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	frameBufferInfo.viewType						= VK_IMAGE_VIEW_TYPE_2D;
-	frameBufferInfo.format							= VulkanSurfaceFormat.format;
-	frameBufferInfo.subresourceRange.baseMipLevel	= 0;
-	frameBufferInfo.subresourceRange.levelCount		= 1;
-	frameBufferInfo.subresourceRange.baseArrayLayer = 0;
-	frameBufferInfo.subresourceRange.layerCount		= 1;
-
-	for (uint32_t i = 0; i < NbVulkanFrames; i++)
+	//create or recreate swapchain
 	{
-		frameBufferInfo.image = VulkanBackBuffers[i];
-		VK_CALL_PRINT(vkCreateImageView(VulkanDevice, &frameBufferInfo, nullptr, &(VulkanBackColourBuffers[i])));
+		//the struct allowing us to know the display capabilities of our hardware
+		VkSurfaceCapabilitiesKHR SurfaceCapabilities{};
+
+		//gettting back our display capabilities
+		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(VulkanGPU, VulkanSurface, &SurfaceCapabilities);
+
+		VkSwapchainKHR tempSwapchain{ VulkanSwapchain };
+
+		//creating the swap chain
+		VkSwapchainCreateInfoKHR createinfo{};
+		createinfo.sType					= VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+		createinfo.surface					= VulkanSurface;
+		createinfo.minImageCount			= SurfaceCapabilities.maxImageCount;
+		createinfo.imageFormat				= VulkanSurfaceFormat.format;
+		createinfo.imageColorSpace			= VulkanSurfaceFormat.colorSpace;
+		createinfo.imageExtent				= VkExtent2D{ (uint32_t)width, (uint32_t)height };
+		createinfo.imageUsage				= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		createinfo.queueFamilyIndexCount	= VulkanQueueFamily;
+		createinfo.imageArrayLayers			= 1;
+		createinfo.compositeAlpha			= VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+		createinfo.imageSharingMode			= VK_SHARING_MODE_EXCLUSIVE;
+		createinfo.clipped					= VK_TRUE;
+		createinfo.presentMode				= VK_PRESENT_MODE_MAILBOX_KHR;//upload as soon as available
+		createinfo.oldSwapchain				= tempSwapchain;
+		createinfo.preTransform				= VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+
+		//creating the swapchain
+		VK_CALL_PRINT(vkCreateSwapchainKHR(VulkanDevice, &createinfo, nullptr, &VulkanSwapchain))
+
+		//destroying old
+		vkDestroySwapchainKHR(VulkanDevice, tempSwapchain, nullptr);
 	}
+
+	//creating back buffers
+	{
+		//get back the number of frames the swapchain was able to create
+		VK_CALL_PRINT(vkGetSwapchainImagesKHR(VulkanDevice, VulkanSwapchain, &NbVulkanFrames, nullptr));
+		RuntimeHandle.NbVulkanFrames = NbVulkanFrames;
+		VulkanWidth = width;
+		VulkanHeight = height;
+		VulkanBackBuffers.Alloc(NbVulkanFrames);
+		// get back the actual frames
+		VK_CALL_PRINT(vkGetSwapchainImagesKHR(VulkanDevice, VulkanSwapchain, &NbVulkanFrames, *VulkanBackBuffers));
+
+		//recreate the array of framebuffers associated with the swapchain's frames.
+		VulkanBackColourBuffers.Alloc(NbVulkanFrames);
+
+		//describe the ImageView (FrameBuffers) associated with the Frames of the swap chain we want to create
+		VkImageViewCreateInfo frameBufferInfo{};
+		frameBufferInfo.sType							= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		frameBufferInfo.components						= { VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY };
+		frameBufferInfo.subresourceRange.aspectMask		= VK_IMAGE_ASPECT_COLOR_BIT;
+		frameBufferInfo.viewType						= VK_IMAGE_VIEW_TYPE_2D;
+		frameBufferInfo.format							= VulkanSurfaceFormat.format;
+		frameBufferInfo.subresourceRange.baseMipLevel	= 0;
+		frameBufferInfo.subresourceRange.levelCount		= 1;
+		frameBufferInfo.subresourceRange.baseArrayLayer = 0;
+		frameBufferInfo.subresourceRange.layerCount		= 1;
+
+		for (uint32_t i = 0; i < NbVulkanFrames; i++)
+		{
+			frameBufferInfo.image = VulkanBackBuffers[i];
+			VK_CALL_PRINT(vkCreateImageView(VulkanDevice, &frameBufferInfo, nullptr, &(VulkanBackColourBuffers[i])));
+		}
+	}
+
+	//create depth buffers
+	{
+		VulkanDepthBuffers.Alloc(NbVulkanFrames);
+		VulkanDepthBufferViews.Alloc(NbVulkanFrames);
+
+		VkImageCreateInfo depthBufferInfo{};
+		depthBufferInfo.sType			= VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		depthBufferInfo.imageType		= VK_IMAGE_TYPE_2D;//can be 2D 
+		depthBufferInfo.format			= VK_FORMAT_D32_SFLOAT;//for now we'll just do depth without stencil
+		depthBufferInfo.extent.width	= width;
+		depthBufferInfo.extent.height	= height;
+		depthBufferInfo.extent.depth	= 1;
+		depthBufferInfo.mipLevels		= 1u;
+		depthBufferInfo.arrayLayers		= 1u;
+		depthBufferInfo.tiling			= VK_IMAGE_TILING_OPTIMAL;//this we'll be wrote znyway so keep it as optimal
+		depthBufferInfo.initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;//no need to init
+		depthBufferInfo.usage			= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;//same as above
+		depthBufferInfo.sharingMode		= VK_SHARING_MODE_EXCLUSIVE;//we have to command queues : one for the app, one for the UI. the UI shouldn't use the depth buffer.
+		depthBufferInfo.samples			= VK_SAMPLE_COUNT_1_BIT;//why would you want more than one sample in a simple app ?
+		depthBufferInfo.flags = 0; // Optional
+
+		VK_CALL_PRINT(vkCreateImage(VulkanDevice, &depthBufferInfo, nullptr, &VulkanDepthBuffers[0]));
+
+		//getting the necessary requirements to create our image
+		VkMemoryRequirements memRequirements;
+		vkGetImageMemoryRequirements(VulkanDevice, VulkanDepthBuffers[0], &memRequirements);
+
+		//trying to find a matching memory type between what the app wants and the device's limitation.
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType				= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize	= memRequirements.size * NbVulkanFrames;
+		vkGetPhysicalDeviceMemoryProperties(VulkanGPU, &VulkanUploader.MemoryProperties);
+		allocInfo.memoryTypeIndex	= VulkanHelper::GetMemoryTypeFromRequirements(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memRequirements, VulkanUploader.MemoryProperties);
+
+		VK_CALL_PRINT(vkAllocateMemory(VulkanDevice, &allocInfo, nullptr, &VulkanDepthBufferMemory));
+
+		//creating the image view fromn the image
+		VkImageViewCreateInfo depthBufferViewInfo{};
+		depthBufferViewInfo.sType							= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		depthBufferViewInfo.image							= VulkanDepthBuffers[0];
+		depthBufferViewInfo.components						= { VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY, VK_COMPONENT_SWIZZLE_IDENTITY };
+		depthBufferViewInfo.subresourceRange.aspectMask		= VK_IMAGE_ASPECT_DEPTH_BIT;
+		depthBufferViewInfo.viewType						= VK_IMAGE_VIEW_TYPE_2D;
+		depthBufferViewInfo.format							= VK_FORMAT_D32_SFLOAT;
+		depthBufferViewInfo.subresourceRange.baseMipLevel	= 0;
+		depthBufferViewInfo.subresourceRange.levelCount		= 1;
+		depthBufferViewInfo.subresourceRange.baseArrayLayer = 0;
+		depthBufferViewInfo.subresourceRange.layerCount		= 1;
+
+		VK_CALL_PRINT(vkBindImageMemory(VulkanDevice, VulkanDepthBuffers[0], VulkanDepthBufferMemory, 0));
+		VK_CALL_PRINT(vkCreateImageView(VulkanDevice, &depthBufferViewInfo, nullptr, &VulkanDepthBufferViews[0]));
+
+		for (uint32_t i = 1; i < NbVulkanFrames; i++)
+		{
+			VK_CALL_PRINT(vkCreateImage(VulkanDevice, &depthBufferInfo, nullptr, &VulkanDepthBuffers[i]));
+			VK_CALL_PRINT(vkBindImageMemory(VulkanDevice, VulkanDepthBuffers[i], VulkanDepthBufferMemory, i* memRequirements.size));
+			depthBufferViewInfo.image = VulkanDepthBuffers[i];
+			VK_CALL_PRINT(vkCreateImageView(VulkanDevice, &depthBufferViewInfo, nullptr, &VulkanDepthBufferViews[i]));
+		}
+	}
+
 
 	//create semaphores and fences
 	{

@@ -836,6 +836,11 @@ void VulkanHelper::ClearModel(const VkDevice& VulkanDevice, Model& model)
 		ClearMesh(VulkanDevice, model.meshes[i]);
 	}
 	VK_CLEAR_ARRAY(model.buffersHandle, model.buffersHandle.Nb(), vkFreeMemory, VulkanDevice);
+	for (uint32_t i = 0; i < model.textures.Nb(); i++)
+	{
+		ClearTexture(VulkanDevice, model.textures[i]);
+	}
+	VK_CLEAR_ARRAY(model.samplers, model.samplers.Nb(), vkDestroySampler, VulkanDevice);
 }
 
 /* Images/Textures */

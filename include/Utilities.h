@@ -11,14 +11,15 @@
 
 
 /**
-* A simple class representing an allocated RAM memory block.
+* A simple class representing an allocated RAM memory block, in C format.
 * You may ask, why use the standard library, and things such as vector ?
 * You can definetely do that, it is just personal preference.
+* This uses malloc and free, as such, it should be used for simple C types and not with class.
 */
 template<typename T>
 class HeapMemory
 {
-private:
+protected:
 	T* _raw_data{nullptr};
 
 public:
@@ -34,15 +35,15 @@ public:
 	}
 
 	HeapMemory(uint32_t nb) :
-		_raw_data{ new T[nb]}
+		_raw_data{ (T*)malloc(nb * sizeof(T)) }
 	{
-		//memset(_raw_data, 0, nb * sizeof(T));
+		memset(_raw_data, 0, nb * sizeof(T));
 	}
 
 	~HeapMemory()
 	{
 		if (_raw_data)
-			delete[] _raw_data;// free(_raw_data);
+			free(_raw_data);
 	}
 
 	/*===== Accessor =====*/
@@ -97,15 +98,14 @@ public:
 	virtual void Clear()
 	{
 		if (_raw_data)
-			delete[] _raw_data;
-			//free(_raw_data);
+			free(_raw_data);
 		_raw_data = nullptr;
 	}
 
 	virtual void Alloc(uint32_t nb)
 	{
-		_raw_data = new T[nb];//(T*)malloc(nb * sizeof(T));
-		//memset(_raw_data, 0, nb * sizeof(T));
+		_raw_data = (T*)malloc(nb * sizeof(T));
+		memset(_raw_data, 0, nb * sizeof(T));
 	}
 
 };
@@ -160,6 +160,100 @@ public:
 	virtual void Alloc(uint32_t nb)override
 	{
 		HeapMemory<T>::Alloc(nb);
+		_nb = nb;
+	}
+
+};
+
+/*
+* A simple class representing an allocated RAM memory block, in cpp.
+* in conbtrast with the parent, this uses new and delete, thus preserving vtables for contained classes.
+*/
+template<typename T>
+class SmartHeapMemory : public HeapMemory<T>
+{
+public:
+	/*===== Constructor =====*/
+
+	SmartHeapMemory() = default;
+
+	SmartHeapMemory(uint32_t nb) :
+		_raw_data{ new T[nb]; }
+	{
+	}
+
+	~SmartHeapMemory()
+	{
+		if (_raw_data)
+			delete[] _raw_data;
+	}
+
+	/*===== Memory Management =====*/
+
+	virtual void Clear()override
+	{
+		if (_raw_data)
+			delete[] _raw_data;
+		_raw_data = nullptr;
+	}
+
+	virtual void Alloc(uint32_t nb)override
+	{
+		_raw_data = new T[nb];
+	}
+};
+
+/**
+* A simple class representing a simple array of data you would need to loop through.
+* as being smart, this preserve classes vtable when allocating.
+*/
+template<typename T>
+class SmartLoopArray : public SmartHeapMemory<T>
+{
+private:
+	uint32_t _nb{ 0 };
+
+public:
+	/*===== Constructor =====*/
+
+	SmartLoopArray() = default;
+
+	SmartLoopArray(T* raw_data) = delete;
+
+	SmartLoopArray(T* raw_data, uint32_t nb) :
+		SmartHeapMemory<T>(raw_data),
+		_nb{ nb }
+
+	{
+
+	}
+
+	SmartLoopArray(uint32_t nb) :
+		SmartHeapMemory<T>(nb),
+		_nb{ nb }
+	{
+	}
+
+	/*===== Accessor =====*/
+
+	__forceinline const uint32_t& Nb()const { return _nb; }
+
+	/*===== Assignement =====*/
+
+	T* operator=(T* raw_data) = delete;
+
+
+	/*===== Memory Management =====*/
+
+	virtual void Clear()override
+	{
+		SmartHeapMemory<T>::Clear();
+		_nb = 0;
+	}
+
+	virtual void Alloc(uint32_t nb)override
+	{
+		SmartHeapMemory<T>::Alloc(nb);
 		_nb = nb;
 	}
 

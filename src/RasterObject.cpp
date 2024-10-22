@@ -136,38 +136,69 @@ void RasterObject::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& 
 	colorBlending.attachmentCount	= 1;
 	colorBlending.pAttachments		= &colorBlendAttachment;
 
-	/*===== FRAMEBUFFER OUTPUT ======*/
-
-	//describing the format of the output (our framebuffers)
-	VkAttachmentDescription frameColourBufferAttachment{};
-	frameColourBufferAttachment.format			= GAPI.VulkanSurfaceFormat.format;
-	frameColourBufferAttachment.samples			= VK_SAMPLE_COUNT_1_BIT;//one pixel will have exactly one calculation done
-	frameColourBufferAttachment.loadOp			= VK_ATTACHMENT_LOAD_OP_CLEAR;//we'll make the pipeline clear
-	frameColourBufferAttachment.storeOp			= VK_ATTACHMENT_STORE_OP_STORE;//we want to write into the framebuffer
-	frameColourBufferAttachment.initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;//we write onto the entire vewport so it will be completely replaced, what was before does not interests us
-	frameColourBufferAttachment.finalLayout		= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;//there is no post process this is immediate writing into frame buffer
-
-	/*===== SUBPASS DESCRIPTION ======*/
+	/*===== DEPTH TEST ======*/
+	VkPipelineDepthStencilStateCreateInfo depthStencil{};
+	depthStencil.sType				= VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depthStencil.depthTestEnable	= VK_TRUE;
+	depthStencil.depthWriteEnable	= VK_TRUE;
+	depthStencil.depthCompareOp		= VK_COMPARE_OP_LESS;
 
 	{
+		/*===== FRAMEBUFFER OUTPUT ======*/
+
+		//describing the format of the output (our framebuffers)
+		VkAttachmentDescription frameColourBufferAttachment{};
+		frameColourBufferAttachment.format = GAPI.VulkanSurfaceFormat.format;
+		frameColourBufferAttachment.samples = VK_SAMPLE_COUNT_1_BIT;//one pixel will have exactly one calculation done
+		frameColourBufferAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;//we'll make the pipeline clear
+		frameColourBufferAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;//we want to write into the framebuffer
+		frameColourBufferAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;//we write onto the entire vewport so it will be completely replaced, what was before does not interests us
+		frameColourBufferAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;//there is no post process this is immediate writing into frame buffer
+
+		/*===== DEPTH BUFFER CONFIG =====*/
+
+		//describing the format of the depthbuffer
+		VkAttachmentDescription depthBufferAttachment{};
+		depthBufferAttachment.format = VK_FORMAT_D32_SFLOAT;
+		depthBufferAttachment.samples = VK_SAMPLE_COUNT_1_BIT;//one pixel will have exactly one calculation done
+		depthBufferAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;//we'll make the pipeline clear the depth buffer
+		depthBufferAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;//we just want the rasterizer to use it
+		depthBufferAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		depthBufferAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthBufferAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;//we write onto the entire vewport so it will be completely replaced, what was before does not interests us
+		depthBufferAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;//we just want to use it as depth buffer.
+
+		/*===== SUBPASS DESCRIPTION ======*/
+
 		//describing the output in the subpass
 		VkAttachmentReference frameColourBufferAttachmentRef{};
 		frameColourBufferAttachmentRef.attachment = 0;
 		frameColourBufferAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		//describing the output in the subpass
+		VkAttachmentReference depthBufferAttachmentRef{};
+		depthBufferAttachmentRef.attachment = 1;
+		depthBufferAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
 		//describing the subpass of our main renderpass
 		VkSubpassDescription subpass{};
 		subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		subpass.colorAttachmentCount = 1;
 		subpass.pColorAttachments = &frameColourBufferAttachmentRef;
+		subpass.pDepthStencilAttachment = &depthBufferAttachmentRef;
 
 		//describing our renderpass
 		VkRenderPassCreateInfo renderPassInfo{};
 		renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-		renderPassInfo.attachmentCount = 1;
-		renderPassInfo.pAttachments = &frameColourBufferAttachment;
+		renderPassInfo.attachmentCount = 2;
+		VkAttachmentDescription attachements[2] = { frameColourBufferAttachment, depthBufferAttachment };
+		renderPassInfo.pAttachments = attachements;
 		renderPassInfo.subpassCount = 1;
 		renderPassInfo.pSubpasses = &subpass;
+		VkSubpassDependency dependency{};
+		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
 		VK_CALL_PRINT(vkCreateRenderPass(GAPI.VulkanDevice, &renderPassInfo, nullptr, &objectRenderPass));
 	}
@@ -228,7 +259,7 @@ void RasterObject::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& 
 	pipelineInfo.pViewportState			= &viewportStateInfo;
 	pipelineInfo.pRasterizationState	= &rasterizer;
 	pipelineInfo.pMultisampleState		= &multisampling;
-	pipelineInfo.pDepthStencilState		= nullptr; // Optional
+	pipelineInfo.pDepthStencilState		= &depthStencil;
 	pipelineInfo.pColorBlendState		= &colorBlending;
 	pipelineInfo.pDynamicState			= &dynamicStateInfo;
 	pipelineInfo.layout					= objectLayout;
@@ -435,8 +466,9 @@ void RasterObject::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t 
 
 	for (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
 	{
-		framebufferInfo.attachmentCount = 1;
-		framebufferInfo.pAttachments = &GAPI.VulkanBackColourBuffers[i];
+		framebufferInfo.attachmentCount = 2;
+		VkImageView attachement[2] = { GAPI.VulkanBackColourBuffers[i] , GAPI.VulkanDepthBufferViews[i] };
+		framebufferInfo.pAttachments = attachement;
 		VK_CALL_PRINT(vkCreateFramebuffer(GAPI.VulkanDevice, &framebufferInfo, nullptr, &objectOutput[i]))
 
 
@@ -513,10 +545,11 @@ void RasterObject::Show(GAPIHandle& GAPIHandle)
 		info.framebuffer				= objectOutput[GAPIHandle.VulkanFrameIndex];
 		info.renderArea.extent.width	= (uint32_t)objectViewport.width;
 		info.renderArea.extent.height	= (uint32_t)objectViewport.height;
-		info.clearValueCount = 1;
-		VkClearValue clearValue{};
-		clearValue.color = { 0.2f, 0.2f, 0.2f, 1.0f };
-		info.pClearValues = &clearValue;
+		info.clearValueCount = 2;
+		VkClearValue clearValue [2] = {};
+		clearValue[0].color = {0.2f, 0.2f, 0.2f, 1.0f};
+		clearValue[1].depthStencil = {1.0f, 0};
+		info.pClearValues = clearValue;
 		//info.pClearValues				= &imgui.ImGuiWindow.ClearValue;
 		vkCmdBeginRenderPass(commandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
 	}
@@ -575,6 +608,8 @@ void RasterObject::Close(class GraphicsAPIManager& GAPI)
 	ClearModel(GAPI.VulkanDevice, meshBuffer);//they all use the same buffers
 
 	vkDestroyDescriptorPool(GAPI.VulkanDevice, objectDescriptorPool, nullptr);
+	vkDestroyDescriptorPool(GAPI.VulkanDevice, meshDescriptorPool, nullptr);
+
 
 	vkDestroyDescriptorSetLayout(GAPI.VulkanDevice, objectDescriptorLayout, nullptr);
 	vkDestroyPipelineLayout(GAPI.VulkanDevice, objectLayout, nullptr);

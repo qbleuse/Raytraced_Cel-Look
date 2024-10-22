@@ -141,6 +141,12 @@ public:
 		//The actual frames buffers of the swapchain. this is an array containing a number of VkImageViews equal to the number of frames.
 		//This is the interface that will allow us to write into the actual frames we want to present to the screen.
 		HeapMemory<VkImageView> VulkanBackColourBuffers;
+		//The depth buffers. this is an array containing a number of VkImage (with a minimum of 3)
+		HeapMemory<VkImage> VulkanDepthBuffers;
+		//memory where all depth buffer will be allocated.
+		VkDeviceMemory VulkanDepthBufferMemory{VK_NULL_HANDLE};
+		//the view object for the depth buffers
+		HeapMemory<VkImageView> VulkanDepthBufferViews;
 		//The nb of actual Vulkan framebuffers in the Vulkan swapchain at any given time (this can change between hardware)
 		uint32_t NbVulkanFrames{ 0 };
 
