@@ -16,7 +16,7 @@
 #include "Maths.h"
 
 /**
-* This class is the beginning and first scene of all good Graphics Project : a Rasterized Triangle !
+* This class is a scene to try to load a model and do all the thing a normal forward rasterized renderer would do.
 */
 class RasterObject : public Scene
 {
