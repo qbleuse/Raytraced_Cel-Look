@@ -359,7 +359,8 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 #endif
 
 	//Vulkan Physical Device chosen
-	VK_CALL_PRINT(vkCreateDevice(VulkanGPU, &deviceCreateInfo, nullptr, &VulkanDevice))
+	VK_CALL_PRINT(vkCreateDevice(VulkanGPU, &deviceCreateInfo, nullptr, &VulkanDevice));
+	RuntimeHandle.VulkanDevice = VulkanDevice;
 
 	//announce what GPU we end up with
 	{

@@ -846,7 +846,7 @@ void VulkanHelper::ClearModel(const VkDevice& VulkanDevice, Model& model)
 /* Images/Textures */
 
 
-bool VulkanHelper::CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, VkDeviceMemory& imageMemory, uint32_t width, uint32_t height, uint32_t depth, VkImageType imagetype, VkFormat format, VkImageUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryProperties)
+bool VulkanHelper::CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, VkDeviceMemory& imageMemory, uint32_t width, uint32_t height, uint32_t depth, VkImageType imagetype, VkFormat format, VkImageUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryProperties, uint32_t offset, bool AllocateMemory)
 {
 	//will stay the same if we suceed
 	VkResult result = VK_SUCCESS;
@@ -870,19 +870,23 @@ bool VulkanHelper::CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, V
 
 	VK_CALL_PRINT(vkCreateImage(VulkanUploader.VulkanDevice, &imageInfo, nullptr, &imageToMake));
 
-	//getting the necessary requirements to create our image
-	VkMemoryRequirements memRequirements;
-	vkGetImageMemoryRequirements(VulkanUploader.VulkanDevice, imageToMake, &memRequirements);
+	if (AllocateMemory)
+	{
+		//getting the necessary requirements to create our image
+		VkMemoryRequirements memRequirements;
+		vkGetImageMemoryRequirements(VulkanUploader.VulkanDevice, imageToMake, &memRequirements);
 
-	//trying to find a matching memory type between what the app wants and the device's limitation.
-	VkMemoryAllocateInfo allocInfo{};
-	allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	allocInfo.allocationSize = memRequirements.size;
-	allocInfo.memoryTypeIndex = GetMemoryTypeFromRequirements(memoryProperties, memRequirements, VulkanUploader.MemoryProperties);
+		//trying to find a matching memory type between what the app wants and the device's limitation.
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize = memRequirements.size;
+		allocInfo.memoryTypeIndex = GetMemoryTypeFromRequirements(memoryProperties, memRequirements, VulkanUploader.MemoryProperties);
 
-	//allocating and associate the memory to our image.
-	VK_CALL_PRINT(vkAllocateMemory(VulkanUploader.VulkanDevice, &allocInfo, nullptr, &imageMemory));
-	VK_CALL_PRINT(vkBindImageMemory(VulkanUploader.VulkanDevice, imageToMake, imageMemory, 0))
+		//allocating and associate the memory to our image.
+		VK_CALL_PRINT(vkAllocateMemory(VulkanUploader.VulkanDevice, &allocInfo, nullptr, &imageMemory));
+	}
+
+	VK_CALL_PRINT(vkBindImageMemory(VulkanUploader.VulkanDevice, imageToMake, imageMemory, offset))
 
 	return result == VK_SUCCESS;
 }

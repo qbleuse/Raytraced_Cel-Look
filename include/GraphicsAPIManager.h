@@ -10,6 +10,7 @@
 struct GAPIHandle
 {
 	/* Vulkan */
+	VkDevice					VulkanDevice;
 	VkQueue	VulkanQueues[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
 	HeapMemory<VkCommandBuffer>	VulkanCommand;
 	HeapMemory<VkSemaphore>		VulkanCanPresentSemaphore;

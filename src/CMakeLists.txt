@@ -6,7 +6,8 @@ set (SRC_FILES
 	"${CMAKE_CURRENT_SOURCE_DIR}/RasterTriangle.cpp" 
 	"${CMAKE_CURRENT_SOURCE_DIR}/VulkanHelper.cpp" 
 	"${CMAKE_CURRENT_SOURCE_DIR}/RasterObject.cpp" 
-	"${CMAKE_CURRENT_SOURCE_DIR}/ImGuiHelper.cpp")
+	"${CMAKE_CURRENT_SOURCE_DIR}/ImGuiHelper.cpp" 
+	"${CMAKE_CURRENT_SOURCE_DIR}/RaytraceCPU.cpp")
 
 # add to executable
 target_sources(VulkanLearning PUBLIC ${SRC_FILES})

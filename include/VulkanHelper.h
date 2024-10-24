@@ -202,7 +202,7 @@ namespace VulkanHelper
 
 	/* Images */
 
-	bool CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, VkDeviceMemory& imageMemory, uint32_t width, uint32_t height, uint32_t depth, VkImageType imagetype, VkFormat format, VkImageUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	bool CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, VkDeviceMemory& imageMemory, uint32_t width, uint32_t height, uint32_t depth, VkImageType imagetype, VkFormat format, VkImageUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, uint32_t offset = 0u, bool AllocateMemory = true);
 	bool UploadImage(Uploader& VulkanUploader, VkImage& imageToUploadTo, void* imageContent, uint32_t width, uint32_t height, uint32_t channels, uint32_t depth = 1);
 
 	/*

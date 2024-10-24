@@ -20,6 +20,7 @@
 #include "Scene.h"
 #include "RasterTriangle.h"
 #include "RasterObject.h"
+#include "RaytraceCPU.h"
 
 #include <cstdio>
 
@@ -230,9 +231,10 @@ int main()
 
 		//resources for main loop
 		AppWideContext AppContext;
-		LoopArray<Scene*> scenes(2);
+		LoopArray<Scene*> scenes(3);
 		scenes[0] = new RasterTriangle();
 		scenes[1] = new RasterObject();
+		scenes[2] = new RaytraceCPU();
 
 		//init our scenes
 		GAPI.PrepareForUpload();
