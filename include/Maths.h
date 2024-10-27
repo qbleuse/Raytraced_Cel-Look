@@ -50,6 +50,10 @@ struct vec2
 
 	__forceinline vec2& operator+=(const vec2& rhs) { x += rhs.x; y += rhs.y; return *this; }
 	__forceinline vec2& operator-=(const vec2& rhs) { x -= rhs.x; y -= rhs.y; return *this; }
+	__forceinline vec2& operator*=(const float& mult) { x *= mult; y *= mult; return *this; }
+	__forceinline vec2& operator/=(const float& div) { x -= div; y -= div; return *this; }
+
+	__forceinline vec2 operator-() const { return vec2{ -scalar[0], -scalar[1] }; }
 
 };
 
@@ -110,6 +114,10 @@ struct vec3
 
 	__forceinline vec3& operator+=(const vec3& rhs) { x += rhs.x; y += rhs.y; z += rhs.z; return *this; }
 	__forceinline vec3& operator-=(const vec3& rhs) { x -= rhs.x; y -= rhs.y; z -= rhs.z; return *this; }
+	__forceinline vec3& operator*=(const float& mult) { x *= mult; y *= mult; z *= mult; return *this; }
+	__forceinline vec3& operator/=(const float& div) { x -= div; y -= div; z -= div; return *this; }
+
+	__forceinline vec3 operator-() const { return vec3{ -scalar[0], -scalar[1], -scalar[2] }; }
 };
 
 /* typedef */
@@ -183,6 +191,10 @@ struct vec4
 
 	__forceinline vec4& operator+=(const vec4& rhs) { x += rhs.x; y += rhs.y; z += rhs.z; w += rhs.w; return *this; }
 	__forceinline vec4& operator-=(const vec4& rhs) { x -= rhs.x; y -= rhs.y; z -= rhs.z; w += rhs.w; return *this; }
+	__forceinline vec4& operator*=(const float& mult) { x *= mult; y *= mult; z *= mult; w *= mult;  return *this; }
+	__forceinline vec4& operator/=(const float& div) { x -= div; y -= div; z -= div; w *= div;  return *this; }
+
+	__forceinline vec4 operator-() const { return vec4{ -scalar[0], -scalar[1], -scalar[2], -scalar[3]}; }
 
 };
 

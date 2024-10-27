@@ -18,19 +18,38 @@
 		printf("Vulkan call error : %s ; result : %s .\n", #vk_call, string_VkResult(result));\
 	}\
 
+#define VK_CLEAR_RAW_ARRAY_NO_FREE(raw_array, size, call, device) \
+	if (raw_array != nullptr)\
+	{\
+		for (uint32_t i = 0; i < size; i++)\
+			if (raw_array[i] != nullptr)\
+			{\
+				call(device, raw_array[i], nullptr); \
+				raw_array[i] = nullptr;\
+			}\
+	}\
+
 #define VK_CLEAR_RAW_ARRAY(raw_array, size, call, device) \
 	if (raw_array != nullptr)\
 	{\
 		for (uint32_t i = 0; i < size; i++)\
-			call(device, raw_array[i], nullptr);\
-		delete [] raw_array;\
+			if (raw_array[i] != nullptr)\
+			{\
+				call(device, raw_array[i], nullptr); \
+				raw_array[i] = nullptr;\
+			}\
+		free(raw_array);\
 	}\
 
 #define VK_CLEAR_ARRAY(_array, size, call, device) \
 	if (_array != nullptr)\
 	{\
 		for (uint32_t i = 0; i < size; i++)\
-			call(device, _array[i], nullptr);\
+			if (_array[i] != nullptr)\
+			{\
+				call(device, _array[i], nullptr); \
+				_array[i] = nullptr;\
+			}\
 		_array.Clear();\
 	}\
 
@@ -113,8 +132,8 @@ namespace VulkanHelper
 	*/
 	struct StaticBufferHandle
 	{
-		VkBuffer		StaticGPUBuffer;
-		VkDeviceMemory	StaticGPUMemoryHandle;
+		VkBuffer		StaticGPUBuffer{VK_NULL_HANDLE};
+		VkDeviceMemory	StaticGPUMemoryHandle{ VK_NULL_HANDLE };
 	};
 
 	/* Creates all the pointers and handle vulkan needs to create a buffer on the GPU and creates a staging buffer to send the data */
@@ -146,7 +165,7 @@ namespace VulkanHelper
 				VkBuffer normals;
 				VkBuffer tangents;
 			};
-			VkBuffer vertexBuffers[4];
+			VkBuffer vertexBuffers[4] = { VK_NULL_HANDLE, VK_NULL_HANDLE , VK_NULL_HANDLE , VK_NULL_HANDLE };
 		};
 
 		union
@@ -163,7 +182,7 @@ namespace VulkanHelper
 
 		LoopArray<VkDeviceMemory> vertexMemoryHandle;
 
-		VkBuffer	indices;
+		VkBuffer	indices{ VK_NULL_HANDLE };
 		uint32_t	indicesNb;
 		uint32_t	indicesOffset;
 		VkIndexType indicesType;

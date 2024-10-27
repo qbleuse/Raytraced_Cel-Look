@@ -508,8 +508,10 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* fileName, L
 
 void VulkanHelper::ClearMesh(const VkDevice& VulkanDevice, Mesh& mesh)
 {
+	VK_CLEAR_RAW_ARRAY_NO_FREE(mesh.vertexBuffers, 4, vkDestroyBuffer, VulkanDevice);
+	if (mesh.indices != nullptr)
+		vkDestroyBuffer(VulkanDevice, mesh.indices, nullptr);
 	VK_CLEAR_ARRAY(mesh.vertexMemoryHandle, mesh.vertexMemoryHandle.Nb(), vkFreeMemory, VulkanDevice);
-	VK_CLEAR_RAW_ARRAY(mesh.vertexBuffers, 5, vkDestroyBuffer, VulkanDevice);
 }
 
 

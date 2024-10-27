@@ -268,6 +268,7 @@ void RaytraceCPU::ResizeVulkanResource(GraphicsAPIManager& GAPI, int32_t width, 
 	VK_CLEAR_ARRAY(ImageCopyBuffer, old_nb_frames, vkDestroyBuffer, GAPI.VulkanDevice);
 	VK_CLEAR_ARRAY(GPULocalImageViews, old_nb_frames, vkDestroyImageView, GAPI.VulkanDevice);
 	VK_CLEAR_ARRAY(GPULocalImageBuffers, old_nb_frames, vkDestroyImage, GAPI.VulkanDevice);
+	VK_CLEAR_ARRAY(fullscreenOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
 	MappedCPUImage.Clear();
 	raytracedImage.Clear();
 
@@ -329,7 +330,7 @@ void RaytraceCPU::ResizeVulkanResource(GraphicsAPIManager& GAPI, int32_t width, 
 	}
 
 	// the size of the fullscreen image's buffer : a fullscreen rgba texture
-	VkDeviceSize bufferSize = static_cast<VkDeviceSize>(fullscreenViewport.width * fullscreenViewport.height * 4.0f * sizeof(float));
+	VkDeviceSize bufferSize = static_cast<VkDeviceSize>(fullscreenViewport.width * fullscreenViewport.height * sizeof(vec4));
 
 
 	//allocate the memory for buffer and image
@@ -397,7 +398,7 @@ void RaytraceCPU::ResizeVulkanResource(GraphicsAPIManager& GAPI, int32_t width, 
 		VK_CALL_PRINT(vkCreateFramebuffer(GAPI.VulkanDevice, &framebufferInfo, nullptr, &fullscreenOutput[i]))
 
 		//create the buffer object that will be used to copy from CPU to GPU
-		VulkanHelper::CreateVulkanBuffer(GAPI.VulkanUploader, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, ImageCopyBuffer[i], ImageCopyMemory, ImageCopyBufferSize * i, false);
+		VulkanHelper::CreateVulkanBuffer(GAPI.VulkanUploader, ImageCopyBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, ImageCopyBuffer[i], ImageCopyMemory, ImageCopyBufferSize * i, false);
 
 		//create the image that will be used to write from texture to screen frame buffer
 		VulkanHelper::CreateImage(GAPI.VulkanUploader, GPULocalImageBuffers[i], GPULocalImageMemory, fullscreenScissors.extent.width, fullscreenScissors.extent.height, 1, VK_IMAGE_TYPE_2D, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, GPULocalImageBufferSize * i, false);
@@ -465,7 +466,7 @@ void RaytraceCPU::Act(AppWideContext& AppContext)
 	for (uint32_t h = 0; h < fullscreenScissors.extent.height; h++)
 		for (uint32_t w = 0; w < fullscreenScissors.extent.width; w++)
 		{
-			raytracedImage[h + w] = vec4{ (float)(w / fullscreenScissors.extent.width), (float)(h / fullscreenScissors.extent.height), 0.0f, 1.0f };
+			raytracedImage[(h * fullscreenScissors.extent.width) + w] = vec4{ ((float)w / (float)fullscreenScissors.extent.width), ((float)h / (float)fullscreenScissors.extent.height), 0.0f, 1.0f };
 		}
 
 }
@@ -474,25 +475,26 @@ void RaytraceCPU::Act(AppWideContext& AppContext)
 
 void RaytraceCPU::Show(GAPIHandle& GAPIHandle)
 {
-	VkResult err;
+	VkResult result;
 	VkCommandBuffer commandBuffer = GAPIHandle.GetCurrentVulkanCommand();
 	VkSemaphore		waitSemaphore = GAPIHandle.GetCurrentCanPresentSemaphore();
 	VkSemaphore		signalSemaphore = GAPIHandle.GetCurrentHasPresentedSemaphore();
 
 	//begin command buffer
 	{
-		err = vkResetCommandBuffer(commandBuffer, 0);
+		result = vkResetCommandBuffer(commandBuffer, 0);
 		//check_vk_result(err);
 		VkCommandBufferBeginInfo info = {};
 		info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-		err = vkBeginCommandBuffer(commandBuffer, &info);
+		result = vkBeginCommandBuffer(commandBuffer, &info);
 		//	check_vk_result(err);
 	}
 	//copy CPU Buffer into GPU Buffer
 	{
-		vkMapMemory(GAPIHandle.VulkanDevice, ImageCopyMemory, ImageCopyBufferSize * GAPIHandle.VulkanCurrentFrame, ImageCopyBufferSize, 0, &MappedCPUImage[GAPIHandle.VulkanCurrentFrame]);
-		memcpy(MappedCPUImage[GAPIHandle.VulkanCurrentFrame], *raytracedImage, ImageCopyBufferSize);
+		void* CPUMap;
+		VK_CALL_PRINT(vkMapMemory(GAPIHandle.VulkanDevice, ImageCopyMemory, ImageCopyBufferSize * GAPIHandle.VulkanCurrentFrame, ImageCopyBufferSize, 0, &CPUMap));
+		memcpy(CPUMap, *raytracedImage, ImageCopyBufferSize);
 		vkUnmapMemory(GAPIHandle.VulkanDevice, ImageCopyMemory);
 	}
 
@@ -523,6 +525,7 @@ void RaytraceCPU::Show(GAPIHandle& GAPIHandle)
 		copyRegion.imageExtent.width = fullscreenScissors.extent.width;
 		copyRegion.imageExtent.height = fullscreenScissors.extent.height;
 		copyRegion.imageExtent.depth = 1;
+		
 
 		vkCmdCopyBufferToImage(commandBuffer, ImageCopyBuffer[GAPIHandle.VulkanCurrentFrame], GPULocalImageBuffers[GAPIHandle.VulkanCurrentFrame], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
@@ -585,9 +588,9 @@ void RaytraceCPU::Show(GAPIHandle& GAPIHandle)
 		info.signalSemaphoreCount = 1;
 		info.pSignalSemaphores = &signalSemaphore;
 
-		err = vkEndCommandBuffer(commandBuffer);
+		result = vkEndCommandBuffer(commandBuffer);
 		//check_vk_result(err);
-		err = vkQueueSubmit(GAPIHandle.VulkanQueues[0], 1, &info, nullptr);
+		result = vkQueueSubmit(GAPIHandle.VulkanQueues[0], 1, &info, nullptr);
 		//check_vk_result(err);
 	}
 }
@@ -600,6 +603,7 @@ void RaytraceCPU::Close(GraphicsAPIManager& GAPI)
 	VK_CLEAR_ARRAY(ImageCopyBuffer, GAPI.NbVulkanFrames, vkDestroyBuffer, GAPI.VulkanDevice);
 	VK_CLEAR_ARRAY(GPULocalImageViews, GAPI.NbVulkanFrames, vkDestroyImageView, GAPI.VulkanDevice);
 	VK_CLEAR_ARRAY(GPULocalImageBuffers, GAPI.NbVulkanFrames, vkDestroyImage, GAPI.VulkanDevice);
+	VK_CLEAR_ARRAY(fullscreenOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
 	MappedCPUImage.Clear();
 	raytracedImage.Clear();
 

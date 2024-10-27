@@ -233,7 +233,7 @@ int main()
 		AppWideContext AppContext;
 		LoopArray<Scene*> scenes(3);
 		scenes[0] = new RasterTriangle();
-		scenes[1] = new RasterObject();
+		scenes[0] = new RasterObject();
 		scenes[2] = new RaytraceCPU();
 
 		//init our scenes

@@ -610,8 +610,8 @@ void RasterObject::Close(class GraphicsAPIManager& GAPI)
 	vkDestroyDescriptorPool(GAPI.VulkanDevice, objectDescriptorPool, nullptr);
 	vkDestroyDescriptorPool(GAPI.VulkanDevice, meshDescriptorPool, nullptr);
 
-
 	vkDestroyDescriptorSetLayout(GAPI.VulkanDevice, objectDescriptorLayout, nullptr);
+	vkDestroyDescriptorSetLayout(GAPI.VulkanDevice, samplerDescriptorLayout, nullptr);
 	vkDestroyPipelineLayout(GAPI.VulkanDevice, objectLayout, nullptr);
 	vkDestroyPipeline(GAPI.VulkanDevice, objectPipeline, nullptr);
 	vkDestroyRenderPass(GAPI.VulkanDevice, objectRenderPass, nullptr);
