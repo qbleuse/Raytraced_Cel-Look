@@ -13,6 +13,12 @@
 #define DEGREES_TO_RADIANS static_cast<float>(M_PI)/180.0f
 #define RADIANS_TO_DEGREES 180.0f/static_cast<float>(M_PI)
 
+//utility funciton returning a random number between 0.0f and 1.0f
+__forceinline float randf()
+{
+	return static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+}
+
 /* struct representing a mathematical 2 dimensional vector. it has been made to resemble the one you may encounter in glsl or hlsl. */
 struct vec2
 {
@@ -66,8 +72,12 @@ typedef vec2 Vec2;
 
 __forceinline vec2 operator+(const vec2& lhs, const vec2& rhs) { return {{lhs.x + rhs.x, lhs.y + rhs.y}}; }
 __forceinline vec2 operator-(const vec2& lhs, const vec2& rhs) { return {{lhs.x - rhs.x, lhs.y - rhs.y}}; }
-__forceinline vec2 operator*(const vec2& vec, const float& scalar) { return { {vec.x * scalar, vec.y * scalar} }; }
+__forceinline vec2 operator*(const vec2& lhs, const vec2& rhs) { return { {lhs.x * rhs.x, lhs.y * rhs.y} }; }
+__forceinline vec2 operator/(const vec2& lhs, const vec2& rhs) { return { {lhs.x / rhs.x, lhs.y / rhs.y} }; }
 
+
+__forceinline vec2 operator*(const vec2& vec, const float& scalar) { return { {vec.x * scalar, vec.y * scalar} }; }
+__forceinline vec2 operator/(const vec2& vec, const float& scalar) { return { {vec.x / scalar, vec.y / scalar} }; }
 
 __forceinline float dot(const vec2& lhs, const vec2& rhs) { return lhs.x * rhs.x + lhs.y * rhs.y; }
 __forceinline float length(const vec2& vec) { return vec.x + vec.y == 0 ? 0 : sqrtf(vec.x * vec.x + vec.y * vec.y); }
@@ -129,7 +139,11 @@ typedef vec3 Vec3;
 
 __forceinline vec3 operator+(const vec3& lhs, const vec3& rhs) { return {{lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z}}; }
 __forceinline vec3 operator-(const vec3& lhs, const vec3& rhs) { return {{lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z}}; }
+__forceinline vec3 operator*(const vec3& lhs, const vec3& rhs) { return { {lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z} }; }
+__forceinline vec3 operator/(const vec3& lhs, const vec3& rhs) { return { {lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z} }; }
+
 __forceinline vec3 operator*(const vec3& vec, const float& scalar) { return { {vec.x * scalar, vec.y * scalar, vec.z * scalar} }; }
+__forceinline vec3 operator/(const vec3& vec, const float& scalar) { return { {vec.x / scalar, vec.y / scalar, vec.z / scalar} }; }
 
 __forceinline float dot(const vec3& lhs, const vec3& rhs) { return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z; }
 __forceinline float length(const vec3& vec) { return vec.x + vec.y + vec.z == 0.0f ? 0.0f : sqrtf(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z); }
@@ -205,10 +219,14 @@ typedef vec4 Vec4;
 
 /* math operation */
 
-__forceinline vec4 operator+(const vec4& lhs, const vec4& rhs) { return {{lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z, lhs.w + rhs.z}}; }
-__forceinline vec4 operator-(const vec4& lhs, const vec4& rhs) { return {{lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z, lhs.w - rhs.z}}; }
-__forceinline vec4 operator*(const vec4& vec, const float& scalar) { return { {vec.x * scalar, vec.y * scalar, vec.z * scalar, vec.w * scalar} }; }
+__forceinline vec4 operator+(const vec4& lhs, const vec4& rhs) { return {{lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z, lhs.w + rhs.w}}; }
+__forceinline vec4 operator-(const vec4& lhs, const vec4& rhs) { return {{lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z, lhs.w - rhs.w}}; }
+__forceinline vec4 operator*(const vec4& lhs, const vec4& rhs) { return { {lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z, lhs.w * rhs.w} }; }
+__forceinline vec4 operator/(const vec4& lhs, const vec4& rhs) { return { {lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z, lhs.w / rhs.w} }; }
 
+
+__forceinline vec4 operator*(const vec4& vec, const float& scalar) { return { {vec.x * scalar, vec.y * scalar, vec.z * scalar, vec.w * scalar} }; }
+__forceinline vec4 operator/(const vec4& vec, const float& scalar) { return { {vec.x / scalar, vec.y / scalar, vec.z / scalar, vec.w / scalar} }; }
 
 __forceinline float dot(const vec4& lhs, const vec4& rhs) { return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w; }
 __forceinline float length(const vec4& vec) { return vec.x + vec.y + vec.z + vec.w == 0.0f ? 0.0f : sqrtf(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z + vec.w * vec.w); }

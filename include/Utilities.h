@@ -177,6 +177,11 @@ public:
 
 	SmartHeapMemory() = default;
 
+	SmartHeapMemory(T* raw_data) :
+		HeapMemory<T>{ raw_data }
+	{
+	}
+
 	SmartHeapMemory(uint32_t nb) :
 		_raw_data{ new T[nb]; }
 	{

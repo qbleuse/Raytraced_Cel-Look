@@ -254,6 +254,10 @@ void RaytraceCPU::Prepare(GraphicsAPIManager& GAPI)
 
 	PrepareVulkanScripts(GAPI, VertexShader, FragmentShader);
 	PrepareVulkanProps(GAPI, VertexShader, FragmentShader);
+
+	scene.Alloc(2);
+	scene[0] = new sphere(vec3{ 0.0f,0.0f,-1.0f }, 0.5f);
+	scene[1] = new sphere(vec3{ 0.0f,-100.5f,-1.0f }, 90.0f);
 }
 
 
@@ -461,12 +465,62 @@ void RaytraceCPU::Resize(GraphicsAPIManager& GAPI, int32_t old_width, int32_t ol
 
 /*==== Act =====*/
 
+vec4 GetRayColor(const ray& incoming)
+{
+	float backgroundGradient = 0.5f * (incoming.direction.y + 1.0f);
+	return vec4{ 1.0f, 1.0f, 1.0f, 1.0f } * (1.0f - backgroundGradient) + vec4 { 0.3f, 0.7f, 1.0f, 1.0f } * backgroundGradient;
+}
+
 void RaytraceCPU::Act(AppWideContext& AppContext)
 {
+	//2D viewport values
+	float windowHeight	= static_cast<float>(fullscreenScissors.extent.height);
+	float windowWidth	= static_cast<float>(fullscreenScissors.extent.width);
+	float aspectRatio	= windowWidth / windowHeight;
+
+	//3D viewport and Camera values
+	float focalLength = 1.0f;
+	float viewportHeight = 2.0f;
+	float viewportWidth = viewportHeight * (windowWidth / windowHeight);
+	const vec3& cameraCenter = AppContext.camera_pos;
+
+	//The ray generation sample vectors
+	vec3 viewportU = vec3{viewportWidth, 0.0f, 0.0f};
+	vec3 viewportV = vec3{0.0f, -viewportHeight, 0.0f };
+	vec3 pixelDeltaU = viewportU / windowWidth;
+	vec3 pixelDeltaV = viewportV / windowHeight;
+
+	//first sample dir and sample steps
+	vec3 viewportUpperLeft = cameraCenter - vec3{ 0,0,focalLength } - (viewportU * 0.5f) - (viewportV * 0.5f);
+	vec3 firstPixel = viewportUpperLeft + ((pixelDeltaU + pixelDeltaV) * 0.5f);
+
 	for (uint32_t h = 0; h < fullscreenScissors.extent.height; h++)
 		for (uint32_t w = 0; w < fullscreenScissors.extent.width; w++)
 		{
-			raytracedImage[(h * fullscreenScissors.extent.width) + w] = vec4{ ((float)w / (float)fullscreenScissors.extent.width), ((float)h / (float)fullscreenScissors.extent.height), 0.0f, 1.0f };
+			//first get the pixel's "3D position"
+			vec3 pixelCenter = firstPixel + pixelDeltaU * (float)(w) + pixelDeltaV * (float)(h);
+			//create a direction from the camera's position to the 3D viewport for this pixel
+			vec3 rayDir = normalize(pixelCenter - cameraCenter);//normalizing is very slow, we'll still do it, but you may want to ignore it
+
+			ray pixelRay = ray{ pixelCenter, rayDir };
+
+			float hasHit = false;
+			hit_record final_hit{};
+			final_hit.distance = FLT_MAX;
+			for (uint32_t i = 0; i < scene.Nb(); i++)
+			{
+				hit_record iHit{};
+				if (scene[i]->hit(pixelRay, iHit))
+				{
+					if (iHit.distance < final_hit.distance)
+					{
+						final_hit = iHit;
+						hasHit = true;
+					}
+				}
+			}
+
+			raytracedImage[(h * fullscreenScissors.extent.width) + w] = hasHit ? final_hit.shade : GetRayColor(pixelRay);
 		}
 
 }

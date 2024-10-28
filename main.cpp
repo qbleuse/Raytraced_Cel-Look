@@ -23,6 +23,7 @@
 #include "RaytraceCPU.h"
 
 #include <cstdio>
+#include <time.h>
 
 //directly taken from imgui
 static void glfw_error_callback(int error, const char* description)
@@ -187,6 +188,9 @@ int main()
 	if (!glfwInit())
 		return 1;
 
+	//seed rand generator
+	srand(static_cast<uint32_t>(time(0)));
+
 	//this is so that destructor are called before the end of the program
 	{
 
@@ -233,7 +237,7 @@ int main()
 		AppWideContext AppContext;
 		LoopArray<Scene*> scenes(3);
 		scenes[0] = new RasterTriangle();
-		scenes[0] = new RasterObject();
+		scenes[1] = new RasterObject();
 		scenes[2] = new RaytraceCPU();
 
 		//init our scenes
@@ -244,7 +248,7 @@ int main()
 			scenes[i]->Resize(GAPI,GAPI.VulkanWidth,GAPI.VulkanHeight,GAPI.NbVulkanFrames);
 		}
 		GAPI.SubmitUpload();
-		AppContext.proj_mat = ro_perspective_proj(GAPI.VulkanWidth, GAPI.VulkanHeight, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
+		AppContext.proj_mat = ro_perspective_proj(static_cast<float>(GAPI.VulkanWidth), static_cast<float>(GAPI.VulkanHeight), AppContext.fov, AppContext.near_plane, AppContext.far_plane);
 
 		while (!glfwWindowShouldClose(GAPI.VulkanWindow))
 		{

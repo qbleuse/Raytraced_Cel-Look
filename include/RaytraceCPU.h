@@ -11,8 +11,7 @@
 #include "AppWideContext.h"
 
 //utilities include
-#include "Utilities.h"
-#include "Maths.h"
+#include "RaytracingHelper.h"
 
 /**
 * This class is a scene to do the Raytracing in One Week-End tutorial.
@@ -93,7 +92,8 @@ public:
 	virtual void Close(class GraphicsAPIManager& GAPI)final;
 
 	// the cpu image. should be of size width * height
-	HeapMemory<vec4> raytracedImage;
+	HeapMemory<vec4>		raytracedImage;
+	LoopArray<hittable*>	scene;
 
 
 public:
