@@ -19,6 +19,12 @@ __forceinline float randf()
 	return static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
 }
 
+//utility funciton returning a random number between 0.0f and 1.0f
+__forceinline float randf(float min, float max)
+{
+	return min + (max - min) * (static_cast<float>(rand()) / static_cast<float>(RAND_MAX));
+}
+
 /* struct representing a mathematical 2 dimensional vector. it has been made to resemble the one you may encounter in glsl or hlsl. */
 struct vec2
 {

@@ -13,6 +13,127 @@
 //utilities include
 #include "RaytracingHelper.h"
 
+#define RAY_TO_COMPUTE_PER_FRAME 500
+
+
+class FirstContactRaytraceJob : public ThreadJob
+{
+public:
+	bool*					ended{ nullptr };
+	ray_compute*			computes{ nullptr };
+	uint32_t				computesNb{ 0 };
+	LoopArray<hittable*>*	hittables{ nullptr };
+	Queue<ray_compute>*		newRays{ nullptr };
+
+	__forceinline vec4 GetRayColor(const ray& incoming)
+	{
+		float backgroundGradient = 0.5f * (incoming.direction.y + 1.0f);
+		return vec4{ 1.0f, 1.0f, 1.0f, 1.0f } *(1.0f - backgroundGradient) + vec4{ 0.3f, 0.7f, 1.0f, 1.0f } *backgroundGradient;
+	}
+
+	__forceinline void Execute()override
+	{
+		LoopArray<hittable*>& scene = *hittables;
+		for (uint32_t i = 0; i < computesNb; i++)
+		{
+			const ray_compute& indexedComputedRay = computes[i];
+
+			float hasHit = false;
+			hit_record final_hit{};
+			final_hit.distance = FLT_MAX;
+			for (uint32_t i = 0; i < scene.Nb(); i++)
+			{
+				hit_record iHit{};
+				if (scene[i]->hit(indexedComputedRay.launched, iHit))
+				{
+					if (iHit.distance < final_hit.distance)
+					{
+						final_hit = iHit;
+						hasHit = true;
+					}
+				}
+			}
+
+			*indexedComputedRay.pixel = hasHit ? final_hit.shade : GetRayColor(indexedComputedRay.launched);
+
+			if (newRays)
+			{
+				ray_compute newCompute{};
+				ray newRay{ final_hit.hit_point, final_hit.hit_normal};
+				newRay.direction = newRay.direction + vec3{ randf(-1.0f, 1.0f), randf(-1.0f, 1.0f), randf(-1.0f, 1.0f) };
+
+				newCompute.launched = newRay;
+				newCompute.pixel	= indexedComputedRay.pixel;
+
+				newRays->Push(newCompute);
+			}
+		}
+
+		if (ended)
+			*ended = true;
+	}
+};
+
+class DiffuseRaytraceJob : public ThreadJob
+{
+public:
+	bool*					ended{ nullptr };
+	ray_compute*			computes{ nullptr };
+	uint32_t				computesNb{ 0 };
+	LoopArray<hittable*>*	hittables{ nullptr };
+	Queue<ray_compute>*		newRays{ nullptr };
+
+	__forceinline vec4 GetRayColor(const ray& incoming)
+	{
+		float backgroundGradient = 0.5f * (incoming.direction.y + 1.0f);
+		return vec4{ 1.0f, 1.0f, 1.0f, 1.0f } *(1.0f - backgroundGradient) + vec4{ 0.3f, 0.7f, 1.0f, 1.0f } *backgroundGradient;
+	}
+
+	__forceinline void Execute()override
+	{
+		LoopArray<hittable*>& scene = *hittables;
+		for (uint32_t i = 0; i < computesNb; i++)
+		{
+			const ray_compute& indexedComputedRay = computes[i];
+
+			float hasHit = false;
+			hit_record final_hit{};
+			final_hit.distance = FLT_MAX;
+			for (uint32_t i = 0; i < scene.Nb(); i++)
+			{
+				hit_record iHit{};
+				if (scene[i]->hit(indexedComputedRay.launched, iHit))
+				{
+					if (iHit.distance < final_hit.distance)
+					{
+						final_hit = iHit;
+						hasHit = true;
+					}
+				}
+			}
+
+			vec4 color = *indexedComputedRay.pixel;
+			*indexedComputedRay.pixel = hasHit ? final_hit.shade * color : GetRayColor(indexedComputedRay.launched) * color;
+
+			if (newRays)
+			{
+				ray_compute newCompute{};
+				ray newRay{ final_hit.hit_point, final_hit.hit_normal };
+				newRay.direction = newRay.direction + vec3{ randf(-1.0f, 1.0f), randf(-1.0f, 1.0f), randf(-1.0f, 1.0f) };
+
+				newCompute.launched = newRay;
+				newCompute.pixel = indexedComputedRay.pixel;
+
+				newRays->Push(newCompute);
+			}
+		}
+
+		if (ended)
+			*ended = true;
+	}
+};
+
+
 /**
 * This class is a scene to do the Raytracing in One Week-End tutorial.
 * Doing the actual rendering on CPU then copying the image onto the GPU afterwards
@@ -87,16 +208,27 @@ public:
 
 	virtual void Act(struct AppWideContext& AppContext)final;
 
+	void DispatchSceneRay(struct AppWideContext& AppContext);
+
 	virtual void Show(GAPIHandle& GAPIHandle)final;
 
 	virtual void Close(class GraphicsAPIManager& GAPI)final;
 
 	// the cpu image. should be of size width * height
 	HeapMemory<vec4>		raytracedImage;
+
+	//the objects in our scene
 	LoopArray<hittable*>	scene;
 
+	//the pending work executed in act each frames
+	Queue<ray_compute>		rayToCompute;
 
-public:
+	//how many rays should we compute per frame refresh ?
+	uint32_t computePerFrames{ RAY_TO_COMPUTE_PER_FRAME };
+
+	//need to recompute the frame
+	bool needRefresh{ true };
+
 };
 
 

@@ -8,7 +8,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <memory.h>
-
+#include <thread>
+#include <mutex>
+#include <condition_variable>
 
 /**
 * A simple class representing an allocated RAM memory block, in C format.
@@ -58,15 +60,15 @@ public:
 		return _raw_data[i];
 	}
 
-	__forceinline T** operator&()
-	{
-		return &_raw_data;
-	}
+	//__forceinline T** operator&()
+	//{
+	//	return &_raw_data;
+	//}
 
-	__forceinline T*const* operator&()const
-	{
-		return &_raw_data;
-	}
+	//__forceinline T*const* operator&()const
+	//{
+	//	return &_raw_data;
+	//}
 
 	__forceinline T* operator*()const
 	{
@@ -410,10 +412,416 @@ public:
 			//make next node to clear current node
 			iNode = prevNode;
 		} while (iNode != nullptr);
+
+		head = nullptr;
+		toe = nullptr;
+		nb = 0;
 	}
 };
 
+#define QUEUE_NODE_CAPACITY 100
+
+/**
+* A simple class representing the familiar queue container.
+* This queue will work in FIFO (First-in First-Out).
+* As for memory it will not be contiguous, to avoid huge copy of memory.
+* This queue also expects that value will be pushed as batches (though one at a time will work too).
+*/
+template<typename T>
+class Queue
+{
+private:
+	struct QueueNode
+	{
+		T* data{ nullptr };
+
+		uint32_t index{ 0 };
+		uint32_t nb{ 0 };
+
+		__forceinline T* GetCurrent()const
+		{
+			return &data[index];
+		}
+	};
+
+	List<QueueNode> nodes;
+	uint32_t nb{ 0 };
 
 
+public:
+	/*===== Manipulation =====*/
+
+	//pushing a new data. as this is a copy, the data is considered to not being yet allocated.
+	__forceinline void Push(const T& data)
+	{
+		//creating the node
+		QueueNode newNode{};
+		newNode.data = (T*)malloc(sizeof(T));
+		*newNode.data = data;
+		newNode.nb = 1;
+
+		//pushing it into the list
+		nodes.Add(newNode);
+
+		nb++;
+	}
+
+	//pushing a new batch. the batch is considered to be allocated.
+	__forceinline void PushBatch(T* batch, uint32_t batchNb)
+	{
+		//creating the node
+		QueueNode newNode{};
+		newNode.data = batch;
+		newNode.nb = batchNb;
+
+		//pushing it into the list
+		nodes.Add(newNode);
+
+		nb += batchNb;
+	}
+
+	//pops a single data. is nullptr if queue is empty.
+	__forceinline T* Pop()
+	{
+		if (nb <= 0)
+			return;
+
+		QueueNode& headNode = nodes.GetHead()->data;
+		T* data = headNode.GetCurrent();
+		headNode.index++;
+
+		if (headNode.index >= headNode.nb)
+			nodes.Remove(headNode, false);
+
+		nb--;
+
+		return data;
+	}
+
+	//pops a batch. we cannot guarantee that you'll get all the requested data in the returned array, 
+	//therefore the nb you get is given in return ; as such you may need to call the method multiple times
+	__forceinline T* PopBatch(uint32_t& wantedBatchNb)
+	{
+		if (nb <= 0)
+		{
+			wantedBatchNb = 0;
+			return nullptr;
+		}
+
+		QueueNode& headNode = nodes.GetHead()->data;
+		uint32_t remaining = (headNode.nb - headNode.index);
+		if (remaining < wantedBatchNb)
+			wantedBatchNb = remaining;
+
+		T* data = headNode.GetCurrent();
+		headNode.index += wantedBatchNb;
+
+		if (headNode.index >= headNode.nb)
+			nodes.Remove(nodes.GetHead(), false);
+
+		nb -= wantedBatchNb;
+
+		return data;
+	}
+
+	/*===== Accessor =====*/
+
+	__forceinline uint32_t GetNb()const
+	{
+		return nb;
+	}
+
+	/*===== Memory Management =====*/
+
+	__forceinline void Clear(bool shouldFree = true)
+	{
+		//no need if already empty
+		if (nb <= 0)
+			return;
+
+		if (shouldFree)
+		{
+			//if we're not empty, there is a head
+			List<QueueNode>::ListNode* indexedNode = nodes.GetHead();
+
+			while (indexedNode != nullptr)
+			{
+				free(indexedNode->data.data);
+				indexedNode = indexedNode->next;
+			}
+		}
+
+		nodes.Clear();
+		nb = 0;
+	}
+
+};
+
+/**
+* A simple class representing the familiar queue container.
+* This queue will work in FIFO (First-in First-Out).
+* As for memory it will not be contiguous, to avoid huge copy of memory.
+* This queue also expects that value will be pushed as batches (though one at a time will work too).
+* It is smart, as such it uses "new" operator rather the malloc.
+*/
+template<typename T>
+class SmartQueue
+{
+private:
+	struct QueueNode
+	{
+		T* data{ nullptr };
+
+		uint32_t index{ 0 };
+		uint32_t nb{ 0 };
+
+		__forceinline T* GetCurrent()const
+		{
+			return &data[index];
+		}
+	};
+
+	List<QueueNode> nodes;
+	uint32_t nb{ 0 };
+
+
+public:
+	/*===== Manipulation =====*/
+
+	//pushing a new data. as this is a copy, the data is considered to not being yet allocated.
+	__forceinline void Push(const T& data)
+	{
+		//creating the node
+		QueueNode newNode{};
+		newNode.data = new T(data);
+		newNode.nb = 1;
+
+		//pushing it into the list
+		nodes.Add(newNode);
+
+		nb++;
+	}
+
+	//pushing a new data. as this is a copy, the data is considered to not being yet allocated.
+	//this one exists only for polymorphism
+	template<typename PolyT>
+	__forceinline void Push(const PolyT& data)
+	{
+		//creating the node
+		QueueNode newNode{};
+		newNode.data = (T*)(new PolyT(data));
+		newNode.nb = 1;
+
+		//pushing it into the list
+		nodes.Add(newNode);
+
+		nb++;
+	}
+
+	//pushing a new batch. the batch is considered to be allocated.
+	__forceinline void PushBatch(T* batch, uint32_t batchNb)
+	{
+		//creating the node
+		QueueNode newNode{};
+		newNode.data = batch;
+		newNode.nb = batchNb;
+
+		//pushing it into the list
+		nodes.Add(newNode);
+
+		nb += batchNb;
+	}
+
+	//pops a single data. is nullptr if queue is empty.
+	__forceinline T* Pop()
+	{
+		if (nb <= 0)
+			return nullptr;
+
+		QueueNode& headNode = nodes.GetHead()->data;
+		T* data = headNode.GetCurrent();
+		headNode.index++;
+
+		if (headNode.index >= headNode.nb)
+			nodes.Remove(nodes.GetHead(), false);
+
+		nb--;
+
+		return data;
+	}
+
+	//pops a batch. we cannot guarantee that you'll get all the requested data in the returned array, 
+	//therefore the nb you get is given in return ; as such you may need to call the method multiple times
+	__forceinline T* PopBatch(uint32_t& wantedBatchNb)
+	{
+		if (nb <= 0)
+		{
+			wantedBatchNb = 0;
+			return nullptr;
+		}
+
+		QueueNode& headNode = nodes.GetHead()->data;
+		uint32_t remaining = (headNode.nb - headNode.index);
+		if (remaining < wantedBatchNb)
+			wantedBatchNb = remaining;
+
+		T* data = headNode.GetCurrent();
+		headNode.index += wantedBatchNb;
+
+		if (headNode.index >= headNode.nb)
+			nodes.Remove(nodes.GetHead(), false);
+
+		nb -= wantedBatchNb;
+
+		return data;
+	}
+
+	/*===== Accessor =====*/
+
+	__forceinline uint32_t GetNb()const
+	{
+		return nb;
+	}
+
+	/*===== Memory Management =====*/
+
+	__forceinline void Clear(bool shouldFree = true)
+	{
+		//no need if already empty
+		if (nb <= 0)
+			return;
+
+		if (shouldFree)
+		{
+			//if we're not empty, there is a head
+			List<QueueNode>::ListNode* indexedNode = nodes.GetHead();
+
+			while (indexedNode != nullptr)
+			{
+				delete indexedNode->data.data;
+				indexedNode = indexedNode->next;
+			}
+		}
+
+		nodes.Clear();
+		nb = 0;
+	}
+
+};
+
+class ThreadJob
+{
+public:
+	virtual void Execute() = 0;
+};
+
+class ThreadPool
+{
+private:
+	std::mutex					jobs_mutex;
+	SmartQueue<ThreadJob>		jobs;
+	LoopArray<std::thread>		threads;
+	std::condition_variable_any	thread_wait;
+
+	bool killThread{ false };
+
+public:
+
+	__forceinline void ThreadLoop()
+	{
+		ThreadJob* job = nullptr;
+		while (!killThread)
+		{
+			{
+				//locks the mutex to try to get a job
+				jobs_mutex.lock();
+
+				//waits for a job to be available
+				thread_wait.wait(jobs_mutex, [this]() {return jobs.GetNb() > 0 || killThread; });
+
+				//gets the job
+				job = jobs.Pop();
+
+				//unlocks the mutex
+				jobs_mutex.unlock();
+			}
+
+			if (job != nullptr)
+			{
+				job->Execute();
+				delete job;
+			}
+
+		}
+	}
+
+	/*===== Manipulation =====*/
+
+	template<typename Job>
+	__forceinline void Add(const Job& job)
+	{
+		{
+			//locks the mutex to try to get a job
+			jobs_mutex.lock();
+
+			//add a new job to do
+			jobs.Push(job);
+
+			//unlocks the mutex
+			jobs_mutex.unlock();
+		}
+		thread_wait.notify_one();
+	}
+
+
+	/*===== Accessor =====*/
+
+	__forceinline uint32_t GetJobsNb()const
+	{
+		return jobs.GetNb();
+	}
+
+	__forceinline uint32_t GetThreadsNb()const
+	{
+		return threads.Nb();
+	}
+
+	/*===== Memory Management =====*/
+
+	__forceinline void MakeThreads(uint32_t threadsNb)
+	{
+		killThread = false;
+		threads.Alloc(threadsNb);
+
+		for (uint32_t i = 0; i < threads.Nb(); i++)
+		{
+			threads[i] = std::thread(&ThreadPool::ThreadLoop, this);
+		}
+	}
+
+	__forceinline void Clear()
+	{
+		{
+			jobs_mutex.lock();
+
+			//say we want them to stop
+			killThread = true;
+
+			jobs_mutex.unlock();
+		}
+
+		//let them know we want them to stop
+		thread_wait.notify_all();
+
+		//wait for the m to stop
+		for (uint32_t i = 0; i < threads.Nb(); i++)
+		{
+			threads[i].join();
+		}
+		//then clear
+		threads.Clear();
+		jobs.Clear();
+	}
+};
 
 #endif //__UTILITIES_H__

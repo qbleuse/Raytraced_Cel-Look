@@ -54,7 +54,7 @@
 	}\
 
 #define VK_CLEAR_LIST(_list, size, call, device) \
-	if (_list.GetHead() != nullptr)\
+	if (_list.GetNb() > 0)\
 	{\
 		auto start = _list.GetHead();\
 		for (uint32_t i = 0; i < size; i++)\

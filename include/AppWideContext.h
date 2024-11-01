@@ -44,6 +44,9 @@ struct AppWideContext
 	//the camera's view matrix
 	mat4		view_mat = uniform_scale(1.0f);
 
+	//a threadPool that can be used throughout the program
+	ThreadPool threadPool{};
+
 };
 
 

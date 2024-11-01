@@ -36,6 +36,18 @@ struct hit_record
 	vec4 shade{};
 };
 
+
+/*
+* a simple struct to represent a way for the system to ask for the compute of a ray with the scene
+*/
+struct ray_compute
+{
+	//said launched ray that we need to compute if it hits anything
+	ray launched{};
+	//the final pixel we want to shade
+	vec4* pixel{ nullptr };
+};
+
 /*
 * the simple virtual interface representation of a object that can be hit by a ray in 3D space
 */
@@ -100,7 +112,6 @@ struct sphere : public hittable
 		record.hit_point	= incomming.at(record.distance);
 		record.hit_normal	= (record.hit_point - center) / radius;//this is a normalized vector
 		record.shade		= shading(record);
-
 		return true;
 	}
 
