@@ -104,7 +104,7 @@ struct sphere : public hittable
 		float root_1 = h + sqrt_discriminant;
 		float root_2 = h - sqrt_discriminant;
 
-		if (root_1 < 0.0f && root_2 < 0.0f)
+		if (root_1 < 0.01f && root_2 < 0.01f)
 			return false;
 
 		//choosing our closest root
@@ -118,7 +118,7 @@ struct sphere : public hittable
 	//a method to implement what color does the hit returns
 	__forceinline virtual vec4 shading(const hit_record& record)override
 	{
-		return vec4{ record.hit_normal.x, record.hit_normal.y, record.hit_normal.z, 1.0f };
+		return vec4{ 0.7f, 0.8f, 0.5f, 1.0f };
 	}
 };
 

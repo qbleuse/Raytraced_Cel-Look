@@ -257,7 +257,7 @@ void RaytraceCPU::Prepare(GraphicsAPIManager& GAPI)
 
 	scene.Alloc(2);
 	scene[0] = new sphere(vec3{ 0.0f,0.0f,-1.0f }, 0.5f);
-	scene[1] = new sphere(vec3{ 0.0f,-100.5f,-1.0f }, 90.0f);
+	scene[1] = new sphere(vec3{ 0.0f,-100.5f,-1.0f }, 100.0f);
 }
 
 
@@ -528,6 +528,8 @@ void RaytraceCPU::DispatchSceneRay(AppWideContext& AppContext)
 			newJob.computesNb = computeNb;
 			newJob.hittables = &scene;
 			newJob.newRays = &rayToCompute;
+			newJob.newRaysFence = &queue_fence;
+			newJob.newRays_wait = &queue_wait;
 
 			AppContext.threadPool.Add(newJob);
 		}
@@ -558,25 +560,35 @@ void RaytraceCPU::Act(AppWideContext& AppContext)
 	if (needRefresh || AppContext.in_camera_mode)
 		DispatchSceneRay(AppContext);
 
-	//for (uint32_t i = 0; i < computePerFrames; i++)//AppContext.threadPool.GetThreadsNb(); i++)
-	//{
-	//	uint32_t computeNb = computePerFrames;
-	//	ray_compute* computes = rayToCompute.PopBatch(computeNb);
-	//
-	//	if (computeNb > 0)
-	//	{
-	//		DiffuseRaytraceJob newJob;
-	//		newJob.ended = nullptr;
-	//		newJob.computes = computes;
-	//		newJob.computesNb = computeNb;
-	//		newJob.hittables = &scene;
-	//		newJob.newRays = &rayToCompute;
-	//
-	//		AppContext.threadPool.Add(newJob);
-	//	}
-	//	else
-	//		break;
-	//}
+	queue_fence.lock();
+
+	//queue_wait.wait(queue_fence);
+
+	for (uint32_t i = 0; i < AppContext.threadPool.GetThreadsNb(); i++)
+	{
+		uint32_t computeNb = computePerFrames;
+		ray_compute* computes = rayToCompute.PopBatch(computeNb);
+	
+		if (computeNb > 0)
+		{
+			DiffuseRaytraceJob newJob;
+			newJob.ended = nullptr;
+			newJob.computes = computes;
+			newJob.computesNb = computeNb;
+			newJob.hittables = &scene;
+			newJob.newRays = &rayToCompute;
+			newJob.newRaysFence = &queue_fence;
+			newJob.newRays_wait = &queue_wait;
+	
+			AppContext.threadPool.Add(newJob);
+		}
+		else
+			break;
+	}
+
+	queue_fence.unlock();
+
+	//queue_wait.notify_one();
 }
 
 /*==== Show =====*/
