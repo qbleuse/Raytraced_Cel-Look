@@ -567,7 +567,7 @@ bool LoadGLTFMaterialInGPU(Uploader& VulkanUploader, const tinygltf::Model& load
 			break;
 		default:
 			imageFormat = VK_FORMAT_UNDEFINED;
-			printf("error when loading %s, with %d channels.\n is the path correct?", image.uri, image.component);
+                printf("error when loading %s, with %d channels.\n is the path correct?", image.uri.c_str(), image.component);
 			return false;
 		}
 

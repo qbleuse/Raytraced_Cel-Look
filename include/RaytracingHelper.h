@@ -66,7 +66,7 @@ struct hittable
 struct material
 {
 	//a method to implement the reflected ray from a hit.
-	// /!\ careful, calling twice this method with the same parameter may not have the same result /!\ 
+	// careful, calling twice this method with the same parameter may not have the same result
 	virtual ray reflect(const hit_record& record) = 0;
 
 	//a method to implement what color does the hit returns

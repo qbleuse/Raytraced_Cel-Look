@@ -13,6 +13,10 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 project ("VulkanLearning")
 
+#we at least need C++ 11 (with imgui dependency)
+#set_property(TARGET VulkanLearning PROPERTY CXX_STANDARD 11)
+set (CMAKE_CXX_STANDARD 11)
+
 #define project directory
 set(SRC_DIR "${CMAKE_SOURCE_DIR}/src")
 set(DEPS_DIR "${CMAKE_SOURCE_DIR}/deps")

@@ -124,27 +124,29 @@ protected:
 	std::atomic_uint32_t* shared;
 
 public:
+    
+    using HeapMemory<T,true>::_raw_data;
 
 	/*===== Constructor =====*/
 
 	SharedHeapMemory() = default;
 
 	SharedHeapMemory(T* raw_data) :
-		HeapMemory(raw_data),
+		HeapMemory<T,true>(raw_data),
 		shared{ new std::atomic_uint32_t {1} }
 	{
 
 	}
 
 	SharedHeapMemory(const SharedHeapMemory<T>& memory) :
-		HeapMemory(memory._raw_data),
+        HeapMemory<T,true>(memory._raw_data),
 		shared{ memory.shared}
 	{
 		shared->fetch_add(1);
 	}
 
 	SharedHeapMemory(uint32_t nb) :
-		HeapMemory(nb),
+        HeapMemory<T,true>(nb),
 		shared{ new std::atomic_uint32_t {1} }
 	{
 		//memset(_raw_data, 0, nb * sizeof(T));
@@ -192,6 +194,9 @@ private:
 	uint32_t _nb{0};
 
 public:
+    
+    using HeapMemory<T, scoped>::_raw_data;
+    
 	/*===== Constructor =====*/
 
 	LoopArray() = default;
@@ -199,7 +204,7 @@ public:
 	LoopArray(T* raw_data) = delete;
 
 	LoopArray(T* raw_data, uint32_t nb):
-		HeapMemory<T>(raw_data),
+        HeapMemory<T,scoped>(raw_data),
 		_nb{nb}
 
 	{
@@ -207,7 +212,7 @@ public:
 	}
 
 	LoopArray(uint32_t nb) :
-		HeapMemory<T>(nb),
+		HeapMemory<T,scoped>(nb),
 		_nb{nb}
 	{
 	}
@@ -246,16 +251,18 @@ class SmartHeapMemory : public HeapMemory<T, scoped>
 {
 public:
 	/*===== Constructor =====*/
+    
+    using HeapMemory<T, scoped>::_raw_data;
 
 	SmartHeapMemory() = default;
 
 	SmartHeapMemory(T* raw_data) :
-		HeapMemory<T>{ raw_data }
+		HeapMemory<T, scoped>{ raw_data }
 	{
 	}
 
 	SmartHeapMemory(uint32_t nb) :
-		_raw_data{ new T[nb]; }
+        HeapMemory<T, scoped>{ new T[nb] }
 	{
 	}
 
@@ -290,7 +297,12 @@ class SmartLoopArray : public SmartHeapMemory<T,scoped>
 private:
 	uint32_t _nb{ 0 };
 
+protected:
+    using SmartHeapMemory<T, scoped>::_raw_data;
+    
 public:
+
+    
 	/*===== Constructor =====*/
 
 	SmartLoopArray() = default;
@@ -436,7 +448,7 @@ public:
 				}
 
 				if (clearData)
-					free(&iNode);
+					free(iNode);
 
 				break;
 			}
@@ -772,7 +784,7 @@ public:
 		if (shouldFree)
 		{
 			//if we're not empty, there is a head
-			List<QueueNode>::ListNode* indexedNode = nodes.GetHead();
+            typename List<QueueNode>::ListNode* indexedNode = nodes.GetHead();
 
 			while (indexedNode != nullptr)
 			{
@@ -790,6 +802,8 @@ public:
 class ThreadJob
 {
 public:
+    virtual ~ThreadJob(){}
+    
 	virtual void Execute() = 0;
 };
 
