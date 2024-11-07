@@ -10,6 +10,7 @@
 #include <memory.h>
 #include <thread>
 #include <mutex>
+#include <atomic>
 #include <condition_variable>
 
 /**
@@ -18,7 +19,7 @@
 * You can definetely do that, it is just personal preference.
 * This uses malloc and free, as such, it should be used for simple C types and not with class.
 */
-template<typename T>
+template<typename T, bool scoped = true>
 class HeapMemory
 {
 protected:
@@ -44,7 +45,7 @@ public:
 
 	~HeapMemory()
 	{
-		if (_raw_data)
+		if (_raw_data && scoped)
 			free(_raw_data);
 	}
 
@@ -113,10 +114,79 @@ public:
 };
 
 /**
-* A simple class representing a simple array of data you would need to loop through.
+* A simple class representing an allocated RAM memory block, in C format.
+* This one is for sharing between thread. therefore thread safe.
 */
 template<typename T>
-class LoopArray : public HeapMemory<T>
+class SharedHeapMemory : public HeapMemory<T,true>
+{
+protected:
+	std::atomic_uint32_t* shared;
+
+public:
+
+	/*===== Constructor =====*/
+
+	SharedHeapMemory() = default;
+
+	SharedHeapMemory(T* raw_data) :
+		HeapMemory(raw_data),
+		shared{ new std::atomic_uint32_t {1} }
+	{
+
+	}
+
+	SharedHeapMemory(const SharedHeapMemory<T>& memory) :
+		HeapMemory(memory._raw_data),
+		shared{ memory.shared}
+	{
+		shared->fetch_add(1);
+	}
+
+	SharedHeapMemory(uint32_t nb) :
+		HeapMemory(nb),
+		shared{ new std::atomic_uint32_t {1} }
+	{
+		//memset(_raw_data, 0, nb * sizeof(T));
+	}
+
+	~SharedHeapMemory()
+	{
+		shared->load();
+		shared->fetch_sub(1);
+		if (_raw_data && shared->load() == 0)
+		{
+			free(_raw_data);
+			delete shared;
+		}
+		_raw_data = nullptr;
+	}
+
+	/*===== Copy =====*/
+
+	SharedHeapMemory& operator=(const SharedHeapMemory& copy)
+	{
+		
+		shared = copy.shared;
+		shared->fetch_add(1);
+		_raw_data = copy._raw_data;
+
+		return *this;
+	}
+
+	/*===== Memory Management =====*/
+
+	//virtual void Clear() = delete;
+
+	//virtual void Alloc(uint32_t nb)
+
+};
+
+/**
+* A simple class representing a simple array of data you would need to loop through.
+*/
+template<typename T, bool scoped = true>
+class LoopArray : public HeapMemory<T,scoped>
 {
 private:
 	uint32_t _nb{0};
@@ -171,8 +241,8 @@ public:
 * A simple class representing an allocated RAM memory block, in cpp.
 * in conbtrast with the parent, this uses new and delete, thus preserving vtables for contained classes.
 */
-template<typename T>
-class SmartHeapMemory : public HeapMemory<T>
+template<typename T, bool scoped = true>
+class SmartHeapMemory : public HeapMemory<T, scoped>
 {
 public:
 	/*===== Constructor =====*/
@@ -191,7 +261,7 @@ public:
 
 	~SmartHeapMemory()
 	{
-		if (_raw_data)
+		if (_raw_data && scoped)
 			delete[] _raw_data;
 	}
 
@@ -214,8 +284,8 @@ public:
 * A simple class representing a simple array of data you would need to loop through.
 * as being smart, this preserve classes vtable when allocating.
 */
-template<typename T>
-class SmartLoopArray : public SmartHeapMemory<T>
+template<typename T, bool scoped = true>
+class SmartLoopArray : public SmartHeapMemory<T,scoped>
 {
 private:
 	uint32_t _nb{ 0 };
@@ -430,13 +500,17 @@ public:
 template<typename T>
 class Queue
 {
-private:
+public:
 	struct QueueNode
 	{
-		T* data{ nullptr };
+		QueueNode() = default;
+		QueueNode(const QueueNode&) = default;
+
+		SharedHeapMemory<T> data{ nullptr };
 
 		uint32_t index{ 0 };
 		uint32_t nb{ 0 };
+		
 
 		__forceinline T* GetCurrent()const
 		{
@@ -444,6 +518,7 @@ private:
 		}
 	};
 
+private:
 	List<QueueNode> nodes;
 	uint32_t nb{ 0 };
 
@@ -467,7 +542,7 @@ public:
 	}
 
 	//pushing a new batch. the batch is considered to be allocated.
-	__forceinline void PushBatch(T* batch, uint32_t batchNb)
+	__forceinline void PushBatch(const SharedHeapMemory<T>& batch, uint32_t batchNb)
 	{
 		//creating the node
 		QueueNode newNode{};
@@ -480,15 +555,17 @@ public:
 		nb += batchNb;
 	}
 
+
 	//pops a single data. is nullptr if queue is empty.
-	__forceinline T* Pop()
+	__forceinline QueueNode Pop()
 	{
 		if (nb <= 0)
-			return;
+			return QueueNode{};
 
 		QueueNode& headNode = nodes.GetHead()->data;
-		T* data = headNode.GetCurrent();
+		QueueNode data = headNode;
 		headNode.index++;
+		data.nb = 1;
 
 		if (headNode.index >= headNode.nb)
 			nodes.Remove(headNode, false);
@@ -500,12 +577,12 @@ public:
 
 	//pops a batch. we cannot guarantee that you'll get all the requested data in the returned array, 
 	//therefore the nb you get is given in return ; as such you may need to call the method multiple times
-	__forceinline T* PopBatch(uint32_t& wantedBatchNb)
+	__forceinline QueueNode PopBatch(uint32_t& wantedBatchNb)
 	{
 		if (nb <= 0)
 		{
 			wantedBatchNb = 0;
-			return nullptr;
+			return QueueNode{};
 		}
 
 		QueueNode& headNode = nodes.GetHead()->data;
@@ -513,8 +590,9 @@ public:
 		if (remaining < wantedBatchNb)
 			wantedBatchNb = remaining;
 
-		T* data = headNode.GetCurrent();
+		QueueNode data = headNode;
 		headNode.index += wantedBatchNb;
+		data.nb = wantedBatchNb;
 
 		if (headNode.index >= headNode.nb)
 			nodes.Remove(nodes.GetHead(), false);
@@ -539,17 +617,17 @@ public:
 		if (nb <= 0)
 			return;
 
-		if (shouldFree)
-		{
-			//if we're not empty, there is a head
-			List<QueueNode>::ListNode* indexedNode = nodes.GetHead();
-
-			while (indexedNode != nullptr)
-			{
-				free(indexedNode->data.data);
-				indexedNode = indexedNode->next;
-			}
-		}
+		//if (shouldFree)
+		//{
+		//	//if we're not empty, there is a head
+		//	List<QueueNode>::ListNode* indexedNode = nodes.GetHead();
+		//
+		//	while (indexedNode != nullptr)
+		//	{
+		//		free(indexedNode->data.data);
+		//		indexedNode = indexedNode->next;
+		//	}
+		//}
 
 		nodes.Clear();
 		nb = 0;

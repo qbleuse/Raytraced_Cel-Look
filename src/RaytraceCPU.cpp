@@ -497,7 +497,7 @@ void RaytraceCPU::DispatchSceneRay(AppWideContext& AppContext)
 	vec3 viewportUpperLeft	= cameraCenter - vec3{ 0,0,focalLength } - (viewportU * 0.5f) - (viewportV * 0.5f);
 	vec3 firstPixel			= viewportUpperLeft + ((pixelDeltaU + pixelDeltaV) * 0.5f);
 
-	ray_compute* computes = (ray_compute*)malloc(sizeof(ray_compute) * fullscreenScissors.extent.width * fullscreenScissors.extent.height);
+	SharedHeapMemory<ray_compute> computes{ fullscreenScissors.extent.width * fullscreenScissors.extent.height};
 
 	for (uint32_t h = 0; h < fullscreenScissors.extent.height; h++)
 		for (uint32_t w = 0; w < fullscreenScissors.extent.width; w++)
@@ -518,14 +518,14 @@ void RaytraceCPU::DispatchSceneRay(AppWideContext& AppContext)
 	for (uint32_t i = 0; i < fullscreenScissors.extent.width * fullscreenScissors.extent.height;)
 	{
 		uint32_t computeNb = computePerFrames;
-		ray_compute* computes_job = rayToCompute.PopBatch(computeNb);
+		const Queue<ray_compute>::QueueNode& computes_job = rayToCompute.PopBatch(computeNb);
 
 		if (computeNb > 0)
 		{
 			FirstContactRaytraceJob newJob;
 			newJob.ended	= nullptr;
 			newJob.computes = computes_job;
-			newJob.computesNb = computeNb;
+			//newJob.computesNb = computeNb;
 			newJob.hittables = &scene;
 			newJob.newRays = &rayToCompute;
 			newJob.newRaysFence = &queue_fence;
@@ -567,14 +567,14 @@ void RaytraceCPU::Act(AppWideContext& AppContext)
 	for (uint32_t i = 0; i < AppContext.threadPool.GetThreadsNb(); i++)
 	{
 		uint32_t computeNb = computePerFrames;
-		ray_compute* computes = rayToCompute.PopBatch(computeNb);
+		const Queue<ray_compute>::QueueNode& computes = rayToCompute.PopBatch(computeNb);
 	
 		if (computeNb > 0)
 		{
 			DiffuseRaytraceJob newJob;
 			newJob.ended = nullptr;
 			newJob.computes = computes;
-			newJob.computesNb = computeNb;
+			//newJob.computesNb = computeNb;
 			newJob.hittables = &scene;
 			newJob.newRays = &rayToCompute;
 			newJob.newRaysFence = &queue_fence;

@@ -18,17 +18,17 @@
 
 #define RAY_TO_COMPUTE_PER_FRAME 500
 
+typedef Queue<ray_compute>::QueueNode RayBatch;
 
 class FirstContactRaytraceJob : public ThreadJob
 {
 public:
-	bool*					ended{ nullptr };
-	ray_compute*			computes{ nullptr };
-	uint32_t				computesNb{ 0 };
-	LoopArray<hittable*>*	hittables{ nullptr };
-	Queue<ray_compute>*		newRays{ nullptr };
-	std::mutex* newRaysFence{ nullptr };
-	std::condition_variable_any* newRays_wait{nullptr};
+	bool*							ended{ nullptr };
+	RayBatch						computes{ nullptr };
+	LoopArray<hittable*>*			hittables{ nullptr };
+	Queue<ray_compute>*				newRays{ nullptr };
+	std::mutex*						newRaysFence{ nullptr };
+	std::condition_variable_any*	newRays_wait{nullptr};
 
 	__forceinline vec4 GetRayColor(const ray& incoming)
 	{
@@ -76,11 +76,11 @@ public:
 	__forceinline void Execute()override
 	{
 		LoopArray<hittable*>& scene = *hittables;
-		ray_compute* gen_rays = (ray_compute*)malloc(computesNb*sizeof(ray_compute));
+		ray_compute* gen_rays = (ray_compute*)malloc(computes.nb*sizeof(ray_compute));
 		uint32_t hit_nb{0};
-		for (uint32_t i = 0; i < computesNb; i++)
+		for (uint32_t i = 0; i < computes.nb; i++)
 		{
-			ray_compute& indexedComputedRay = computes[i];
+			ray_compute& indexedComputedRay = computes.data[i + computes.index];
 			
 			//*indexedComputedRay.pixel += GetColorFromHit(scene, indexedComputedRay, *indexedComputedRay.pixel, 10);
 
@@ -137,13 +137,12 @@ public:
 class DiffuseRaytraceJob : public ThreadJob
 {
 public:
-	bool*					ended{ nullptr };
-	ray_compute*			computes{ nullptr };
-	uint32_t				computesNb{ 0 };
-	LoopArray<hittable*>*	hittables{ nullptr };
-	Queue<ray_compute>*		newRays{ nullptr };
-	std::mutex* newRaysFence{ nullptr };
-	std::condition_variable_any* newRays_wait{ nullptr };
+	bool*							ended{ nullptr };
+	RayBatch						computes{ nullptr };
+	LoopArray<hittable*>*			hittables{ nullptr };
+	Queue<ray_compute>*				newRays{ nullptr };
+	std::mutex*						newRaysFence{ nullptr };
+	std::condition_variable_any*	newRays_wait{ nullptr };
 
 
 	__forceinline vec4 GetRayColor(const ray& incoming)
@@ -155,11 +154,11 @@ public:
 	__forceinline void Execute()override
 	{
 		LoopArray<hittable*>& scene = *hittables;
-		ray_compute* gen_rays = (ray_compute*)malloc(computesNb * sizeof(ray_compute));
+		ray_compute* gen_rays = (ray_compute*)malloc(computes.nb * sizeof(ray_compute));
 		uint32_t hit_nb{ 0 };
-		for (uint32_t i = 0; i < computesNb; i++)
+		for (uint32_t i = 0; i < computes.nb; i++)
 		{
-			const ray_compute& indexedComputedRay = computes[i];
+			const ray_compute& indexedComputedRay = computes.data[i + computes.index];
 
 			float hasHit = false;
 			hit_record final_hit{};
@@ -208,7 +207,7 @@ public:
 		if (ended)
 			*ended = true;
 
-		free(computes);
+		//free(computes);
 	}
 };
 

@@ -56,8 +56,41 @@ struct hittable
 	//a method to implement the collision beween the hittable object and a ray
 	virtual bool hit(const ray& incomming, hit_record& record) = 0;
 
+	virtual ray reflect(const hit_record& record) = 0;
+
 	//a method to implement what color does the hit returns
 	virtual vec4 shading(const hit_record& record) = 0;
+};
+
+/* the simple representation of the material of an hittable object */
+struct material
+{
+	//a method to implement the reflected ray from a hit.
+	// /!\ careful, calling twice this method with the same parameter may not have the same result /!\ 
+	virtual ray reflect(const hit_record& record) = 0;
+
+	//a method to implement what color does the hit returns
+	virtual vec4 shading(const hit_record& record) = 0;
+};
+
+struct diffuse : public material
+{
+	vec4 albedo{};
+
+	//diffuse reflection, or basically, lambertian "random" reflection
+	virtual ray reflect(const hit_record& record)
+	{
+		ray reflect{ record.hit_point, record.hit_normal };
+		reflect.direction = reflect.direction + normalize(vec3{ randf(-1.0f, 1.0f), randf(-1.0f, 1.0f), randf(-1.0f, 1.0f) });
+
+		return reflect;
+	}
+
+	virtual vec4 shading(const hit_record& record)
+	{
+		return albedo;
+	}
+
 };
 
 struct sphere : public hittable
@@ -69,8 +102,9 @@ struct sphere : public hittable
 	{
 	}
 
-	vec3 center{};
-	float radius{0.0f};
+	vec3		center{};
+	float		radius{0.0f};
+	material*	material{ nullptr };
 
 	//a method to implement the collision beween the hittable object and a ray
 	__forceinline virtual bool hit(const ray& incomming, hit_record& record)override
@@ -118,7 +152,13 @@ struct sphere : public hittable
 	//a method to implement what color does the hit returns
 	__forceinline virtual vec4 shading(const hit_record& record)override
 	{
-		return vec4{ 0.7f, 0.8f, 0.5f, 1.0f };
+		return material == nullptr ? vec4{ 0.f, 0.f, 0.f, 0.f} : material->shading(record);
+	}
+
+	//a method to implement what color does the hit returns
+	__forceinline virtual ray reflect(const hit_record& record)override
+	{
+		return material == nullptr ? ray{} : material->reflect(record);
 	}
 };
 
