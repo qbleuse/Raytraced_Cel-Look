@@ -206,7 +206,7 @@ public:
 		* - returns : whether at least one window was successfully created.
 		*
 		*/
-		bool ResizeSwapChain(LoopArray<class Scene*>& ScenesToChange);
+		bool ResizeSwapChain(SmartLoopArray<class Scene*>& ScenesToChange);
 
 		/**
 		* Creates any platform specific interface needed to upload resources to GPU

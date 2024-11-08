@@ -18,7 +18,7 @@
 
 #define RAY_TO_COMPUTE_PER_FRAME 500
 
-typedef Queue<ray_compute>::QueueNode RayBatch;
+typedef SmartQueue<SharedSmartHeapMemory<ray_compute>>::QueueNode RayBatch;
 
 class FirstContactRaytraceJob : public ThreadJob
 {
@@ -26,7 +26,7 @@ public:
 	bool*							ended{ nullptr };
 	RayBatch						computes{ nullptr };
 	LoopArray<hittable*>*			hittables{ nullptr };
-	Queue<ray_compute>*				newRays{ nullptr };
+	SmartQueue<SharedSmartHeapMemory<ray_compute>>*		newRays{ nullptr };
 	std::mutex*						newRaysFence{ nullptr };
 	std::condition_variable_any*	newRays_wait{nullptr};
 
@@ -76,7 +76,7 @@ public:
 	__forceinline void Execute()override
 	{
 		LoopArray<hittable*>& scene = *hittables;
-		ray_compute* gen_rays = (ray_compute*)malloc(computes.nb*sizeof(ray_compute));
+		SharedSmartHeapMemory<ray_compute> gen_rays{ computes.nb * 10};
 		uint32_t hit_nb{0};
 		for (uint32_t i = 0; i < computes.nb; i++)
 		{
@@ -102,17 +102,23 @@ public:
 			
 			if (hasHit && newRays != nullptr)
 			{
-				ray_compute newCompute{};
-				ray newRay{ final_hit.hit_point, final_hit.hit_normal };
-				newRay.direction = newRay.direction + normalize(vec3{ randf(-1.0f, 1.0f), randf(-1.0f, 1.0f), randf(-1.0f, 1.0f) });
-			
-				newCompute.launched = newRay;
-				newCompute.pixel = indexedComputedRay.pixel;
-			
-				gen_rays[hit_nb++] = newCompute;
+				for (uint32_t i = 0; i < 10; i++)
+				{
+					ray_compute newCompute{};
+
+					newCompute.launched = final_hit.mat->reflect(indexedComputedRay.launched,final_hit);
+					newCompute.pixel = indexedComputedRay.pixel;
+					newCompute.color = final_hit.shade;
+
+					gen_rays[hit_nb++] = newCompute;
+				}
 			}
 			
-			*indexedComputedRay.pixel = hasHit ? final_hit.shade : GetRayColor(indexedComputedRay.launched);
+			//basically clearing screen
+			if (!hasHit)
+				*indexedComputedRay.pixel = GetRayColor(indexedComputedRay.launched);
+			else
+				*indexedComputedRay.pixel = vec4{ 0.0f, 0.0f, 0.0f, 1.0f };
 		}
 
 		if (newRays && newRaysFence && newRays_wait && hit_nb > 0)
@@ -121,10 +127,6 @@ public:
 		
 			newRays->PushBatch(gen_rays, hit_nb);
 			newRaysFence->unlock();
-		}
-		else
-		{
-			free(gen_rays);
 		}
 
 		if (ended)
@@ -140,7 +142,7 @@ public:
 	bool*							ended{ nullptr };
 	RayBatch						computes{ nullptr };
 	LoopArray<hittable*>*			hittables{ nullptr };
-	Queue<ray_compute>*				newRays{ nullptr };
+	SmartQueue<SharedSmartHeapMemory<ray_compute>>*		newRays{ nullptr };
 	std::mutex*						newRaysFence{ nullptr };
 	std::condition_variable_any*	newRays_wait{ nullptr };
 
@@ -154,7 +156,7 @@ public:
 	__forceinline void Execute()override
 	{
 		LoopArray<hittable*>& scene = *hittables;
-		ray_compute* gen_rays = (ray_compute*)malloc(computes.nb * sizeof(ray_compute));
+		SharedSmartHeapMemory<ray_compute> gen_rays{ computes.nb};
 		uint32_t hit_nb{ 0 };
 		for (uint32_t i = 0; i < computes.nb; i++)
 		{
@@ -176,17 +178,16 @@ public:
 				}
 			}
 
-			vec4& color = *indexedComputedRay.pixel;
-			color = hasHit ? color * final_hit.shade : GetRayColor(indexedComputedRay.launched) * color;
+			if (!hasHit && indexedComputedRay.pixel != nullptr)
+				*indexedComputedRay.pixel += indexedComputedRay.color * 0.1f;
 
 			if (hasHit && newRays != nullptr)
 			{
 				ray_compute newCompute{};
-				ray newRay{ final_hit.hit_point, final_hit.hit_normal };
-				newRay.direction = newRay.direction + normalize(vec3{ randf(-1.0f, 1.0f), randf(-1.0f, 1.0f), randf(-1.0f, 1.0f)});
 
-				newCompute.launched = newRay;
+				newCompute.launched = final_hit.mat->reflect(indexedComputedRay.launched,final_hit);
 				newCompute.pixel = indexedComputedRay.pixel;
+				newCompute.color = final_hit.shade * indexedComputedRay.color;
 
 				gen_rays[hit_nb++] = newCompute;
 			}
@@ -198,10 +199,6 @@ public:
 
 			newRays->PushBatch(gen_rays, hit_nb);
 			newRaysFence->unlock();
-		}
-		else
-		{
-			free(gen_rays);
 		}
 
 		if (ended)
@@ -297,9 +294,11 @@ public:
 
 	//the objects in our scene
 	LoopArray<hittable*>	scene;
+	//the materials for our objects
+	SmartLoopArray<material*> materials;
 
 	//the pending work executed in act each frames
-	Queue<ray_compute>			rayToCompute;
+	SmartQueue<SharedSmartHeapMemory<ray_compute>>	rayToCompute;
 	//the mutex for this data (as it will be changed by multiple threads at a time)
 	std::mutex					queue_fence;
 	//the condition variable to make the thread wait or wake up.

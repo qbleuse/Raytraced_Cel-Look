@@ -255,9 +255,17 @@ void RaytraceCPU::Prepare(GraphicsAPIManager& GAPI)
 	PrepareVulkanScripts(GAPI, VertexShader, FragmentShader);
 	PrepareVulkanProps(GAPI, VertexShader, FragmentShader);
 
-	scene.Alloc(2);
-	scene[0] = new sphere(vec3{ 0.0f,0.0f,-1.0f }, 0.5f);
-	scene[1] = new sphere(vec3{ 0.0f,-100.5f,-1.0f }, 100.0f);
+	materials.Alloc(4);
+	materials[0] = new diffuse( vec4{ 0.8f,0.8f,0.1f, 0.0f} );
+	materials[1] = new diffuse( vec4{ 0.1f, 0.2f, 0.5f, 1.0f });
+	materials[2] = new metal( vec4{ 0.8f,0.8f,0.8f,1.0f });
+	materials[3] = new metal( vec4{ 0.8f, 0.6f, 0.2f, 1.0f });
+
+	scene.Alloc(4);
+	scene[0] = new sphere(vec3{ 0.0f, -100.5f, -1.0f }, 100.0f, materials[0]);
+	scene[1] = new sphere(vec3{ 0.0f, 0.0f, -1.2f }, 0.5f, materials[1]);
+	scene[2] = new sphere(vec3{ -1.0f, 0.0f,-1.0f }, 0.5f, materials[2]);
+	scene[3] = new sphere(vec3{ 1.0f, 0.0f,-1.0f }, 0.5f, materials[3]);
 }
 
 
@@ -466,12 +474,6 @@ void RaytraceCPU::Resize(GraphicsAPIManager& GAPI, int32_t old_width, int32_t ol
 
 /*==== Act =====*/
 
-vec4 GetRayColor(const ray& incoming)
-{
-	float backgroundGradient = 0.5f * (incoming.direction.y + 1.0f);
-	return vec4{ 1.0f, 1.0f, 1.0f, 1.0f } * (1.0f - backgroundGradient) + vec4 { 0.3f, 0.7f, 1.0f, 1.0f } * backgroundGradient;
-}
-
 void RaytraceCPU::DispatchSceneRay(AppWideContext& AppContext)
 {
 	rayToCompute.Clear();
@@ -483,42 +485,46 @@ void RaytraceCPU::DispatchSceneRay(AppWideContext& AppContext)
 
 	//3D viewport and Camera values
 	float focalLength			= 1.0f;
-	float viewportHeight		= 2.0f;
+	float viewportHeight		= 2.0f * tanf(AppContext.fov * 0.5f) * focalLength;
 	float viewportWidth			= viewportHeight * (windowWidth / windowHeight);
-	const vec3& cameraCenter	= AppContext.camera_pos;
+	const vec3& cameraCenter	= -AppContext.camera_pos;
+
 
 	//The ray generation sample vectors
-	vec3 viewportU = vec3{ viewportWidth, 0.0f, 0.0f };
-	vec3 viewportV = vec3{ 0.0f, -viewportHeight, 0.0f };
+	vec3 viewportU = vec3{ viewportWidth, 0.0f, 0.0f } * AppContext.view_mat.vector[0].xyz;
+	vec3 viewportV = vec3{ 0.0f, -viewportHeight, 0.0f } * AppContext.view_mat.vector[1].xyz;
+	vec3 viewportW = AppContext.view_mat.vector[2].xyz;
 	vec3 pixelDeltaU = viewportU / windowWidth;
 	vec3 pixelDeltaV = viewportV / windowHeight;
 
 	//first sample dir and sample steps
-	vec3 viewportUpperLeft	= cameraCenter - vec3{ 0,0,focalLength } - (viewportU * 0.5f) - (viewportV * 0.5f);
+	vec3 viewportUpperLeft	= cameraCenter - viewportW - (viewportU * 0.5f) - (viewportV * 0.5f);
 	vec3 firstPixel			= viewportUpperLeft + ((pixelDeltaU + pixelDeltaV) * 0.5f);
 
-	SharedHeapMemory<ray_compute> computes{ fullscreenScissors.extent.width * fullscreenScissors.extent.height};
+	{
+		SharedSmartHeapMemory<ray_compute> computes{ fullscreenScissors.extent.width * fullscreenScissors.extent.height };
 
-	for (uint32_t h = 0; h < fullscreenScissors.extent.height; h++)
-		for (uint32_t w = 0; w < fullscreenScissors.extent.width; w++)
-		{
-			//first get the pixel's "3D position"
-			vec3 pixelCenter = firstPixel + pixelDeltaU * (float)(w)+pixelDeltaV * (float)(h);
-			//create a direction from the camera's position to the 3D viewport for this pixel
-			vec3 rayDir = normalize(pixelCenter - cameraCenter);//normalizing is very slow, we'll still do it, but you may want to ignore it
+		for (uint32_t h = 0; h < fullscreenScissors.extent.height; h++)
+			for (uint32_t w = 0; w < fullscreenScissors.extent.width; w++)
+			{
+				//first get the pixel's "3D position"
+				vec3 pixelCenter = firstPixel + pixelDeltaU * (static_cast<float>(w) + randf() - 0.5f) 
+												+ pixelDeltaV * (static_cast<float>(h) + randf() - 0.5f);
+				//create a direction from the camera's position to the 3D viewport for this pixel
+				vec3 rayDir = normalize(pixelCenter - cameraCenter);//normalizing is very slow, we'll still do it, but you may want to ignore it
 
-			ray pixelRay = ray{ pixelCenter, rayDir };
+				ray pixelRay = ray{ pixelCenter, rayDir };
 
-			computes[(h * fullscreenScissors.extent.width) + w] = { pixelRay, &raytracedImage[(h * fullscreenScissors.extent.width) + w] };
-		}
+				computes[(h * fullscreenScissors.extent.width) + w] = { pixelRay, &raytracedImage[(h * fullscreenScissors.extent.width) + w] };
+			}
 
-	rayToCompute.PushBatch(computes, fullscreenScissors.extent.width * fullscreenScissors.extent.height);
-	needRefresh = false;
+		rayToCompute.PushBatch(computes, fullscreenScissors.extent.width * fullscreenScissors.extent.height);
+	}
 
 	for (uint32_t i = 0; i < fullscreenScissors.extent.width * fullscreenScissors.extent.height;)
 	{
 		uint32_t computeNb = computePerFrames;
-		const Queue<ray_compute>::QueueNode& computes_job = rayToCompute.PopBatch(computeNb);
+		const RayBatch& computes_job = rayToCompute.PopBatch(computeNb);
 
 		if (computeNb > 0)
 		{
@@ -527,7 +533,7 @@ void RaytraceCPU::DispatchSceneRay(AppWideContext& AppContext)
 			newJob.computes = computes_job;
 			//newJob.computesNb = computeNb;
 			newJob.hittables = &scene;
-			newJob.newRays = &rayToCompute;
+			newJob.newRays = needRefresh && (needRefresh != AppContext.in_camera_mode) ? &rayToCompute : nullptr;
 			newJob.newRaysFence = &queue_fence;
 			newJob.newRays_wait = &queue_wait;
 
@@ -557,36 +563,46 @@ void RaytraceCPU::DispatchSceneRay(AppWideContext& AppContext)
 
 void RaytraceCPU::Act(AppWideContext& AppContext)
 {
+	//queue_fence.lock();
+
+	while (!queue_fence.try_lock())
+	{
+
+	}
+
 	if (needRefresh || AppContext.in_camera_mode)
 		DispatchSceneRay(AppContext);
-
-	queue_fence.lock();
-
-	//queue_wait.wait(queue_fence);
-
-	for (uint32_t i = 0; i < AppContext.threadPool.GetThreadsNb(); i++)
+	else
 	{
-		uint32_t computeNb = computePerFrames;
-		const Queue<ray_compute>::QueueNode& computes = rayToCompute.PopBatch(computeNb);
-	
-		if (computeNb > 0)
+		//queue_wait.wait(queue_fence);
+
+		for (uint32_t i = 0; i < AppContext.threadPool.GetThreadsNb(); i++)
 		{
-			DiffuseRaytraceJob newJob;
-			newJob.ended = nullptr;
-			newJob.computes = computes;
-			//newJob.computesNb = computeNb;
-			newJob.hittables = &scene;
-			newJob.newRays = &rayToCompute;
-			newJob.newRaysFence = &queue_fence;
-			newJob.newRays_wait = &queue_wait;
-	
-			AppContext.threadPool.Add(newJob);
+			uint32_t computeNb = computePerFrames;
+			const RayBatch& computes = rayToCompute.PopBatch(computeNb);
+
+			if (computeNb > 0)
+			{
+				DiffuseRaytraceJob newJob;
+				newJob.ended = nullptr;
+				newJob.computes = computes;
+				//newJob.computesNb = computeNb;
+				newJob.hittables = &scene;
+				newJob.newRays = &rayToCompute;
+				newJob.newRaysFence = &queue_fence;
+				newJob.newRays_wait = &queue_wait;
+
+				AppContext.threadPool.Add(newJob);
+			}
+			else
+				break;
 		}
-		else
-			break;
 	}
 
 	queue_fence.unlock();
+
+	//this is needed in dispatch rays;
+	needRefresh = AppContext.in_camera_mode;
 
 	//queue_wait.notify_one();
 }

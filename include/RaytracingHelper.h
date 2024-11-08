@@ -34,6 +34,8 @@ struct hit_record
 	float distance{0.0f};
 	//the shade color for this hit
 	vec4 shade{};
+	//the material of the hit object
+	struct material* mat{ nullptr };
 };
 
 
@@ -46,6 +48,8 @@ struct ray_compute
 	ray launched{};
 	//the final pixel we want to shade
 	vec4* pixel{ nullptr };
+	//the color the ray has computed so far
+	vec4 color;
 };
 
 /*
@@ -56,7 +60,7 @@ struct hittable
 	//a method to implement the collision beween the hittable object and a ray
 	virtual bool hit(const ray& incomming, hit_record& record) = 0;
 
-	virtual ray reflect(const hit_record& record) = 0;
+	virtual ray reflect(const ray& in, const hit_record& record) = 0;
 
 	//a method to implement what color does the hit returns
 	virtual vec4 shading(const hit_record& record) = 0;
@@ -67,7 +71,7 @@ struct material
 {
 	//a method to implement the reflected ray from a hit.
 	// careful, calling twice this method with the same parameter may not have the same result
-	virtual ray reflect(const hit_record& record) = 0;
+	virtual ray reflect(const ray& in, const hit_record& record) = 0;
 
 	//a method to implement what color does the hit returns
 	virtual vec4 shading(const hit_record& record) = 0;
@@ -75,13 +79,45 @@ struct material
 
 struct diffuse : public material
 {
+	diffuse() = default;
+	diffuse(const vec4& color) :
+		albedo{ color }
+	{
+	}
+
 	vec4 albedo{};
 
 	//diffuse reflection, or basically, lambertian "random" reflection
-	virtual ray reflect(const hit_record& record)
+	virtual ray reflect(const ray& in, const hit_record& record)
 	{
 		ray reflect{ record.hit_point, record.hit_normal };
 		reflect.direction = reflect.direction + normalize(vec3{ randf(-1.0f, 1.0f), randf(-1.0f, 1.0f), randf(-1.0f, 1.0f) });
+
+		return reflect;
+	}
+
+	virtual vec4 shading(const hit_record& record)
+	{
+		return albedo;
+	}
+};
+
+struct metal : public material
+{
+	metal() = default;
+	metal(const vec4& color) :
+		albedo{ color }
+	{
+	}
+
+	vec4 albedo{};
+
+	//diffuse reflection, or basically, lambertian "random" reflection
+	virtual ray reflect(const ray& in, const hit_record& record)
+	{
+		ray reflect;
+		reflect.origin = record.hit_point;
+		reflect.direction = in.direction - record.hit_normal * 2.0f * dot(in.direction,record.hit_normal);
 
 		return reflect;
 	}
@@ -96,15 +132,16 @@ struct diffuse : public material
 struct sphere : public hittable
 {
 	sphere() = default;
-	sphere(const vec3& _center, float _radius):
+	sphere(const vec3& _center, float _radius, material* mat = nullptr):
 		center{_center},
-		radius {_radius}
+		radius {_radius},
+		_material{ mat}
 	{
 	}
 
 	vec3		center{};
 	float		radius{0.0f};
-	material*	material{ nullptr };
+	material*	_material{ nullptr };
 
 	//a method to implement the collision beween the hittable object and a ray
 	__forceinline virtual bool hit(const ray& incomming, hit_record& record)override
@@ -129,7 +166,7 @@ struct sphere : public hittable
 		float discriminant = h * h - c;
 
 		//we're not in a complex plane, so sqrt(-1) is impossible
-		if (discriminant < 0)
+		if (discriminant < 0.0f)
 			return false;
 		
 		//finding the roots
@@ -146,19 +183,20 @@ struct sphere : public hittable
 		record.hit_point	= incomming.at(record.distance);
 		record.hit_normal	= (record.hit_point - center) / radius;//this is a normalized vector
 		record.shade		= shading(record);
+		record.mat			= _material;
 		return true;
 	}
 
 	//a method to implement what color does the hit returns
 	__forceinline virtual vec4 shading(const hit_record& record)override
 	{
-		return material == nullptr ? vec4{ 0.f, 0.f, 0.f, 0.f} : material->shading(record);
+		return _material == nullptr ? vec4{ 0.0f, 0.0f, 0.0f, 0.0f} : _material->shading(record);
 	}
 
 	//a method to implement what color does the hit returns
-	__forceinline virtual ray reflect(const hit_record& record)override
+	__forceinline virtual ray reflect(const ray& in, const hit_record& record)override
 	{
-		return material == nullptr ? ray{} : material->reflect(record);
+		return _material == nullptr ? ray{} : _material->reflect(in, record);
 	}
 };
 

@@ -150,7 +150,7 @@ bool ResetImGuiResource(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiReso
 
 /*===== Draw =====*/
 
-void BeginDrawUIWindow(const GraphicsAPIManager& GAPI, LoopArray<class Scene*>& scenes, AppWideContext& AppContext)
+void BeginDrawUIWindow(const GraphicsAPIManager& GAPI, SmartLoopArray<class Scene*>& scenes, AppWideContext& AppContext)
 {
 	if (!AppContext.ui_visible)
 		return;

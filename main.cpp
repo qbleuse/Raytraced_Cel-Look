@@ -236,7 +236,7 @@ int main()
 		//resources for main loop
 		AppWideContext AppContext;
 		AppContext.threadPool.MakeThreads(std::thread::hardware_concurrency());
-		LoopArray<Scene*> scenes(3);
+		SmartLoopArray<Scene*> scenes(3);
 		scenes[0] = new RasterTriangle();
 		scenes[1] = new RasterObject();
 		scenes[2] = new RaytraceCPU();

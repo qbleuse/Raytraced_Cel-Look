@@ -121,7 +121,7 @@ template<typename T>
 class SharedHeapMemory : public HeapMemory<T,true>
 {
 protected:
-	std::atomic_uint32_t* shared;
+	std::atomic_uint32_t* shared{nullptr};
 
 public:
     
@@ -133,7 +133,7 @@ public:
 
 	SharedHeapMemory(T* raw_data) :
 		HeapMemory<T,true>(raw_data),
-		shared{ new std::atomic_uint32_t {1} }
+		shared{ raw_data == nullptr ? nullptr : new std::atomic_uint32_t {1} }
 	{
 
 	}
@@ -142,7 +142,8 @@ public:
         HeapMemory<T,true>(memory._raw_data),
 		shared{ memory.shared}
 	{
-		shared->fetch_add(1);
+		if (shared)
+			shared->fetch_add(1);
 	}
 
 	SharedHeapMemory(uint32_t nb) :
@@ -154,23 +155,28 @@ public:
 
 	~SharedHeapMemory()
 	{
-		shared->load();
-		shared->fetch_sub(1);
-		if (_raw_data && shared->load() == 0)
+		if (shared)
 		{
-			free(_raw_data);
-			delete shared;
+			shared->fetch_sub(1);
+			if (_raw_data && shared->load() == 0)
+			{
+				free(_raw_data);
+				delete shared;
+			}
+			_raw_data = nullptr;
+			shared = nullptr;
 		}
-		_raw_data = nullptr;
 	}
 
 	/*===== Copy =====*/
 
 	SharedHeapMemory& operator=(const SharedHeapMemory& copy)
 	{
-		
+		if (shared)
+			shared->fetch_sub(1);
 		shared = copy.shared;
-		shared->fetch_add(1);
+		if (shared)
+			shared->fetch_add(1);
 		_raw_data = copy._raw_data;
 
 		return *this;
@@ -261,6 +267,12 @@ public:
 	{
 	}
 
+	template<typename PolyT>
+	SmartHeapMemory(PolyT* raw_data) :
+		_raw_data{ raw_data }
+	{
+	}
+
 	SmartHeapMemory(uint32_t nb) :
         HeapMemory<T, scoped>{ new T[nb] }
 	{
@@ -285,6 +297,112 @@ public:
 	{
 		_raw_data = new T[nb];
 	}
+};
+
+/*
+* A simple class representing an allocated RAM memory block, in cpp.
+* in conbtrast with the parent, this uses new and delete, thus preserving vtables for contained classes.
+* This one is for sharing between thread. therefore thread safe.
+*/
+template<typename T>
+class SharedSmartHeapMemory : public SmartHeapMemory<T, true>
+{
+protected:
+	std::atomic_uint32_t* shared{ nullptr };
+
+public:
+
+	using HeapMemory<T, true>::_raw_data;
+
+	/*===== Constructor =====*/
+
+	SharedSmartHeapMemory() = default;
+
+	SharedSmartHeapMemory(T* raw_data) :
+		SmartHeapMemory<T, true>(raw_data),
+		shared{ raw_data == nullptr ? nullptr : new std::atomic_uint32_t {1} }
+	{
+
+	}
+
+	SharedSmartHeapMemory(const SharedSmartHeapMemory<T>& memory) :
+		SmartHeapMemory<T, true>(memory._raw_data),
+		shared{ memory.shared }
+	{
+		if (shared)
+			shared->fetch_add(1);
+	}
+
+	template<typename PolyT>
+	SharedSmartHeapMemory(const SharedSmartHeapMemory<PolyT>& memory) :
+		SmartHeapMemory<T, true>(memory._raw_data),
+		shared{ memory.shared }
+	{
+		if (shared)
+			shared->fetch_add(1);
+	}
+
+	SharedSmartHeapMemory(uint32_t nb) :
+		SmartHeapMemory<T, true>(nb),
+		shared{ new std::atomic_uint32_t {1} }
+	{
+		//memset(_raw_data, 0, nb * sizeof(T));
+	}
+
+	~SharedSmartHeapMemory()
+	{
+		if (shared)
+		{
+			shared->fetch_sub(1);
+			if (_raw_data && shared->load() == 0)
+			{
+				delete[] _raw_data;
+				delete shared;
+			}
+			_raw_data = nullptr;
+			shared = nullptr;
+		}
+	}
+
+	/*===== Copy =====*/
+
+	SharedSmartHeapMemory& operator=(const SharedSmartHeapMemory& copy)
+	{
+		if (shared)
+			shared->fetch_sub(1);
+		shared = copy.shared;
+		if (shared)
+			shared->fetch_add(1);
+		_raw_data = copy._raw_data;
+
+		return *this;
+	}
+
+	template<typename PolyT>
+	SharedSmartHeapMemory& operator=(const SharedSmartHeapMemory<PolyT>& copy)
+	{
+		if (shared)
+			shared->fetch_sub(1);
+		shared = copy.shared;
+		if (shared)
+			shared->fetch_add(1);
+		_raw_data = copy._raw_data;
+
+		return *this;
+	}
+
+	
+
+	/*===== Memory Management =====*/
+
+	virtual void Clear()override
+	{
+	}
+
+	virtual void Alloc(uint32_t nb)override
+	{
+	}
+
 };
 
 /**
@@ -427,7 +545,7 @@ public:
 			}
 
 			if (clearData)
-				free(head);
+				free(node);
 
 			nb--;
 			return;
@@ -501,6 +619,160 @@ public:
 	}
 };
 
+
+/**
+* A simple class representing the familiar list container.
+* an uncontiguous memory container, linking node with pointer from one to the next.
+*/
+template<typename T>
+class SmartList
+{
+public:
+	struct ListNode
+	{
+		T data;
+
+		ListNode* prev{ nullptr };
+		ListNode* next{ nullptr };
+
+		ListNode* operator++()
+		{
+			return next;
+		}
+
+		ListNode* operator--()
+		{
+			return prev;
+		}
+
+		bool operator==(const ListNode& rhs)
+		{
+			return data == rhs;
+		}
+	};
+
+private:
+	ListNode* head{ nullptr };//first node
+	ListNode* toe{ nullptr };//last node
+
+	uint32_t	nb{ 0 };
+public:
+
+	/*===== Manipulation =====*/
+
+	__forceinline void Add(const T& data)
+	{
+		ListNode* newNode = new ListNode;
+		newNode->data = data;
+
+		Add(newNode);
+	}
+
+	__forceinline void Add(ListNode* newNode)
+	{
+		if (head == nullptr)
+		{
+			head = newNode;
+			toe = newNode;
+		}
+		else if (toe != nullptr)
+		{
+			toe->next = newNode;
+			newNode->prev = toe;
+			toe = newNode;
+		}
+		nb++;
+	}
+
+	__forceinline void Remove(ListNode* node, bool clearData = true)
+	{
+		if (node == head)
+		{
+			if (node->next != nullptr)
+			{
+				head = node->next;
+				head->prev = nullptr;
+			}
+			else
+			{
+				head = nullptr;
+			}
+
+			if (clearData)
+				delete node;
+
+			nb--;
+			return;
+		}
+
+		ListNode* iNode = head;
+		for (uint32_t i = 0; i < nb; i++)
+		{
+			if (iNode == node)
+			{
+				if (iNode->prev != nullptr)
+				{
+					iNode->prev->next = iNode->next;
+				}
+				if (iNode->next != nullptr)
+				{
+					iNode->next->prev = iNode->prev;
+				}
+
+				if (clearData)
+					delete iNode;
+
+				break;
+			}
+
+			iNode++;
+		}
+
+		nb--;
+	}
+
+	/*===== Accessor =====*/
+
+	__forceinline ListNode* GetHead()const
+	{
+		return head;
+	}
+
+	__forceinline ListNode* GetToe()const
+	{
+		return toe;
+	}
+
+	__forceinline uint32_t GetNb()const
+	{
+		return nb;
+	}
+
+	/*===== Memory Management =====*/
+
+	__forceinline void Clear()
+	{
+		if (toe == nullptr)
+			return;
+
+		//going from back
+		ListNode* iNode = toe;
+		do
+		{
+			//getting back next node to clear
+			ListNode* prevNode = iNode->prev;
+			//freeing current node
+			delete iNode;
+			//make next node to clear current node
+			iNode = prevNode;
+		} while (iNode != nullptr);
+
+		head = nullptr;
+		toe = nullptr;
+		nb = 0;
+	}
+};
+
 #define QUEUE_NODE_CAPACITY 100
 
 /**
@@ -518,7 +790,7 @@ public:
 		QueueNode() = default;
 		QueueNode(const QueueNode&) = default;
 
-		SharedHeapMemory<T> data{ nullptr };
+		T data{ nullptr };
 
 		uint32_t index{ 0 };
 		uint32_t nb{ 0 };
@@ -543,8 +815,7 @@ public:
 	{
 		//creating the node
 		QueueNode newNode{};
-		newNode.data = (T*)malloc(sizeof(T));
-		*newNode.data = data;
+		newNode.data = data;
 		newNode.nb = 1;
 
 		//pushing it into the list
@@ -554,7 +825,7 @@ public:
 	}
 
 	//pushing a new batch. the batch is considered to be allocated.
-	__forceinline void PushBatch(const SharedHeapMemory<T>& batch, uint32_t batchNb)
+	__forceinline void PushBatch(const T& batch, uint32_t batchNb)
 	{
 		//creating the node
 		QueueNode newNode{};
@@ -580,7 +851,7 @@ public:
 		data.nb = 1;
 
 		if (headNode.index >= headNode.nb)
-			nodes.Remove(headNode, false);
+			nodes.Remove(nodes.GetHead(), true);
 
 		nb--;
 
@@ -607,7 +878,7 @@ public:
 		data.nb = wantedBatchNb;
 
 		if (headNode.index >= headNode.nb)
-			nodes.Remove(nodes.GetHead(), false);
+			nodes.Remove(nodes.GetHead(), true);
 
 		nb -= wantedBatchNb;
 
@@ -657,10 +928,10 @@ public:
 template<typename T>
 class SmartQueue
 {
-private:
+public:
 	struct QueueNode
 	{
-		T* data{ nullptr };
+		T data{ nullptr };
 
 		uint32_t index{ 0 };
 		uint32_t nb{ 0 };
@@ -671,35 +942,23 @@ private:
 		}
 	};
 
-	List<QueueNode> nodes;
+private:
+
+	SmartList<QueueNode> nodes;
 	uint32_t nb{ 0 };
 
 
 public:
 	/*===== Manipulation =====*/
 
-	//pushing a new data. as this is a copy, the data is considered to not being yet allocated.
-	__forceinline void Push(const T& data)
-	{
-		//creating the node
-		QueueNode newNode{};
-		newNode.data = new T(data);
-		newNode.nb = 1;
-
-		//pushing it into the list
-		nodes.Add(newNode);
-
-		nb++;
-	}
-
-	//pushing a new data. as this is a copy, the data is considered to not being yet allocated.
+	//pushing a new data. as this is a copy, the data is considered to be allocated.
 	//this one exists only for polymorphism
 	template<typename PolyT>
 	__forceinline void Push(const PolyT& data)
 	{
 		//creating the node
 		QueueNode newNode{};
-		newNode.data = (T*)(new PolyT(data));
+		newNode.data = (T)(data);
 		newNode.nb = 1;
 
 		//pushing it into the list
@@ -709,11 +968,12 @@ public:
 	}
 
 	//pushing a new batch. the batch is considered to be allocated.
-	__forceinline void PushBatch(T* batch, uint32_t batchNb)
+	template<typename PolyT>
+	__forceinline void PushBatch(const PolyT& batch, uint32_t batchNb)
 	{
 		//creating the node
 		QueueNode newNode{};
-		newNode.data = batch;
+		newNode.data = (T)batch;
 		newNode.nb = batchNb;
 
 		//pushing it into the list
@@ -723,17 +983,18 @@ public:
 	}
 
 	//pops a single data. is nullptr if queue is empty.
-	__forceinline T* Pop()
+	__forceinline QueueNode& Pop()
 	{
 		if (nb <= 0)
-			return nullptr;
+			return QueueNode{};
 
 		QueueNode& headNode = nodes.GetHead()->data;
-		T* data = headNode.GetCurrent();
+		QueueNode data = headNode;
 		headNode.index++;
+		data.nb = 1;
 
 		if (headNode.index >= headNode.nb)
-			nodes.Remove(nodes.GetHead(), false);
+			nodes.Remove(nodes.GetHead(), true);
 
 		nb--;
 
@@ -742,12 +1003,12 @@ public:
 
 	//pops a batch. we cannot guarantee that you'll get all the requested data in the returned array, 
 	//therefore the nb you get is given in return ; as such you may need to call the method multiple times
-	__forceinline T* PopBatch(uint32_t& wantedBatchNb)
+	__forceinline QueueNode PopBatch(uint32_t& wantedBatchNb)
 	{
 		if (nb <= 0)
 		{
 			wantedBatchNb = 0;
-			return nullptr;
+			return QueueNode{};
 		}
 
 		QueueNode& headNode = nodes.GetHead()->data;
@@ -755,11 +1016,12 @@ public:
 		if (remaining < wantedBatchNb)
 			wantedBatchNb = remaining;
 
-		T* data = headNode.GetCurrent();
+		QueueNode data = headNode;
 		headNode.index += wantedBatchNb;
+		data.nb = wantedBatchNb;
 
 		if (headNode.index >= headNode.nb)
-			nodes.Remove(nodes.GetHead(), false);
+			nodes.Remove(nodes.GetHead(), true);
 
 		nb -= wantedBatchNb;
 
@@ -781,17 +1043,17 @@ public:
 		if (nb <= 0)
 			return;
 
-		if (shouldFree)
-		{
-			//if we're not empty, there is a head
-            typename List<QueueNode>::ListNode* indexedNode = nodes.GetHead();
-
-			while (indexedNode != nullptr)
-			{
-				delete indexedNode->data.data;
-				indexedNode = indexedNode->next;
-			}
-		}
+		//if (shouldFree)
+		//{
+		//	//if we're not empty, there is a head
+        //    typename SmartList<QueueNode>::ListNode* indexedNode = nodes.GetHead();
+		//
+		//	while (indexedNode != nullptr)
+		//	{
+		//		delete indexedNode->data.data;
+		//		indexedNode = indexedNode->next;
+		//	}
+		//}
 
 		nodes.Clear();
 		nb = 0;
@@ -804,14 +1066,14 @@ class ThreadJob
 public:
     virtual ~ThreadJob(){}
     
-	virtual void Execute() = 0;
+	virtual void Execute() {};
 };
 
 class ThreadPool
 {
 private:
 	std::mutex					jobs_mutex;
-	SmartQueue<ThreadJob>		jobs;
+	SmartQueue<ThreadJob*>		jobs;
 	LoopArray<std::thread>		threads;
 	std::condition_variable_any	thread_wait;
 
@@ -832,7 +1094,7 @@ public:
 				thread_wait.wait(jobs_mutex, [this]() {return jobs.GetNb() > 0 || killThread; });
 
 				//gets the job
-				job = jobs.Pop();
+				job = jobs.Pop().data;
 
 				//unlocks the mutex
 				jobs_mutex.unlock();
@@ -857,7 +1119,7 @@ public:
 			jobs_mutex.lock();
 
 			//add a new job to do
-			jobs.Push(job);
+			jobs.Push(new Job(job));
 
 			//unlocks the mutex
 			jobs_mutex.unlock();

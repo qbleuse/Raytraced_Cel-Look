@@ -690,7 +690,7 @@ bool GraphicsAPIManager::ResizeVulkanSwapChain(int32_t width, int32_t height)
 	return result == VK_SUCCESS;
 }
 
-bool GraphicsAPIManager::ResizeSwapChain(LoopArray<Scene*>& SceneToChange)
+bool GraphicsAPIManager::ResizeSwapChain(SmartLoopArray<Scene*>& SceneToChange)
 {
 	/* Vulkan Support */
 

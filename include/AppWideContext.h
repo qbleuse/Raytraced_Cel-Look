@@ -28,7 +28,7 @@ struct AppWideContext
 	//the far plane value for the camera
 	float		far_plane{ 100.0f };
 	//the field of view of the camera
-	float		fov{ 90.0f };
+	float		fov{ 90.0f * DEGREES_TO_RADIANS };
 	//is the user in the camera settings menu ?
 	bool		in_camera_menu{ false };
 	//is the user controlling a 3D camera or using the UI
