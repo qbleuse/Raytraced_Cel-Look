@@ -258,13 +258,15 @@ void RaytraceCPU::Prepare(GraphicsAPIManager& GAPI)
 	materials.Alloc(4);
 	materials[0] = new diffuse( vec4{ 0.8f,0.8f,0.1f, 0.0f} );
 	materials[1] = new diffuse( vec4{ 0.1f, 0.2f, 0.5f, 1.0f });
-	materials[2] = new metal( vec4{ 0.8f,0.8f,0.8f,1.0f });
+    materials[2] = new dieletrics( vec4{ 0.8f,0.8f,0.8f,1.0f }, 1.50f);
+    //materials[3] = new dieletrics( vec4{ 0.8f,0.8f,0.8f,1.0f }, 1.0f/1.50f);
 	materials[3] = new metal( vec4{ 0.8f, 0.6f, 0.2f, 1.0f });
 
 	scene.Alloc(4);
 	scene[0] = new sphere(vec3{ 0.0f, -100.5f, -1.0f }, 100.0f, materials[0]);
 	scene[1] = new sphere(vec3{ 0.0f, 0.0f, -1.2f }, 0.5f, materials[1]);
 	scene[2] = new sphere(vec3{ -1.0f, 0.0f,-1.0f }, 0.5f, materials[2]);
+    //scene[3] = new sphere(vec3{ -1.0f, 0.0f,-1.0f }, 0.4f, materials[3]);
 	scene[3] = new sphere(vec3{ 1.0f, 0.0f,-1.0f }, 0.5f, materials[3]);
 }
 
@@ -311,7 +313,7 @@ void RaytraceCPU::ResizeVulkanResource(GraphicsAPIManager& GAPI, int32_t width, 
 		//there ios only sampler and image in the descriptor pool
 		VkDescriptorPoolSize poolUniformSize{};
 		poolUniformSize.type			= VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		poolUniformSize.descriptorCount = 1;
+		poolUniformSize.descriptorCount = GAPI.NbVulkanFrames;
 
 		VkDescriptorPoolCreateInfo poolInfo{};
 		poolInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -515,7 +517,8 @@ void RaytraceCPU::DispatchSceneRay(AppWideContext& AppContext)
 
 				ray pixelRay = ray{ pixelCenter, rayDir };
 
-				computes[(h * fullscreenScissors.extent.width) + w] = { pixelRay, &raytracedImage[(h * fullscreenScissors.extent.width) + w] };
+                computes[(h * fullscreenScissors.extent.width) + w].launched = pixelRay;
+                computes[(h * fullscreenScissors.extent.width) + w].pixel = &raytracedImage[(h * fullscreenScissors.extent.width) + w];
 			}
 
 		rayToCompute.PushBatch(computes, fullscreenScissors.extent.width * fullscreenScissors.extent.height);

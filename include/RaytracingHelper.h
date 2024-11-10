@@ -30,6 +30,8 @@ struct hit_record
 	vec3 hit_point{};
 	//the contact normal between the ray and the hittable object
 	vec3 hit_normal{};
+    //are we inside or outside an object
+    bool front_face{true};
 	//the distance between the ray origin and the contact point along the ray's direction
 	float distance{0.0f};
 	//the shade color for this hit
@@ -91,7 +93,7 @@ struct diffuse : public material
 	virtual ray reflect(const ray& in, const hit_record& record)
 	{
 		ray reflect{ record.hit_point, record.hit_normal };
-		reflect.direction = reflect.direction + normalize(vec3{ randf(-1.0f, 1.0f), randf(-1.0f, 1.0f), randf(-1.0f, 1.0f) });
+		reflect.direction = normalize(reflect.direction + normalize(vec3{ randf(-1.0f, 1.0f), randf(-1.0f, 1.0f), randf(-1.0f, 1.0f) }));
 
 		return reflect;
 	}
@@ -117,7 +119,7 @@ struct metal : public material
 	{
 		ray reflect;
 		reflect.origin = record.hit_point;
-		reflect.direction = in.direction - record.hit_normal * 2.0f * dot(in.direction,record.hit_normal);
+		reflect.direction = normalize(in.direction - record.hit_normal * 2.0f * dot(in.direction,record.hit_normal));
 
 		return reflect;
 	}
@@ -128,6 +130,54 @@ struct metal : public material
 	}
 
 };
+
+
+struct dieletrics : public metal
+{
+	dieletrics() = default;
+	dieletrics(const vec4& color, float index) :
+		albedo{ color },
+		refract_index{index}
+	{
+	}
+
+	vec4 albedo{};
+	float refract_index{0.0f};
+
+	//diffuse reflection, or basically, lambertian "random" reflection
+	virtual ray reflect(const ray& in, const hit_record& record)override
+	{
+	    //we will use snell's law to approximate refraction properties
+		//the ray will refract when the angle between the ray and the normal is less then 90 degrees
+		//(in other words, when it can refract inside the sphere) and reflect otherwise
+
+        //the refractive index between the material (changes if we are inside or outside the object)
+        float index = record.front_face ? (1.0f/refract_index) : refract_index;
+		//the cos angle between the ray and the normal
+		float cos_ray_normal = fmin(dot(-in.direction, record.hit_normal),1.0f);
+		//from trigonometry property -> cos^2 + sin^2 = 1, we get sin of angle
+		float sin_ray_normal = sqrtf(1.0f - cos_ray_normal * cos_ray_normal);
+
+		//if (refract_index * sin_ray_normal > 1.0f)
+		{
+		    ray refract;
+			refract.origin = record.hit_point;
+            vec3 cos = (in.direction + (record.hit_normal * cos_ray_normal)) * index;
+            vec3 sin = -record.hit_normal * sin_ray_normal;// * -sqrtf(fabs(1.0f - dot(cos,cos)));
+            refract.direction = normalize(cos + sin);
+			return refract;
+		}
+
+		//return metal::reflect(in, record);
+	}
+
+	virtual vec4 shading(const hit_record& record)override
+	{
+		return albedo;
+	}
+
+};
+
 
 struct sphere : public hittable
 {
@@ -168,7 +218,7 @@ struct sphere : public hittable
 		//we're not in a complex plane, so sqrt(-1) is impossible
 		if (discriminant < 0.0f)
 			return false;
-		
+
 		//finding the roots
 		float sqrt_discriminant = sqrtf(discriminant);
 
@@ -182,6 +232,8 @@ struct sphere : public hittable
 		record.distance		= fminf(root_1, root_2);
 		record.hit_point	= incomming.at(record.distance);
 		record.hit_normal	= (record.hit_point - center) / radius;//this is a normalized vector
+        record.front_face   = dot(record.hit_normal,incomming.direction) < 0;
+        record.hit_normal   = record.front_face ? record.hit_normal : -record.hit_normal;
 		record.shade		= shading(record);
 		record.mat			= _material;
 		return true;
