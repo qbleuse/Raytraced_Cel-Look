@@ -16,7 +16,7 @@
 //for multithreading
 #include <mutex>
 
-#define RAY_TO_COMPUTE_PER_FRAME 500
+#define RAY_TO_COMPUTE_PER_FRAME 2700
 
 typedef SmartQueue<SharedSmartHeapMemory<ray_compute>>::QueueNode RayBatch;
 
@@ -36,10 +36,10 @@ public:
 		return vec4{ 1.0f, 1.0f, 1.0f, 1.0f } *(1.0f - backgroundGradient) + vec4{ 0.3f, 0.7f, 1.0f, 1.0f } *backgroundGradient;
 	}
 
-	__forceinline vec4 GetColorFromHit(LoopArray<hittable*>& scene, ray_compute& computes, vec4& finalColor, uint32_t depth)
+	__forceinline vec4 GetColorFromHit(LoopArray<hittable*>& scene, ray_compute& computes, uint32_t depth)
 	{
 		if (depth == 0)
-			return vec4{ 0.0f, 0.0f, 0.0f, 0.0f };
+			return vec4{0.0f,0.0f,0.0f,0.0f};
 
 		float hasHit = false;
 		hit_record final_hit{};
@@ -60,14 +60,13 @@ public:
 		if (hasHit)
 		{
 			ray_compute newCompute{};
-			ray newRay{ final_hit.hit_point, final_hit.hit_normal };
-			newRay.direction = newRay.direction + normalize(vec3{ randf(-1.0f, 1.0f), randf(-1.0f, 1.0f), randf(-1.0f, 1.0f) });
+			newCompute.launched = final_hit.mat->reflect(computes.launched, final_hit);
+			newCompute.pixel = computes.pixel;
+			newCompute.color = final_hit.shade;
 
-			newCompute.launched = newRay;
-			//newCompute.pixel = indexedComputedRay.pixel;
-
-
-			return GetColorFromHit(scene, newCompute, finalColor, depth-1) * 0.5f;
+			//newCompute.color.xyz = (newCompute.launched.direction + Vec3{1.0f, 1.0f, 1.0f})*0.5f;
+			//newCompute.color.xyz = (final_hit.hit_normal + Vec3{ 1.0f, 1.0f, 1.0f }) * 0.5f;
+			return final_hit.shade * GetColorFromHit(scene, newCompute, depth-1);
 		}
 
 		return GetRayColor(computes.launched);
@@ -76,13 +75,11 @@ public:
 	__forceinline void Execute()override
 	{
 		LoopArray<hittable*>& scene = *hittables;
-		SharedSmartHeapMemory<ray_compute> gen_rays{ computes.nb * 10};
+		SharedSmartHeapMemory<ray_compute> gen_rays{ computes.nb * 50};
 		uint32_t hit_nb{0};
 		for (uint32_t i = 0; i < computes.nb; i++)
 		{
 			ray_compute& indexedComputedRay = computes.data[i + computes.index];
-			
-			//*indexedComputedRay.pixel += GetColorFromHit(scene, indexedComputedRay, *indexedComputedRay.pixel, 10);
 
 			float hasHit = false;
 			hit_record final_hit{};
@@ -99,20 +96,27 @@ public:
 					}
 				}
 			}
-			
+
 			if (hasHit && newRays != nullptr)
 			{
-				for (uint32_t i = 0; i < 10; i++)
+				for (uint32_t i = 0; i < 50; i++)
 				{
 					ray_compute newCompute{};
-
+			
 					newCompute.launched = final_hit.mat->reflect(indexedComputedRay.launched,final_hit);
 					newCompute.pixel = indexedComputedRay.pixel;
 					newCompute.color = final_hit.shade;
-
+			
 					gen_rays[hit_nb++] = newCompute;
 				}
 			}
+
+			// FOR DEBUG
+			//* indexedComputedRay.pixel = vec4{ 0.0f, 0.0f, 0.0f, 0.0f };
+			//for (uint32_t i = 0; i < 10; i++)
+			//{
+			//	*indexedComputedRay.pixel += GetColorFromHit(scene, indexedComputedRay, 9) *0.1f;
+			//}
 			
 			//basically clearing screen
 			if (!hasHit)
@@ -179,7 +183,7 @@ public:
 			}
 
 			if (!hasHit && indexedComputedRay.pixel != nullptr)
-				*indexedComputedRay.pixel += indexedComputedRay.color * 0.1f;
+				*indexedComputedRay.pixel += indexedComputedRay.color * 0.02f * GetRayColor(indexedComputedRay.launched);
 
 			if (hasHit && newRays != nullptr)
 			{

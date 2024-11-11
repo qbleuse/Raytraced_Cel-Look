@@ -258,16 +258,16 @@ void RaytraceCPU::Prepare(GraphicsAPIManager& GAPI)
 	materials.Alloc(4);
 	materials[0] = new diffuse( vec4{ 0.8f,0.8f,0.1f, 0.0f} );
 	materials[1] = new diffuse( vec4{ 0.1f, 0.2f, 0.5f, 1.0f });
-    materials[2] = new dieletrics( vec4{ 0.8f,0.8f,0.8f,1.0f }, 1.50f);
+    materials[2] = new dieletrics( vec4{ 0.8f,0.8f,0.8f,1.0f }, 1.0f/1.33f);
     //materials[3] = new dieletrics( vec4{ 0.8f,0.8f,0.8f,1.0f }, 1.0f/1.50f);
 	materials[3] = new metal( vec4{ 0.8f, 0.6f, 0.2f, 1.0f });
 
 	scene.Alloc(4);
-	scene[0] = new sphere(vec3{ 0.0f, -100.5f, -1.0f }, 100.0f, materials[0]);
-	scene[1] = new sphere(vec3{ 0.0f, 0.0f, -1.2f }, 0.5f, materials[1]);
-	scene[2] = new sphere(vec3{ -1.0f, 0.0f,-1.0f }, 0.5f, materials[2]);
+	scene[0] = new sphere(vec3{ 0.0f, -105.0f, -10.0f }, 100.0f, materials[0]);
+	scene[1] = new sphere(vec3{ 0.0f, 0.0f, -12.0f }, 5.0f, materials[1]);
+	scene[2] = new sphere(vec3{ -10.0f, 0.0f,-10.0f }, 5.0f, materials[2]);
     //scene[3] = new sphere(vec3{ -1.0f, 0.0f,-1.0f }, 0.4f, materials[3]);
-	scene[3] = new sphere(vec3{ 1.0f, 0.0f,-1.0f }, 0.5f, materials[3]);
+	scene[3] = new sphere(vec3{ 10.0f, 0.0f,-10.0f }, 5.0f, materials[3]);
 }
 
 

@@ -30,8 +30,6 @@ struct hit_record
 	vec3 hit_point{};
 	//the contact normal between the ray and the hittable object
 	vec3 hit_normal{};
-    //are we inside or outside an object
-    bool front_face{true};
 	//the distance between the ray origin and the contact point along the ray's direction
 	float distance{0.0f};
 	//the shade color for this hit
@@ -117,9 +115,12 @@ struct metal : public material
 	//diffuse reflection, or basically, lambertian "random" reflection
 	virtual ray reflect(const ray& in, const hit_record& record)
 	{
+		bool front_face = dot(record.hit_normal, in.direction) < 0.0f;
+		vec3 normal = front_face ? record.hit_normal : -record.hit_normal;
+
 		ray reflect;
 		reflect.origin = record.hit_point;
-		reflect.direction = normalize(in.direction - record.hit_normal * 2.0f * dot(in.direction,record.hit_normal));
+		reflect.direction = normalize(in.direction - (normal * 2.0f * dot(in.direction, normal)));
 
 		return reflect;
 	}
@@ -151,24 +152,34 @@ struct dieletrics : public metal
 		//the ray will refract when the angle between the ray and the normal is less then 90 degrees
 		//(in other words, when it can refract inside the sphere) and reflect otherwise
 
-        //the refractive index between the material (changes if we are inside or outside the object)
-        float index = record.front_face ? (1.0f/refract_index) : refract_index;
-		//the cos angle between the ray and the normal
-		float cos_ray_normal = fmin(dot(-in.direction, record.hit_normal),1.0f);
-		//from trigonometry property -> cos^2 + sin^2 = 1, we get sin of angle
-		float sin_ray_normal = sqrtf(1.0f - cos_ray_normal * cos_ray_normal);
+		bool front_face = dot(record.hit_normal, in.direction) < 0.0f;
+		vec3 normal = front_face ? record.hit_normal : -record.hit_normal;
+		vec3 uv = normalize(in.direction);
+		//the refractive index between the material (changes if we are inside or outside the object)
+		float index = front_face ? (1.0f / refract_index) : refract_index;
 
-		//if (refract_index * sin_ray_normal > 1.0f)
+
+		//the cos angle between the ray and the normal
+		float cos_ray_normal = fmin(dot(-uv, normal),1.0f);
+		//from trigonometry property -> cos^2 + sin^2 = 1, we get sin of angle
+		float sin_ray_normal = sqrtf(1.0f - (cos_ray_normal * cos_ray_normal));
+
+		bool cannot_refract = index * sin_ray_normal > 1.0f;
+		
+		if (cannot_refract)
+		{
+			ray reflect = metal::reflect(in, record);
+			return reflect;
+		}
+		else
 		{
 		    ray refract;
 			refract.origin = record.hit_point;
-            vec3 cos = (in.direction + (record.hit_normal * cos_ray_normal)) * index;
-            vec3 sin = -record.hit_normal * sin_ray_normal;// * -sqrtf(fabs(1.0f - dot(cos,cos)));
+            vec3 cos = (uv + (normal * cos_ray_normal)) * index;
+            vec3 sin = normal * -sqrtf(fabs(1.0f - dot(cos,cos)));
             refract.direction = normalize(cos + sin);
 			return refract;
 		}
-
-		//return metal::reflect(in, record);
 	}
 
 	virtual vec4 shading(const hit_record& record)override
@@ -203,6 +214,7 @@ struct sphere : public hittable
 		//for the used formula here, it is the simplified one from here : https://raytracing.github.io/books/RayTracingInOneWeekend.html#surfacenormalsandmultipleobjects/simplifyingtheray-sphereintersectioncode
 
 		//in my case, because ray direction are normalized, a == 1, so I'll move it out
+		float a = dot(incomming.direction, incomming.direction);
 
 		//h in geometrical terms is the distance from the ray's origin to the sphere's center
 		//projected onto the ray's direction.
@@ -210,30 +222,29 @@ struct sphere : public hittable
 
 		//this is basically the squared distance between the ray's origin and the sphere's center
 		//substracted to the sphere's squared radius.
-		float c = dot(ray_to_center, ray_to_center) - radius * radius;
+		float c = dot(ray_to_center, ray_to_center) - (radius * radius);
 
 		//a == 1 so it is not h^2 - ac but h^2 - c
-		float discriminant = h * h - c;
+		float discriminant = (h * h) - (a * c);
 
 		//we're not in a complex plane, so sqrt(-1) is impossible
-		if (discriminant < 0.0f)
+		if (discriminant <= 0.0f)
 			return false;
 
 		//finding the roots
 		float sqrt_discriminant = sqrtf(discriminant);
 
-		float root_1 = h + sqrt_discriminant;
-		float root_2 = h - sqrt_discriminant;
+		float root_1 = (h + sqrt_discriminant)/(a);
+		float root_2 = (h - sqrt_discriminant)/(a);
 
-		if (root_1 < 0.01f && root_2 < 0.01f)
+		if (root_1 < 0.1f && root_2 < 0.1f)
 			return false;
 
 		//choosing our closest root
 		record.distance		= fminf(root_1, root_2);
+		record.distance		= record.distance < 0.01f ? fmax(root_1,root_2) : record.distance;
 		record.hit_point	= incomming.at(record.distance);
 		record.hit_normal	= (record.hit_point - center) / radius;//this is a normalized vector
-        record.front_face   = dot(record.hit_normal,incomming.direction) < 0;
-        record.hit_normal   = record.front_face ? record.hit_normal : -record.hit_normal;
 		record.shade		= shading(record);
 		record.mat			= _material;
 		return true;
