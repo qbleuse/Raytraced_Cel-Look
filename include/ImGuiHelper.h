@@ -9,12 +9,12 @@ struct ImGuiResource
 {
 	/* Vulkan */
 
-	VkDescriptorPool	ImGuiDescriptorPool{ VK_NULL_HANDLE };
-	VkRenderPass		ImGuiRenderPass{ VK_NULL_HANDLE };
+	VkDescriptorPool	_ImGuiDescriptorPool{ VK_NULL_HANDLE };
+	VkRenderPass		_ImGuiRenderPass{ VK_NULL_HANDLE };
 	
-	HeapMemory<VkCommandBuffer>	ImGuiCommandBuffer;
-	HeapMemory<VkFramebuffer>		ImguiFrameBuffer;
-	HeapMemory<VkSemaphore>		VulkanHasDrawnUI;
+	MultipleScopedMemory<VkCommandBuffer>	_ImGuiCommandBuffer;
+	MultipleScopedMemory<VkFramebuffer>		_ImguiFrameBuffer;
+	MultipleScopedMemory<VkSemaphore>		_VulkanHasDrawnUI;
 
 };
 
@@ -25,7 +25,7 @@ void InitImGuiVulkan(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResourc
 bool ResetImGuiResource(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResource);
 
 //draws the application wide unified window, but does not end drawing to allow scene to make their UI inside
-void BeginDrawUIWindow(const GraphicsAPIManager& GAPI, SmartLoopArray<class Scene*>& scenes, AppWideContext& AppContext);
+void BeginDrawUIWindow(const GraphicsAPIManager& GAPI, ScopedLoopArray<class Scene*>& scenes, AppWideContext& AppContext);
 
 //ends drawing end ask to render in the associated Graphics API
 void FinishDrawUIWindow(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResource, AppWideContext& AppContext);

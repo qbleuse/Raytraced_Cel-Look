@@ -50,22 +50,22 @@ void FramePresent(GraphicsAPIManager& GAPI, ImGuiResource& imgui, AppWideContext
 {
 	//if (imgui.SwapChainRebuild)
 	//	return;
-	VkSemaphore render_complete_semaphore = imgui.VulkanHasDrawnUI[GAPI.RuntimeHandle.VulkanCurrentFrame];
+	VkSemaphore render_complete_semaphore = imgui._VulkanHasDrawnUI[GAPI._RuntimeHandle._vk_current_frame];
 	VkPresentInfoKHR info = {};
 	info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	info.waitSemaphoreCount		= 1;
 	info.pWaitSemaphores		= &render_complete_semaphore;
 	info.swapchainCount			= 1;
-	info.pSwapchains			= &GAPI.VulkanSwapchain;
-	info.pImageIndices			= &GAPI.RuntimeHandle.VulkanFrameIndex;
-	VkResult err = vkQueuePresentKHR(GAPI.RuntimeHandle.VulkanQueues[0], &info);
+	info.pSwapchains			= &GAPI._VulkanSwapchain;
+	info.pImageIndices			= &GAPI._RuntimeHandle._vk_frame_index;
+	VkResult err = vkQueuePresentKHR(GAPI._RuntimeHandle._VulkanQueues[0], &info);
 	if (err == VK_ERROR_OUT_OF_DATE_KHR || err == VK_SUBOPTIMAL_KHR)
 	{
 		//imgui.SwapChainRebuild = true;
 		return;
 	}
 	//check_vk_result(err);
-	GAPI.RuntimeHandle.VulkanCurrentFrame = (GAPI.RuntimeHandle.VulkanCurrentFrame + 1) % (GAPI.NbVulkanFrames); // Now we can use the next set of semaphores
+	GAPI._RuntimeHandle._vk_current_frame = (GAPI._RuntimeHandle._vk_current_frame + 1) % (GAPI._nb_vk_frames); // Now we can use the next set of semaphores
 }
 
 void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppContext)
@@ -86,7 +86,7 @@ void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppCo
 	//3. Get our window's pos
 	{
 		int x, y;
-		glfwGetWindowPos(GAPI.VulkanWindow,&x,&y);
+		glfwGetWindowPos(GAPI._VulkanWindow,&x,&y);
 
 		//for the moment we only have one window so it will be half empty
 		AppContext.window_pos = { (float)x, (float)y,0.0f,0.0f };
@@ -112,7 +112,7 @@ void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppCo
 
 		//then we recenter the corrdinate for {0,0} to be the center of our window
 		//same as above, for the moment we only have one window so it will be half empty
-		AppContext.window_mouse_pos = { (mouse_pos.x / GAPI.VulkanWidth) * 2.0f - 1.0f, (mouse_pos.y / GAPI.VulkanHeight) * 2.0f - 1.0f , 0.0f, 0.0f};
+		AppContext.window_mouse_pos = { (mouse_pos.x / GAPI._vk_width) * 2.0f - 1.0f, (mouse_pos.y / GAPI._vk_height) * 2.0f - 1.0f , 0.0f, 0.0f};
 	}
 
 	AppContext.delta_time = ImGui::GetIO().DeltaTime;
@@ -124,7 +124,7 @@ void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppCo
 	{
 		AppContext.in_camera_mode = !AppContext.in_camera_mode;
 
-		glfwSetInputMode(GAPI.VulkanWindow, GLFW_CURSOR, AppContext.in_camera_mode ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+		glfwSetInputMode(GAPI._VulkanWindow, GLFW_CURSOR, AppContext.in_camera_mode ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
 	}
 
 	if (AppContext.in_camera_mode)
@@ -200,7 +200,7 @@ int main()
 		//finds supported API
 		if (!GAPI.FindAPISupported())
 		{
-			printf("Graphics API Manager Error: the application currently supports no Graphics API for the current machine.\n(tried Vulkan %d)\n", GAPI.vulkan_supported);
+			printf("Graphics API Manager Error: the application currently supports no Graphics API for the current machine.\n(tried Vulkan %d)\n", GAPI._vulkan_supported);
 			return 1;
 		}
 
@@ -230,13 +230,13 @@ int main()
 
 		//The imgui Resource stuct regrouping every resource for every graphics interface
 		ImGuiResource imguiResource{};
-		if (GAPI.vulkan_supported)
+		if (GAPI._vulkan_supported)
 			InitImGuiVulkan(GAPI, imguiResource);
 
 		//resources for main loop
 		AppWideContext AppContext;
-		AppContext.threadPool.MakeThreads(std::thread::hardware_concurrency());
-		SmartLoopArray<Scene*> scenes(3);
+		AppContext.threadPool.MakeThreads(1);//std::thread::hardware_concurrency());
+		ScopedLoopArray<Scene*> scenes(3);
 		scenes[0] = new RasterTriangle();
 		scenes[1] = new RasterObject();
 		scenes[2] = new RaytraceCPU();
@@ -246,12 +246,12 @@ int main()
 		for (uint32_t i = 0; i < scenes.Nb(); i++)
 		{
 			scenes[i]->Prepare(GAPI);
-			scenes[i]->Resize(GAPI,GAPI.VulkanWidth,GAPI.VulkanHeight,GAPI.NbVulkanFrames);
+			scenes[i]->Resize(GAPI,GAPI._vk_width,GAPI._vk_height,GAPI._nb_vk_frames);
 		}
 		GAPI.SubmitUpload();
-		AppContext.proj_mat = ro_perspective_proj(static_cast<float>(GAPI.VulkanWidth), static_cast<float>(GAPI.VulkanHeight), AppContext.fov, AppContext.near_plane, AppContext.far_plane);
+		AppContext.proj_mat = ro_perspective_proj(static_cast<float>(GAPI._vk_width), static_cast<float>(GAPI._vk_height), AppContext.fov, AppContext.near_plane, AppContext.far_plane);
 
-		while (!glfwWindowShouldClose(GAPI.VulkanWindow))
+		while (!glfwWindowShouldClose(GAPI._VulkanWindow))
 		{
 			glfwPollEvents();
 
@@ -260,7 +260,7 @@ int main()
 			{
 				GAPI.ResizeSwapChain(scenes);
 				ResetImGuiResource(GAPI, imguiResource);
-				AppContext.proj_mat = ro_perspective_proj(GAPI.VulkanWidth, GAPI.VulkanHeight, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
+				AppContext.proj_mat = ro_perspective_proj(GAPI._vk_width, GAPI._vk_height, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
 				continue;
 			}
 
@@ -280,7 +280,7 @@ int main()
 			scenes[AppContext.scene_index]->Act(AppContext);
 
 			//4. draw said scene
-			scenes[AppContext.scene_index]->Show(GAPI.RuntimeHandle);
+			scenes[AppContext.scene_index]->Show(GAPI._RuntimeHandle);
 
 			//5. draw the ui
 			FinishDrawUIWindow(GAPI, imguiResource, AppContext);
@@ -291,12 +291,12 @@ int main()
 			if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
 			{
 				ImGui::UpdatePlatformWindows();
-				ImGui::RenderPlatformWindowsDefault(NULL, imguiResource.ImGuiRenderPass);
+				ImGui::RenderPlatformWindowsDefault(NULL, imguiResource._ImGuiRenderPass);
 			}
 
 		}
 
-		vkDeviceWaitIdle(GAPI.VulkanDevice);
+		vkDeviceWaitIdle(GAPI._VulkanDevice);
 		//check_vk_result(err);
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
@@ -305,6 +305,7 @@ int main()
 		for (uint32_t i = 0; i < scenes.Nb(); i++)
 		{
 			scenes[i]->Close(GAPI);
+			delete scenes[i];
 		}
 
 		ClearImGuiResource(GAPI, imguiResource);

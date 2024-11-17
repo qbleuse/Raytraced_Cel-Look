@@ -45,13 +45,17 @@ void RasterTriangle::PrepareVulkanScripts(GraphicsAPIManager& GAPI, VkShaderModu
 		)";
 
 
-	CreateVulkanShaders(GAPI.VulkanUploader, VertexShader, VK_SHADER_STAGE_VERTEX_BIT, vertex_shader, "Raster Triangle Vertex");
-	CreateVulkanShaders(GAPI.VulkanUploader, FragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_shader, "Raster Triangle Frag");
+	CreateVulkanShaders(GAPI._VulkanUploader, VertexShader, VK_SHADER_STAGE_VERTEX_BIT, vertex_shader, "Raster Triangle Vertex");
+	CreateVulkanShaders(GAPI._VulkanUploader, FragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_shader, "Raster Triangle Frag");
 
 }
 
 void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader)
 {
+	VkResult result = VK_SUCCESS;
+
+	/*===== SHADER ======*/
+
 	//describe vertex shader stage
 	VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
 	vertShaderStageInfo.sType  = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -66,6 +70,8 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	fragShaderStageInfo.module = FragmentShader;
 	fragShaderStageInfo.pName = "main";
 
+	/*===== VERTEX INPUT ======*/
+
 	//the vertex input for the input assembly stage. in this scene, there will not be any vertices, so we'll fill it up with nothing.
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 	vertexInputInfo.sType							= VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
@@ -76,9 +82,11 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 
 	//the description of the input assembly stage. by the fact we won't have any vertex, the input assembly will basically only give the indices (basically 0,1,2 if we ask for a draw command of three vertices)
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-	inputAssembly.sType					= VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-	inputAssembly.topology				= VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-	inputAssembly.primitiveRestartEnable = VK_FALSE;
+	inputAssembly.sType						= VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	inputAssembly.topology					= VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	inputAssembly.primitiveRestartEnable	= VK_FALSE;
+
+	/*===== VIEWPORT/SCISSORS  =====*/
 
 	//most things are described in advance in vulkan pipeline, but this is the config of thing that can be changed on the fly. in our situation it will be only Viewport.
 	VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
@@ -91,9 +99,11 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	VkPipelineViewportStateCreateInfo viewportStateInfo{};
 	viewportStateInfo.sType				= VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 	viewportStateInfo.viewportCount		= 1;
-	viewportStateInfo.pViewports		= &triangleViewport;
+	viewportStateInfo.pViewports		= &_TriViewport;
 	viewportStateInfo.scissorCount		= 1;
-	viewportStateInfo.pScissors			= &triangleScissors;
+	viewportStateInfo.pScissors			= &_TriScissors;
+
+	/*==== RASTERIZER =====*/
 
 	//the description of our rasterizer : a very simple one, that will just fill up polygon (in this case one)
 	VkPipelineRasterizationStateCreateInfo rasterizer{};
@@ -104,11 +114,15 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	rasterizer.frontFace		= VK_FRONT_FACE_CLOCKWISE;
 	rasterizer.lineWidth		= 1.0f;
 
-	//the description of the MSAA, here we just don't want it, an aliased triangle is more than enough
+	/*===== MSAA =====*/
+
+	//the description of the MSAA, here we just don't want it, an aliased _Tri is more than enough
 	VkPipelineMultisampleStateCreateInfo multisampling{};
 	multisampling.sType					= VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 	multisampling.sampleShadingEnable	= VK_FALSE;
 	multisampling.rasterizationSamples	= VK_SAMPLE_COUNT_1_BIT;
+
+	/*===== FRAMEBUFFER BLEND ======*/
 
 	//description of colour bkending and writing configuration : here we write every component of the output, but don;t do alpha blending or other stuff
 	VkPipelineColorBlendAttachmentState colorBlendAttachment{};
@@ -122,68 +136,80 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	colorBlending.attachmentCount	= 1;
 	colorBlending.pAttachments		= &colorBlendAttachment;
 
-	//describing the format of the output (our framebuffers)
-	VkAttachmentDescription frameColourBufferAttachment{};
-	frameColourBufferAttachment.format			= GAPI.VulkanSurfaceFormat.format;
-	frameColourBufferAttachment.samples			= VK_SAMPLE_COUNT_1_BIT;
-	frameColourBufferAttachment.loadOp			= VK_ATTACHMENT_LOAD_OP_CLEAR;//we'll make the pipeline clear
-	frameColourBufferAttachment.storeOp			= VK_ATTACHMENT_STORE_OP_STORE;//we want to write into the framebuffer
-	frameColourBufferAttachment.initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;//we write onto the entire vewport so it will be completely replaced, what was before does not interests us
-	frameColourBufferAttachment.finalLayout		= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;//there is no post process this is immediate writing into frame buffer
+	{
+		/*===== FRAMEBUFFER OUTPUT ======*/
 
-	//describing the output in the subpass
-	VkAttachmentReference frameColourBufferAttachmentRef{};
-	frameColourBufferAttachmentRef.attachment	= 0;
-	frameColourBufferAttachmentRef.layout		= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		//describing the format of the output (our framebuffers)
+		VkAttachmentDescription frameColourBufferAttachment{};
+		frameColourBufferAttachment.format			= GAPI._VulkanSurfaceFormat.format;
+		frameColourBufferAttachment.samples			= VK_SAMPLE_COUNT_1_BIT;
+		frameColourBufferAttachment.loadOp			= VK_ATTACHMENT_LOAD_OP_CLEAR;//we'll make the pipeline clear
+		frameColourBufferAttachment.storeOp			= VK_ATTACHMENT_STORE_OP_STORE;//we want to write into the framebuffer
+		frameColourBufferAttachment.initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;//we write onto the entire vewport so it will be completely replaced, what was before does not interests us
+		frameColourBufferAttachment.finalLayout		= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;//there is no post process this is immediate writing into frame buffer
 
-	//describing the subpass of our main renderpass
-	VkSubpassDescription subpass{};
-	subpass.pipelineBindPoint		= VK_PIPELINE_BIND_POINT_GRAPHICS;
-	subpass.colorAttachmentCount	= 1;
-	subpass.pColorAttachments		= &frameColourBufferAttachmentRef;
+		/*===== SUBPASS DESCRIPTION ======*/
 
-	//describing our renderpass
-	VkRenderPassCreateInfo renderPassInfo{};
-	renderPassInfo.sType			= VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	renderPassInfo.attachmentCount	= 1;
-	renderPassInfo.pAttachments		= &frameColourBufferAttachment;
-	renderPassInfo.subpassCount		= 1;
-	renderPassInfo.pSubpasses		= &subpass;
+		//describing the output in the subpass
+		VkAttachmentReference frameColourBufferAttachmentRef{};
+		frameColourBufferAttachmentRef.attachment	= 0;
+		frameColourBufferAttachmentRef.layout		= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-	VkResult result = VK_SUCCESS;
-	VK_CALL_PRINT(vkCreateRenderPass(GAPI.VulkanDevice, &renderPassInfo, nullptr, &triangleRenderPass));
+		//describing the subpass of our main renderpass
+		VkSubpassDescription subpass{};
+		subpass.pipelineBindPoint		= VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount	= 1;
+		subpass.pColorAttachments		= &frameColourBufferAttachmentRef;
 
-	//creating our uniform buffer
-	VkDescriptorSetLayoutBinding vertexUniformLayoutBinding{};
-	vertexUniformLayoutBinding.binding = 0;
-	vertexUniformLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	vertexUniformLayoutBinding.descriptorCount = 1;
-	vertexUniformLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		//describing our renderpass
+		VkRenderPassCreateInfo renderPassInfo{};
+		renderPassInfo.sType			= VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		renderPassInfo.attachmentCount	= 1;
+		renderPassInfo.pAttachments		= &frameColourBufferAttachment;
+		renderPassInfo.subpassCount		= 1;
+		renderPassInfo.pSubpasses = &subpass;
 
-	VkDescriptorSetLayoutBinding pixelUniformLayoutBinding{};
-	pixelUniformLayoutBinding.binding = 1;
-	pixelUniformLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	pixelUniformLayoutBinding.descriptorCount = 1;
-	pixelUniformLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		VkResult result = VK_SUCCESS;
+		VK_CALL_PRINT(vkCreateRenderPass(GAPI._VulkanDevice, &renderPassInfo, nullptr, &_TriRenderPass));
+	}
 
-	VkDescriptorSetLayoutCreateInfo layoutInfo{};
-	layoutInfo.sType		= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	layoutInfo.bindingCount = 2;
-	VkDescriptorSetLayoutBinding uniformLayoutBinding[2] = { vertexUniformLayoutBinding, pixelUniformLayoutBinding };
-	layoutInfo.pBindings = uniformLayoutBinding;
+	/*===== SUBPASS ATTACHEMENT ======*/
 
-	VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI.VulkanDevice, &layoutInfo, nullptr, &triangleVertexDescriptorLayout));
+	{
 
-	//layoutInfo.pBindings = &pixelUniformLayoutBinding;
-	//VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI.VulkanDevice, &layoutInfo, nullptr, &trianglePixelDescriptorLayout));
+		//creating our vertex uniform buffer
+		VkDescriptorSetLayoutBinding vertexUniformLayoutBinding{};
+		vertexUniformLayoutBinding.binding			= 0;
+		vertexUniformLayoutBinding.descriptorType	= VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		vertexUniformLayoutBinding.descriptorCount	= 1;
+		vertexUniformLayoutBinding.stageFlags		= VK_SHADER_STAGE_VERTEX_BIT;
 
-	VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	//VkDescriptorSetLayout uniformLayout[2] = { triangleVertexDescriptorLayout, trianglePixelDescriptorLayout };
-	pipelineLayoutInfo.pSetLayouts = &triangleVertexDescriptorLayout;
-	pipelineLayoutInfo.setLayoutCount = 1;
+		//creating our pixel uniform buffer
+		VkDescriptorSetLayoutBinding pixelUniformLayoutBinding{};
+		pixelUniformLayoutBinding.binding			= 1;
+		pixelUniformLayoutBinding.descriptorType	= VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		pixelUniformLayoutBinding.descriptorCount	= 1;
+		pixelUniformLayoutBinding.stageFlags		= VK_SHADER_STAGE_VERTEX_BIT;
 
-	VK_CALL_PRINT(vkCreatePipelineLayout(GAPI.VulkanDevice, &pipelineLayoutInfo, nullptr, &triangleLayout));
+		VkDescriptorSetLayoutCreateInfo layoutInfo{};
+		layoutInfo.sType		= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		layoutInfo.bindingCount = 2;
+
+		VkDescriptorSetLayoutBinding uniformLayoutBinding[2] = { vertexUniformLayoutBinding, pixelUniformLayoutBinding };
+		layoutInfo.pBindings = uniformLayoutBinding;
+
+		VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI._VulkanDevice, &layoutInfo, nullptr, &_TriVertexDescriptorLayout));
+
+		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+		pipelineLayoutInfo.sType			= VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipelineLayoutInfo.pSetLayouts		= &_TriVertexDescriptorLayout;
+		pipelineLayoutInfo.setLayoutCount	= 1;
+
+		VK_CALL_PRINT(vkCreatePipelineLayout(GAPI._VulkanDevice, &pipelineLayoutInfo, nullptr, &_TriLayout));
+
+	}
+
+	/*===== PIPELINE ======*/
 
 	//finally creating our pipeline
 	VkGraphicsPipelineCreateInfo pipelineInfo{};
@@ -203,37 +229,38 @@ void RasterTriangle::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule
 	pipelineInfo.pDepthStencilState		= nullptr; // Optional
 	pipelineInfo.pColorBlendState		= &colorBlending;
 	pipelineInfo.pDynamicState			= &dynamicStateInfo;
-	pipelineInfo.layout					= triangleLayout;
-	pipelineInfo.renderPass				= triangleRenderPass;
+	pipelineInfo.layout					= _TriLayout;
+	pipelineInfo.renderPass				= _TriRenderPass;
 	pipelineInfo.subpass				= 0;
 	pipelineInfo.basePipelineHandle		= VK_NULL_HANDLE;
 	pipelineInfo.basePipelineIndex		= -1;
 
-	VK_CALL_PRINT(vkCreateGraphicsPipelines(GAPI.VulkanDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &trianglePipeline));
+	VK_CALL_PRINT(vkCreateGraphicsPipelines(GAPI._VulkanDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_TriPipeline));
 
-	vkDestroyShaderModule(GAPI.VulkanDevice, FragmentShader, nullptr);
-	vkDestroyShaderModule(GAPI.VulkanDevice, VertexShader, nullptr);
+	vkDestroyShaderModule(GAPI._VulkanDevice, FragmentShader, nullptr);
+	vkDestroyShaderModule(GAPI._VulkanDevice, VertexShader, nullptr);
 }
 
 
 void RasterTriangle::Prepare(GraphicsAPIManager& GAPI)
 {
-	//the Shaders needed.
+	//the shaders needed
 	VkShaderModule vertexShader{}, fragmentShader{};
 
-	pointBuffer.first	= vec4{0.0f, -1.0f, 0.0f, 0.0f};
-	pointBuffer.second	= vec4{0.5f, 0.5f, 0.0f, 0.0f};
-	pointBuffer.third	= vec4{-0.5f, 0.5f, 0.0f, 0.0f};
+	//fill up uniform buffers with initial data
+	_PointBuffer.first	= vec4{0.0f, -1.0f, 0.0f, 0.0f};
+	_PointBuffer.second	= vec4{0.5f, 0.5f, 0.0f, 0.0f};
+	_PointBuffer.third	= vec4{-0.5f, 0.5f, 0.0f, 0.0f};
 
-	colorBuffer.first = vec4{1.0f, 0.0f, 0.0f, 0.0f};
-	colorBuffer.second = vec4{0.0f, 1.0f, 0.0f, 0.0f};
-	colorBuffer.third = vec4{0.0f, 0.0f, 1.0f, 0.0f};
+	_ColourBuffer.first = vec4{1.0f, 0.0f, 0.0f, 0.0f};
+	_ColourBuffer.second = vec4{0.0f, 1.0f, 0.0f, 0.0f};
+	_ColourBuffer.third = vec4{0.0f, 0.0f, 1.0f, 0.0f};
 
 
 	//compile the shaders here
 	PrepareVulkanScripts(GAPI, vertexShader, fragmentShader);
 
-	//create the pipeline and draw commands here
+	//create the pipeline and copy commands here
 	PrepareVulkanProps(GAPI, vertexShader, fragmentShader);
 }
 
@@ -243,106 +270,126 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 {
 	VkResult result = VK_SUCCESS;
 
-	VK_CLEAR_ARRAY(triangleOutput, old_nb_frames, vkDestroyFramebuffer, GAPI.VulkanDevice);
-	vkDestroyDescriptorPool(GAPI.VulkanDevice, triangleDescriptorPool, nullptr);
+	/*===== CLEAR RESOURCES ======*/
 
+	//first, we clear previously used resources
+	VK_CLEAR_ARRAY(_TriOutput, old_nb_frames, vkDestroyFramebuffer, GAPI._VulkanDevice);
+	vkDestroyDescriptorPool(GAPI._VulkanDevice, _TriDescriptorPool, nullptr);
+	_TriVertexDescriptorSet.Clear();
+
+	/*===== VIEWPORT AND SCISSORS ======*/
+
+	//filling up the viewport...
+	_TriViewport.width = (float)GAPI._vk_width;
+	_TriViewport.height = (float)GAPI._vk_height;
+	_TriViewport.maxDepth = 1.0f;
+	_TriViewport.minDepth = 0.0f;
+	_TriViewport.x = 0.0f;
+	_TriViewport.y = 0.0f;
+
+	//... and the scissors
+	_TriScissors.extent = { (uint32_t)GAPI._vk_width, (uint32_t)GAPI._vk_height };
+
+	/*===== DESCRIPTORS ======*/
+
+	{
+		//describing how many descriptor at a time should be allocated
+		VkDescriptorPoolSize poolSize{};
+		poolSize.type				= VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		poolSize.descriptorCount	= 2;//we need two : one for vertices, one for colours
+
+		//creating our descriptor pool to allocate sets for each frame
+		VkDescriptorPoolCreateInfo poolInfo{};
+		poolInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.poolSizeCount	= 1;
+		poolInfo.pPoolSizes		= &poolSize;
+		poolInfo.maxSets		= GAPI._nb_vk_frames;
+
+		VK_CALL_PRINT(vkCreateDescriptorPool(GAPI._VulkanDevice, &poolInfo, nullptr, &_TriDescriptorPool))
+
+		//allocating a descriptor set for each of our framebuffer (a uniform buffer per frame)
+		VkDescriptorSetAllocateInfo allocInfo {};
+		allocInfo.sType					= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool		= _TriDescriptorPool;
+		allocInfo.descriptorSetCount	= GAPI._nb_vk_frames;
+
+		//copying the same layout for every descriptor set
+		VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*)alloca(GAPI._nb_vk_frames * sizeof(VkDescriptorSetLayout));
+		for (uint32_t i = 0; i < GAPI._nb_vk_frames; i++)
+			memcpy(&layouts[i], &_TriVertexDescriptorLayout, sizeof(VkDescriptorSetLayout));
+		allocInfo.pSetLayouts = layouts;
+
+		//then create the resource
+		_TriVertexDescriptorSet.Alloc(GAPI._nb_vk_frames);
+		VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI._VulkanDevice, &allocInfo, *_TriVertexDescriptorSet));
+	}
+
+	/*===== FRAMEBUFFERS ======*/
 
 	//creating the description of the output of our pipeline
 	VkFramebufferCreateInfo framebufferInfo{};
-	framebufferInfo.sType			= VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-	framebufferInfo.renderPass		= triangleRenderPass;
-	framebufferInfo.width			= GAPI.VulkanWidth;
-	framebufferInfo.height			= GAPI.VulkanHeight;
-	framebufferInfo.layers = 1;
+	framebufferInfo.sType		= VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+	framebufferInfo.renderPass	= _TriRenderPass;
+	framebufferInfo.width		= GAPI._vk_width;
+	framebufferInfo.height		= GAPI._vk_height;
+	framebufferInfo.layers		= 1;
+	//allocating space for our outputs
+	_TriOutput.Alloc(GAPI._nb_vk_frames);
 
-	//filling up the viewport
-	triangleViewport.width = (float)GAPI.VulkanWidth;
-	triangleViewport.height = (float)GAPI.VulkanHeight;
-	triangleViewport.maxDepth = 1.0f;
-	triangleViewport.minDepth = 0.0f;
-	triangleViewport.x = 0.0f;
-	triangleViewport.y = 0.0f;
-
-	triangleScissors.extent = { (uint32_t)GAPI.VulkanWidth, (uint32_t)GAPI.VulkanHeight};
-
-	triangleOutput.Alloc(GAPI.NbVulkanFrames);
-
-	//create the descriptor pool
-	VkDescriptorPoolSize poolSize{};
-	poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	poolSize.descriptorCount = GAPI.NbVulkanFrames;
-
-	VkDescriptorPoolCreateInfo poolInfo{};
-	poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	poolInfo.poolSizeCount = 2;
-	VkDescriptorPoolSize doublePoolSize[2] = {poolSize, poolSize};
-	poolInfo.pPoolSizes = doublePoolSize;
-	poolInfo.maxSets = GAPI.NbVulkanFrames;
-
-	VK_CALL_PRINT(vkCreateDescriptorPool(GAPI.VulkanDevice, &poolInfo, nullptr, &triangleDescriptorPool))
-
-	//describe a descriptor set for each of our framebuffer (a uniform bufer per frame)
-	VkDescriptorSetAllocateInfo allocInfo{};
-	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	allocInfo.descriptorPool = triangleDescriptorPool;
-	allocInfo.descriptorSetCount = GAPI.NbVulkanFrames;
-	VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*)alloca(GAPI.NbVulkanFrames * sizeof(VkDescriptorSetLayout));
-	for (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
-		memcpy(&layouts[i], &triangleVertexDescriptorLayout, sizeof(VkDescriptorSetLayout));
-	allocInfo.pSetLayouts = layouts;
-
-	triangleVertexDescriptorSet.Alloc(GAPI.NbVulkanFrames);
-	//trianglePixelDescriptorSet = (VkDescriptorSet*)malloc(sizeof(VkDescriptorSet) * GAPI.NbVulkanFrames);
-	VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI.VulkanDevice, &allocInfo, *triangleVertexDescriptorSet));
+	/*===== UNIFORM BUFFERS ======*/
 
 	//recreate the uniform bufferx
-	CreateUniformBufferHandle(GAPI.VulkanUploader, trianglePointsHandle, GAPI.NbVulkanFrames, sizeof(UniformBuffer));
-	CreateUniformBufferHandle(GAPI.VulkanUploader, triangleColourHandle, GAPI.NbVulkanFrames, sizeof(UniformBuffer));
+	CreateUniformBufferHandle(GAPI._VulkanUploader, _TriPointsHandle, GAPI._nb_vk_frames, sizeof(UniformBuffer));
+	CreateUniformBufferHandle(GAPI._VulkanUploader, _TriColourHandle, GAPI._nb_vk_frames, sizeof(UniformBuffer));
 
+	/*===== LINKING RESOURCES ======*/
 
-
-	for (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
+	for (uint32_t i = 0; i < GAPI._nb_vk_frames; i++)
 	{
+		//link our framebuffers (our pipeline's output) to the backbuffers
 		framebufferInfo.attachmentCount = 1;
-		framebufferInfo.pAttachments = &GAPI.VulkanBackColourBuffers[i];
-		VK_CALL_PRINT(vkCreateFramebuffer(GAPI.VulkanDevice, &framebufferInfo, nullptr, &triangleOutput[i]))
+		framebufferInfo.pAttachments = &GAPI._VulkanBackColourBuffers[i];
+		VK_CALL_PRINT(vkCreateFramebuffer(GAPI._VulkanDevice, &framebufferInfo, nullptr, &_TriOutput[i]))
 
-
+		//describing our uniform vertices buffer
 		VkDescriptorBufferInfo bufferInfo{};
-		bufferInfo.buffer = trianglePointsHandle.GPUBuffer[i];
+		bufferInfo.buffer = _TriPointsHandle._GPUBuffer[i];
 		bufferInfo.offset = 0;
 		bufferInfo.range = sizeof(UniformBuffer);
 
+		//then link it to the descriptor
 		VkWriteDescriptorSet descriptorWrite{};
 		descriptorWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrite.dstSet			= triangleVertexDescriptorSet[i];
+		descriptorWrite.dstSet			= _TriVertexDescriptorSet[i];
 		descriptorWrite.dstBinding		= 0;
 		descriptorWrite.dstArrayElement = 0;
 		descriptorWrite.descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		descriptorWrite.descriptorCount = 1;
 		descriptorWrite.pBufferInfo		= &bufferInfo;
 
+		//describing our uniform colour buffer
 		VkDescriptorBufferInfo colorbufferInfo{};
-		colorbufferInfo.buffer = triangleColourHandle.GPUBuffer[i];
-		colorbufferInfo.offset = 0;
-		colorbufferInfo.range = sizeof(UniformBuffer);
+		colorbufferInfo.buffer	= _TriColourHandle._GPUBuffer[i];
+		colorbufferInfo.offset	= 0;
+		colorbufferInfo.range	= sizeof(UniformBuffer);
 
+		//then link it to the descriptor
 		VkWriteDescriptorSet colordescriptorWrite{};
-		colordescriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		colordescriptorWrite.dstSet = triangleVertexDescriptorSet[i];
-		colordescriptorWrite.dstBinding = 1;
-		colordescriptorWrite.dstArrayElement = 0;
-		colordescriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		colordescriptorWrite.descriptorCount = 1;
-		colordescriptorWrite.pBufferInfo = &colorbufferInfo;
+		colordescriptorWrite.sType				= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		colordescriptorWrite.dstSet				= _TriVertexDescriptorSet[i];
+		colordescriptorWrite.dstBinding			= 1;
+		colordescriptorWrite.dstArrayElement	= 0;
+		colordescriptorWrite.descriptorType		= VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		colordescriptorWrite.descriptorCount	= 1;
+		colordescriptorWrite.pBufferInfo		= &colorbufferInfo;
 
 
 		VkWriteDescriptorSet write[2] = { descriptorWrite, colordescriptorWrite };
-		vkUpdateDescriptorSets(GAPI.VulkanDevice, 2, write, 0, nullptr);
+		vkUpdateDescriptorSets(GAPI._VulkanDevice, 2, write, 0, nullptr);
 	}
 
 
-	changed = true;
+	_changed = true;
 }
 
 
@@ -356,36 +403,36 @@ void RasterTriangle::Resize(class GraphicsAPIManager& GAPI, int32_t old_width, i
 
 void RasterTriangle::Act(AppWideContext& AppContext)
 {
-
+	//drag and drop vertices
 	if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
 	{
-		if (length(pointBuffer.first.xy - AppContext.window_mouse_pos.xy) < 0.1f)
+		if (length(_PointBuffer.first.xy - AppContext.window_mouse_pos.xy) < 0.1f)
 		{
-			pointBuffer.first.xy = AppContext.window_mouse_pos.xy;
-			changed = true;
+			_PointBuffer.first.xy = AppContext.window_mouse_pos.xy;
+			_changed = true;
 		}
-		if (length(pointBuffer.second.xy - AppContext.window_mouse_pos.xy) < 0.1f)
+		if (length(_PointBuffer.second.xy - AppContext.window_mouse_pos.xy) < 0.1f)
 		{
-			pointBuffer.second.xy = AppContext.window_mouse_pos.xy;
-			changed = true;
+			_PointBuffer.second.xy = AppContext.window_mouse_pos.xy;
+			_changed = true;
 		}
-		if (length(pointBuffer.third.xy - AppContext.window_mouse_pos.xy) < 0.1f)
+		if (length(_PointBuffer.third.xy - AppContext.window_mouse_pos.xy) < 0.1f)
 		{
-			pointBuffer.third.xy = AppContext.window_mouse_pos.xy;
-			changed = true;
+			_PointBuffer.third.xy = AppContext.window_mouse_pos.xy;
+			_changed = true;
 		}
 	}
 
 	//UI update
 	if (SceneCanShowUI(AppContext))
 	{
-		changed |= ImGui::SliderFloat2("First Point", pointBuffer.first.xy.scalar, -1.0f, 1.0f);
-		changed |= ImGui::SliderFloat2("Second Point", pointBuffer.second.xy.scalar, -1.0f, 1.0f);
-		changed |= ImGui::SliderFloat2("Third Point", pointBuffer.third.xy.scalar, -1.0f, 1.0f);
+		_changed |= ImGui::SliderFloat2("First Point", _PointBuffer.first.xy.scalar, -1.0f, 1.0f);
+		_changed |= ImGui::SliderFloat2("Second Point", _PointBuffer.second.xy.scalar, -1.0f, 1.0f);
+		_changed |= ImGui::SliderFloat2("Third Point", _PointBuffer.third.xy.scalar, -1.0f, 1.0f);
 
-		changed |= ImGui::ColorPicker4("First Point Color", colorBuffer.first.scalar);
-		changed |= ImGui::ColorPicker4("Second Point Color", colorBuffer.second.scalar);
-		changed |= ImGui::ColorPicker4("Third Point Color", colorBuffer.third.scalar);
+		_changed |= ImGui::ColorPicker4("First Point Color", _ColourBuffer.first.scalar);
+		_changed |= ImGui::ColorPicker4("Second Point Color", _ColourBuffer.second.scalar);
+		_changed |= ImGui::ColorPicker4("Third Point Color", _ColourBuffer.third.scalar);
 	}
 }
 
@@ -393,72 +440,91 @@ void RasterTriangle::Act(AppWideContext& AppContext)
 
 void RasterTriangle::Show(GAPIHandle& RuntimeGAPIHandle)
 {
-	VkResult err;
-	VkCommandBuffer commandBuffer = RuntimeGAPIHandle.GetCurrentVulkanCommand();
-	VkSemaphore waitSemaphore = RuntimeGAPIHandle.GetCurrentCanPresentSemaphore();
-	VkSemaphore signalSemaphore = RuntimeGAPIHandle.GetCurrentHasPresentedSemaphore();
+	//to record errors
+	VkResult result = VK_SUCCESS;
+
+	//current frames resources
+	VkCommandBuffer commandBuffer	= RuntimeGAPIHandle.GetCurrentVulkanCommand();
+	VkSemaphore	waitSemaphore		= RuntimeGAPIHandle.GetCurrentCanPresentSemaphore();
+	VkSemaphore	signalSemaphore		= RuntimeGAPIHandle.GetCurrentHasPresentedSemaphore();
 
 	{
-		err = vkResetCommandBuffer(commandBuffer, 0);
-		//check_vk_result(err);
+		//first, reset previous records
+		VK_CALL_PRINT(vkResetCommandBuffer(commandBuffer, 0));
+		
+		//then open for record
 		VkCommandBufferBeginInfo info = {};
 		info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-		err = vkBeginCommandBuffer(commandBuffer, &info);
-		//	check_vk_result(err);
+
+		VK_CALL_PRINT(vkBeginCommandBuffer(commandBuffer, &info));
+
 	}
 	{
+		//Set output and output settings for this render pass.
 		VkRenderPassBeginInfo info = {};
-		info.sType			= VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		info.renderPass		= triangleRenderPass;
-		info.framebuffer	= triangleOutput[RuntimeGAPIHandle.VulkanFrameIndex];
-		info.renderArea.extent.width = triangleViewport.width;
-		info.renderArea.extent.height = triangleViewport.height;
-		info.clearValueCount = 1;
+		info.sType						= VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		info.renderPass					= _TriRenderPass;//obviously using this scene's renderpass
+		info.framebuffer				= _TriOutput[RuntimeGAPIHandle._vk_frame_index];//writing in the available backbuffer
+		info.renderArea.extent.width	= _TriViewport.width;//writing on the whole screen
+		info.renderArea.extent.height	= _TriViewport.height;//writing on the whole screen
+		info.clearValueCount			= 1;
+
 		VkClearValue clearValue{};
-		clearValue.color = { 0.2f, 0.2f, 0.2f, 1.0f };
-		info.pClearValues = &clearValue;
-		//info.pClearValues				= &imgui.ImGuiWindow.ClearValue;
+		clearValue.color				= { 0.2f, 0.2f, 0.2f, 1.0f };
+		info.pClearValues				= &clearValue;
 		vkCmdBeginRenderPass(commandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
 	}
 
-	if (changed)
+	//while the our uniform buffers are always bound,
+	//and always check disparity between GPU buffer and CPU buffer's content,
+	//we will only copy when something really changes (as this is still heavy)
+	if (_changed)
 	{
-		for (uint32_t i = 0; i < RuntimeGAPIHandle.NbVulkanFrames; i++)
+		for (uint32_t i = 0; i < RuntimeGAPIHandle._nb_vk_frames; i++)
 		{
-			memcpy(trianglePointsHandle.CPUMemoryHandle[i], (void*)&pointBuffer, sizeof(UniformBuffer));
-			memcpy(triangleColourHandle.CPUMemoryHandle[i], (void*)&colorBuffer, sizeof(UniformBuffer));
+			memcpy(_TriPointsHandle._CPUMemoryHandle[i], (void*)&_PointBuffer, sizeof(UniformBuffer));
+			memcpy(_TriColourHandle._CPUMemoryHandle[i], (void*)&_ColourBuffer, sizeof(UniformBuffer));
 		}
 
-		changed = false;
+		_changed = false;
 	}
 
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, trianglePipeline);
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, triangleLayout, 0, 1, &triangleVertexDescriptorSet[RuntimeGAPIHandle.VulkanCurrentFrame], 0, nullptr);
+	//binding the pipeline to rasteriwe our triangle
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _TriPipeline);
+	//binding an available uniform buffer (current frame and frame index may be different, as we can ask for redraw multiple times while the frame is not presenting)
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _TriLayout, 0, 1, &_TriVertexDescriptorSet[RuntimeGAPIHandle._vk_current_frame], 0, nullptr);
 
+	//set viewport and scissors to draw on all screen
+	vkCmdSetViewport(commandBuffer, 0, 1, &_TriViewport);
+	vkCmdSetScissor(commandBuffer, 0, 1, &_TriScissors);
 
-	vkCmdSetViewport(commandBuffer, 0, 1, &triangleViewport);
-	vkCmdSetScissor(commandBuffer, 0, 1, &triangleScissors);
+	//finally call for draw (while we don't have a vertex buffer, 
+	// we will only get indices, which is enough for us to show a triangle with our uniform buffer).
 	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
-	// Submit command buffer
+	//end writing in our backbuffer
 	vkCmdEndRenderPass(commandBuffer);
 	{
+		//the pipeline stage at which the GPU should waait for the semaphore to signal itself
 		VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		
+		//then we submit our commands, while setting the necesssary fences (semaphores on GPU), 
+		//to schedule work properly
 		VkSubmitInfo info = {};
-		info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		info.waitSemaphoreCount = 1;
-		info.pWaitSemaphores = &waitSemaphore;
-		info.pWaitDstStageMask = &wait_stage;
-		info.commandBufferCount = 1;
-		info.pCommandBuffers = &commandBuffer;
-		info.signalSemaphoreCount = 1;
-		info.pSignalSemaphores = &signalSemaphore;
+		info.sType					= VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		info.waitSemaphoreCount		= 1;
+		info.pWaitSemaphores		= &waitSemaphore;//the semaphore we wait before beginning work
+		info.pWaitDstStageMask		= &wait_stage;//the pipeline stage at which we will wait the semaphore
+		info.commandBufferCount		= 1;
+		info.pCommandBuffers		= &commandBuffer;//the recorded workload
+		info.signalSemaphoreCount	= 1;
+		info.pSignalSemaphores		= &signalSemaphore;//the semaphore to signal when finishing all the work
 
-		err = vkEndCommandBuffer(commandBuffer);
-		//check_vk_result(err);
-		err = vkQueueSubmit(RuntimeGAPIHandle.VulkanQueues[0], 1, &info, nullptr);
-		//check_vk_result(err);
+		//closing our command record ...
+		VK_CALL_PRINT(vkEndCommandBuffer(commandBuffer));
+		//... and submit it straight away
+		VK_CALL_PRINT(vkQueueSubmit(RuntimeGAPIHandle._VulkanQueues[0], 1, &info, nullptr));
 	}
 
 }
@@ -467,20 +533,18 @@ void RasterTriangle::Show(GAPIHandle& RuntimeGAPIHandle)
 
 void RasterTriangle::Close(class GraphicsAPIManager& GAPI)
 {
-	VK_CLEAR_ARRAY(triangleOutput, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
+	//releasing the "per frames" objects
+	VK_CLEAR_ARRAY(_TriOutput, GAPI._nb_vk_frames, vkDestroyFramebuffer, GAPI._VulkanDevice);
+	VulkanHelper::ClearUniformBufferHandle(GAPI._VulkanDevice, _TriPointsHandle);
+	VulkanHelper::ClearUniformBufferHandle(GAPI._VulkanDevice, _TriColourHandle);
 
-	VulkanHelper::ClearUniformBufferHandle(GAPI.VulkanDevice, trianglePointsHandle);
-	VulkanHelper::ClearUniformBufferHandle(GAPI.VulkanDevice, triangleColourHandle);
+	//release descriptors
+	vkDestroyDescriptorPool(GAPI._VulkanDevice, _TriDescriptorPool, nullptr);
+	_TriVertexDescriptorSet.Clear();
+	vkDestroyDescriptorSetLayout(GAPI._VulkanDevice, _TriVertexDescriptorLayout, nullptr);
 
-	//vkFreeDescriptorSets(GAPI.VulkanDevice, triangleDescriptorPool, GAPI.NbVulkanFrames, triangleVertexDescriptorSet);
-	//free(triangleVertexDescriptorSet);
-	//vkFreeDescriptorSets(GAPI.VulkanDevice, triangleDescriptorPool, GAPI.NbVulkanFrames, trianglePixelDescriptorSet);
-	//free(trianglePixelDescriptorSet);
-	vkDestroyDescriptorPool(GAPI.VulkanDevice, triangleDescriptorPool, nullptr);
-
-	vkDestroyDescriptorSetLayout(GAPI.VulkanDevice, triangleVertexDescriptorLayout, nullptr);
-	//vkDestroyDescriptorSetLayout(GAPI.VulkanDevice, trianglePixelDescriptorLayout, nullptr);
-	vkDestroyPipelineLayout(GAPI.VulkanDevice, triangleLayout, nullptr);
-	vkDestroyPipeline(GAPI.VulkanDevice, trianglePipeline, nullptr);
-	vkDestroyRenderPass(GAPI.VulkanDevice, triangleRenderPass, nullptr);
+	//release pipeline objects
+	vkDestroyPipelineLayout(GAPI._VulkanDevice, _TriLayout, nullptr);
+	vkDestroyPipeline(GAPI._VulkanDevice, _TriPipeline, nullptr);
+	vkDestroyRenderPass(GAPI._VulkanDevice, _TriRenderPass, nullptr);
 }

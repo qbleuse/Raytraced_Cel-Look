@@ -27,29 +27,29 @@ bool VulkanHelper::StartUploader(GraphicsAPIManager& GAPI, Uploader& VulkanUploa
 	VkResult result = VK_SUCCESS;
 
 	//first fill with the data we already have 
-	VulkanUploader.VulkanDevice = GAPI.VulkanDevice;
-	VulkanUploader.CopyQueue	= GAPI.RuntimeHandle.VulkanQueues[0];
-	VulkanUploader.CopyPool		= GAPI.VulkanCommandPool[0];
+	VulkanUploader._VulkanDevice = GAPI._VulkanDevice;
+	VulkanUploader._CopyQueue	= GAPI._RuntimeHandle._VulkanQueues[0];
+	VulkanUploader._CopyPool	= GAPI._VulkanCommandPool[0];
 
 	//then create a copy-only command buffer 
 	//(in this case we use the graphics command pool but we could use a copy and transfer only command pool later on)
 	VkCommandBufferAllocateInfo allocInfo{};
 	allocInfo.sType					= VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	allocInfo.level					= VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	allocInfo.commandPool			= GAPI.VulkanCommandPool[0];
+	allocInfo.commandPool			= GAPI._VulkanCommandPool[0];
 	allocInfo.commandBufferCount	= 1;
 
-	VK_CALL_PRINT(vkAllocateCommandBuffers(GAPI.VulkanDevice, &allocInfo, &VulkanUploader.CopyBuffer));
+	VK_CALL_PRINT(vkAllocateCommandBuffers(GAPI._VulkanDevice, &allocInfo, &VulkanUploader._CopyBuffer));
 
 	// beginning the copy command
 	VkCommandBufferBeginInfo beginInfo{};
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-	VK_CALL_PRINT(vkBeginCommandBuffer(VulkanUploader.CopyBuffer, &beginInfo));
+	VK_CALL_PRINT(vkBeginCommandBuffer(VulkanUploader._CopyBuffer, &beginInfo));
 
 	//also get the memory properties to create buffers and images
-	vkGetPhysicalDeviceMemoryProperties(GAPI.VulkanGPU, &VulkanUploader.MemoryProperties);
+	vkGetPhysicalDeviceMemoryProperties(GAPI._VulkanGPU, &VulkanUploader._MemoryProperties);
 
 	return result == VK_SUCCESS;
 }
@@ -60,28 +60,28 @@ bool VulkanHelper::SubmitUploader(Uploader& VulkanUploader)
 	//to know if we succeeded
 	VkResult result = VK_SUCCESS;
 
-	VK_CALL_PRINT(vkEndCommandBuffer(VulkanUploader.CopyBuffer));
+	VK_CALL_PRINT(vkEndCommandBuffer(VulkanUploader._CopyBuffer));
 
 	// submit copy command immediately 
 	VkSubmitInfo submitInfo{};
 	submitInfo.sType				= VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submitInfo.commandBufferCount	= 1;
-	submitInfo.pCommandBuffers		= &VulkanUploader.CopyBuffer;
+	submitInfo.pCommandBuffers		= &VulkanUploader._CopyBuffer;
 
-	VK_CALL_PRINT(vkQueueSubmit(VulkanUploader.CopyQueue, 1, &submitInfo, VK_NULL_HANDLE));
-	VK_CALL_PRINT(vkQueueWaitIdle(VulkanUploader.CopyQueue));
+	VK_CALL_PRINT(vkQueueSubmit(VulkanUploader._CopyQueue, 1, &submitInfo, VK_NULL_HANDLE));
+	VK_CALL_PRINT(vkQueueWaitIdle(VulkanUploader._CopyQueue));
 
-	VK_CLEAR_LIST(VulkanUploader.ToFreeBuffers, VulkanUploader.ToFreeBuffers.GetNb(), vkDestroyBuffer, VulkanUploader.VulkanDevice);
-	VK_CLEAR_LIST(VulkanUploader.ToFreeMemory, VulkanUploader.ToFreeMemory.GetNb(), vkFreeMemory, VulkanUploader.VulkanDevice);
+	VK_CLEAR_LIST(VulkanUploader._ToFreeBuffers, VulkanUploader._ToFreeBuffers.Nb(), vkDestroyBuffer, VulkanUploader._VulkanDevice);
+	VK_CLEAR_LIST(VulkanUploader._ToFreeMemory, VulkanUploader._ToFreeMemory.Nb(), vkFreeMemory, VulkanUploader._VulkanDevice);
 
-	vkFreeCommandBuffers(VulkanUploader.VulkanDevice, VulkanUploader.CopyPool, 1, &VulkanUploader.CopyBuffer);
+	vkFreeCommandBuffers(VulkanUploader._VulkanDevice, VulkanUploader._CopyPool, 1, &VulkanUploader._CopyBuffer);
 
 	return result == VK_SUCCESS;
 }
 
 /*===== SHADERS =====*/
 
-bool VulkanHelper::CreateVulkanShaders(Uploader& VulkanUploader, VkShaderModule& shader, VkShaderStageFlagBits shaderStage, const char* shaderSource, const char* shader_name, const char* entryPoint)
+bool VulkanHelper::CreateVulkanShaders(Uploader& VulkanUploader, VkShaderModule& shader, VkShaderStageFlagBits shaderStage, const char* shader_source, const char* shader_name, const char* entry_point)
 {
 	//our shader compiler 
 	shaderc_compiler_t shader_compiler = shaderc_compiler_initialize();
@@ -140,7 +140,7 @@ bool VulkanHelper::CreateVulkanShaders(Uploader& VulkanUploader, VkShaderModule&
 	}
 
 	//compiling our shader into byte code
-	shaderc_compilation_result_t compiled_shader = shaderc_compile_into_spv(shader_compiler, shaderSource, strlen(shaderSource), shader_kind, shader_name, entryPoint, compile_options);
+	shaderc_compilation_result_t compiled_shader = shaderc_compile_into_spv(shader_compiler, shader_source, strlen(shader_source), shader_kind, shader_name, entry_point, compile_options);
 
 
 	// make compiled shader, vulkan shaders
@@ -153,7 +153,7 @@ bool VulkanHelper::CreateVulkanShaders(Uploader& VulkanUploader, VkShaderModule&
 		shaderinfo.pCode	= (uint32_t*)shaderc_result_get_bytes(compiled_shader);
 
 		VkResult result = VK_SUCCESS;
-		VK_CALL_PRINT(vkCreateShaderModule(VulkanUploader.VulkanDevice, &shaderinfo, nullptr, &shader))
+		VK_CALL_PRINT(vkCreateShaderModule(VulkanUploader._VulkanDevice, &shaderinfo, nullptr, &shader))
 	}
 	else
 	{
@@ -186,7 +186,7 @@ uint32_t VulkanHelper::GetMemoryTypeFromRequirements(const VkMemoryPropertyFlags
 	return 0;
 }
 
-bool VulkanHelper::CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset, bool AllocateMemory)
+bool VulkanHelper::CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset, bool allocate_memory)
 {
 	//to know if we succeeded
 	VkResult result = VK_SUCCESS;
@@ -198,76 +198,74 @@ bool VulkanHelper::CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize siz
 	bufferInfo.usage		= usage;
 	bufferInfo.sharingMode	= VK_SHARING_MODE_EXCLUSIVE;
 
-	VK_CALL_PRINT(vkCreateBuffer(VulkanUploader.VulkanDevice, &bufferInfo, nullptr, &buffer))
+	VK_CALL_PRINT(vkCreateBuffer(VulkanUploader._VulkanDevice, &bufferInfo, nullptr, &buffer))
 	
 	//now that we have created our buffer object, we need to allocate GPU memory associated with it
 	//first let's get the requirements that the memory should follow (like it needs to be 4 bytes and such)
 	VkMemoryRequirements memRequirements;
-	vkGetBufferMemoryRequirements(VulkanUploader.VulkanDevice, buffer, &memRequirements);
-	if (AllocateMemory)
+	vkGetBufferMemoryRequirements(VulkanUploader._VulkanDevice, buffer, &memRequirements);
+	if (allocate_memory)
 	{
-
-
 		//now that we have reauirements like size we also should choose the type.
 		//we choose the first type that will go with the properties user asked for 
 		//(using the flags to get the better performing memory type)
 		VkMemoryAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = GetMemoryTypeFromRequirements(properties, memRequirements, VulkanUploader.MemoryProperties);
+		allocInfo.memoryTypeIndex = GetMemoryTypeFromRequirements(properties, memRequirements, VulkanUploader._MemoryProperties);
 
-		VK_CALL_PRINT(vkAllocateMemory(VulkanUploader.VulkanDevice, &allocInfo, nullptr, &bufferMemory))
+		VK_CALL_PRINT(vkAllocateMemory(VulkanUploader._VulkanDevice, &allocInfo, nullptr, &bufferMemory))
 	}
 
-	VK_CALL_PRINT(vkBindBufferMemory(VulkanUploader.VulkanDevice, buffer, bufferMemory, offset));
+	VK_CALL_PRINT(vkBindBufferMemory(VulkanUploader._VulkanDevice, buffer, bufferMemory, offset));
 
 	return result == VK_SUCCESS;
 }
 
 bool VulkanHelper::CreateUniformBufferHandle(Uploader& VulkanUploader, UniformBufferHandle& bufferHandle, uint32_t bufferNb, VkDeviceSize size,
-	VkMemoryPropertyFlags properties, VkBufferUsageFlags usage, bool mapCPUMemoryHandle)
+	VkMemoryPropertyFlags properties, VkBufferUsageFlags usage, bool map_cpu_memory_handle)
 
 {
 	VkResult result = VK_SUCCESS;
 
 	//clear if not already empty
-	ClearUniformBufferHandle(VulkanUploader.VulkanDevice, bufferHandle);
+	ClearUniformBufferHandle(VulkanUploader._VulkanDevice, bufferHandle);
 
 	//alloc for buffers
-	bufferHandle.GPUBuffer.Alloc(bufferNb);
-	bufferHandle.GPUMemoryHandle.Alloc(bufferNb);
-	bufferHandle.CPUMemoryHandle.Alloc(bufferNb);
-	bufferHandle.nbBuffer = bufferNb;
+	bufferHandle._GPUBuffer.Alloc(bufferNb);
+	bufferHandle._GPUMemoryHandle.Alloc(bufferNb);
+	bufferHandle._CPUMemoryHandle.Alloc(bufferNb);
+	bufferHandle._nb_buffer = bufferNb;
 
 	for (uint32_t i = 0; i < bufferNb; i++)
 	{
 		//create the new buffer and associated gpu memory with parameter
-		result = CreateVulkanBuffer(VulkanUploader, size, usage, properties, bufferHandle.GPUBuffer[i], bufferHandle.GPUMemoryHandle[i]) ? VK_SUCCESS : VK_ERROR_UNKNOWN;
+		result = CreateVulkanBuffer(VulkanUploader, size, usage, properties, bufferHandle._GPUBuffer[i], bufferHandle._GPUMemoryHandle[i]) ? VK_SUCCESS : VK_ERROR_UNKNOWN;
 
 		//link the GPU handlke with the cpu handle if necessary
-		if (mapCPUMemoryHandle && result == VK_SUCCESS)
-			VK_CALL_PRINT(vkMapMemory(VulkanUploader.VulkanDevice, bufferHandle.GPUMemoryHandle[i], 0, size, 0, &bufferHandle.CPUMemoryHandle[i]));
+		if (map_cpu_memory_handle && result == VK_SUCCESS)
+			VK_CALL_PRINT(vkMapMemory(VulkanUploader._VulkanDevice, bufferHandle._GPUMemoryHandle[i], 0, size, 0, &bufferHandle._CPUMemoryHandle[i]));
 	}
 
 	return result == VK_SUCCESS;
 }
 
-void VulkanHelper::ClearUniformBufferHandle(const VkDevice& VulkanDevice, UniformBufferHandle& bufferHandle)
+void VulkanHelper::ClearUniformBufferHandle(const VkDevice& _VulkanDevice, UniformBufferHandle& bufferHandle)
 {
-	VK_CLEAR_ARRAY(bufferHandle.GPUBuffer, bufferHandle.nbBuffer, vkDestroyBuffer, VulkanDevice);
-	VK_CLEAR_ARRAY(bufferHandle.GPUMemoryHandle, bufferHandle.nbBuffer, vkFreeMemory, VulkanDevice);
-	bufferHandle.CPUMemoryHandle.Clear();
+	VK_CLEAR_ARRAY(bufferHandle._GPUBuffer, bufferHandle._nb_buffer, vkDestroyBuffer, _VulkanDevice);
+	VK_CLEAR_ARRAY(bufferHandle._GPUMemoryHandle, bufferHandle._nb_buffer, vkFreeMemory, _VulkanDevice);
+	bufferHandle._CPUMemoryHandle.Clear();
 }
 
 
 bool VulkanHelper::CreateStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, VkDeviceSize size, VkBufferUsageFlags staticBufferUsage, VkMemoryPropertyFlags staticBufferProperties)
 {
 	//creating the static buffer
-	return CreateVulkanBuffer(VulkanUploader, size, staticBufferUsage, staticBufferProperties, bufferHandle.StaticGPUBuffer, bufferHandle.StaticGPUMemoryHandle, 0);
+	return CreateVulkanBuffer(VulkanUploader, size, staticBufferUsage, staticBufferProperties, bufferHandle._StaticGPUBuffer, bufferHandle._StaticGPUMemoryHandle, 0);
 }
 
 /* sends the data through the staging buffer to the static buffer */
-bool VulkanHelper::UploadStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, const void* data, VkDeviceSize size, bool releaseStagingBuffer)
+bool VulkanHelper::UploadStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, const void* data, VkDeviceSize size, bool release_staging_buffer)
 {	
 	VkResult result = VK_SUCCESS;
 
@@ -280,38 +278,38 @@ bool VulkanHelper::UploadStaticBufferHandle(Uploader& VulkanUploader, StaticBuff
 	CreateVulkanBuffer(VulkanUploader, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingGPUMemoryHandle);
 
 	// first copy the data in the CPU memory allocated by Vulkan for transfer
-	VK_CALL_PRINT(vkMapMemory(VulkanUploader.VulkanDevice, stagingGPUMemoryHandle, 0, size, 0, &CPUHandle));
+	VK_CALL_PRINT(vkMapMemory(VulkanUploader._VulkanDevice, stagingGPUMemoryHandle, 0, size, 0, &CPUHandle));
 	memcpy(CPUHandle, data, size);
-	vkUnmapMemory(VulkanUploader.VulkanDevice, stagingGPUMemoryHandle);
+	vkUnmapMemory(VulkanUploader._VulkanDevice, stagingGPUMemoryHandle);
 
 	// copying from staging buffer to static buffer
 	VkBufferCopy copyRegion{};
 	copyRegion.srcOffset = 0; // Optional
 	copyRegion.dstOffset = 0; // Optional
 	copyRegion.size = size;
-	vkCmdCopyBuffer(VulkanUploader.CopyBuffer, stagingBuffer, bufferHandle.StaticGPUBuffer, 1, &copyRegion);
+	vkCmdCopyBuffer(VulkanUploader._CopyBuffer, stagingBuffer, bufferHandle._StaticGPUBuffer, 1, &copyRegion);
 
 	// free allocated memory and buffer if user wants to
-	if (releaseStagingBuffer)
+	if (release_staging_buffer)
 	{
-		VulkanUploader.ToFreeBuffers.Add(stagingBuffer);
-		VulkanUploader.ToFreeMemory.Add(stagingGPUMemoryHandle);
+		VulkanUploader._ToFreeBuffers.Add(stagingBuffer);
+		VulkanUploader._ToFreeMemory.Add(stagingGPUMemoryHandle);
 	}
 
 	return result == VK_SUCCESS;
 }
 
-void VulkanHelper::ClearStaticBufferHandle(const VkDevice& VulkanDevice, StaticBufferHandle& bufferHandle)
+void VulkanHelper::ClearStaticBufferHandle(const VkDevice& _VulkanDevice, StaticBufferHandle& bufferHandle)
 {
-	if (bufferHandle.StaticGPUBuffer != nullptr)
-		vkDestroyBuffer(VulkanDevice, bufferHandle.StaticGPUBuffer, nullptr);
-	bufferHandle.StaticGPUBuffer = nullptr;
-	if (bufferHandle.StaticGPUMemoryHandle != nullptr)
-		vkFreeMemory(VulkanDevice, bufferHandle.StaticGPUMemoryHandle, nullptr);
-	bufferHandle.StaticGPUMemoryHandle = nullptr;
+	if (bufferHandle._StaticGPUBuffer != nullptr)
+		vkDestroyBuffer(_VulkanDevice, bufferHandle._StaticGPUBuffer, nullptr);
+	bufferHandle._StaticGPUBuffer = nullptr;
+	if (bufferHandle._StaticGPUMemoryHandle != nullptr)
+		vkFreeMemory(_VulkanDevice, bufferHandle._StaticGPUMemoryHandle, nullptr);
+	bufferHandle._StaticGPUMemoryHandle = nullptr;
 }
 
-void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* fileName, LoopArray<Mesh>& meshes)
+void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* file_name, VolatileLoopArray<Mesh>& meshes)
 {
 	// setup obj reader
 	tinyobj::ObjReader reader{};
@@ -319,7 +317,7 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* fileName, L
 	config.triangulate = true;// we ask for triangulate as it will be easier to process
 
 	//read obj
-	if (!reader.ParseFromFile(fileName, config))
+	if (!reader.ParseFromFile(file_name, config))
 		return;
 
 	//get back data
@@ -335,25 +333,25 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* fileName, L
 #if 0
 	uint32_t totalIndexNb = 0;
 	for (uint32_t i = 0; i < objShape.size(); i++)
-		totalIndexNb += objShape[i].mesh.indices.size();
-	HeapMemory<uint32_t> indices{ totalIndexNb };
+		totalIndexNb += objShape[i].mesh._Indices.size();
+	HeapMemory<uint32_t> _Indices{ totalIndexNb };
 
-	//allocate for the vertices buffers (there may be more uvs or normals in the attribute, but it is always linked to a single vertex anyway)
+	//allocate for the vertices buffers (there may be more _Uvs or _Normals in the attribute, but it is always linked to a single vertex anyway)
 	HeapMemory<float> pos{ totalIndexNb * 3u};
 	HeapMemory<float> tex_coords{totalIndexNb *2u };
-	HeapMemory<float> normals{ totalIndexNb * 3u };
+	HeapMemory<float> _Normals{ totalIndexNb * 3u };
 
 	uint32_t indexOffset = 0;
 	for (uint32_t i = 0; i < objShape.size(); i++)
 	{
-		uint32_t indexNb = objShape[i].mesh.indices.size();
+		uint32_t indexNb = objShape[i].mesh._Indices.size();
 
-		//make the indices, texcoords and normal
+		//make the _Indices, texcoords and normal
 		for (uint32_t j = 0; j < indexNb; j++)
 		{
-			const tinyobj::index_t& j_index = objShape[i].mesh.indices[j];
+			const tinyobj::index_t& j_index = objShape[i].mesh._Indices[j];
 
-			indices[j + indexOffset] = j + indexOffset;
+			_Indices[j + indexOffset] = j + indexOffset;
 
 			pos[3 * (j + indexOffset)] = objAttrib.vertices[3 * j_index.vertex_index];
 			pos[3 * (j + indexOffset) + 1] = objAttrib.vertices[3 * j_index.vertex_index + 1];
@@ -367,70 +365,70 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* fileName, L
 
 			if (hasNormals && j_index.normal_index > 0)
 			{
-				normals[3 * (j + indexOffset)] = objAttrib.normals[3 * j_index.normal_index];
-				normals[3 * (j + indexOffset) + 1] = objAttrib.normals[3 * j_index.normal_index + 1];
-				normals[3 * (j + indexOffset) + 2] = objAttrib.normals[3 * j_index.normal_index + 2];
+				_Normals[3 * (j + indexOffset)] = objAttrib._Normals[3 * j_index.normal_index];
+				_Normals[3 * (j + indexOffset) + 1] = objAttrib._Normals[3 * j_index.normal_index + 1];
+				_Normals[3 * (j + indexOffset) + 2] = objAttrib._Normals[3 * j_index.normal_index + 2];
 			}
 		}
 
-		// set the number of indices to allow drawing of mesh
-		meshes[i].indicesNb = indexNb;
-		//set the offest in the indices buffer to draw the mesh
-		meshes[i].indicesOffset = indexOffset;
+		// set the number of _Indices to allow drawing of mesh
+		meshes[i]._indices_nb = indexNb;
+		//set the offest in the _Indices buffer to draw the mesh
+		meshes[i]._indices_offset = indexOffset;
 
 		indexOffset += indexNb;
 	}
 
 	// 1. creating and uploading the position buffer
-	CreateStaticBufferHandle(GAPI, meshes[0].positions, sizeof(vec3) * totalIndexNb);
-	UploadStaticBufferHandle(GAPI, meshes[0].positions, (void*)*pos, sizeof(vec3) * totalIndexNb);
+	CreateStaticBufferHandle(GAPI, meshes[0]._Positions, sizeof(vec3) * totalIndexNb);
+	UploadStaticBufferHandle(GAPI, meshes[0]._Positions, (void*)*pos, sizeof(vec3) * totalIndexNb);
 
-	// 2. creating and uploading the indices buffer (same index buffer is used for all of the meshes, but with different offset)
-	CreateStaticBufferHandle(GAPI, meshes[0].indices, sizeof(uint32_t) * totalIndexNb, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-	UploadStaticBufferHandle(GAPI, meshes[0].indices, (void*)*indices, sizeof(uint32_t) * totalIndexNb);
+	// 2. creating and uploading the _Indices buffer (same index buffer is used for all of the meshes, but with different offset)
+	CreateStaticBufferHandle(GAPI, meshes[0]._Indices, sizeof(uint32_t) * totalIndexNb, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+	UploadStaticBufferHandle(GAPI, meshes[0]._Indices, (void*)*_Indices, sizeof(uint32_t) * totalIndexNb);
 
-	// 3. creating and uploading the uvs buffer
+	// 3. creating and uploading the _Uvs buffer
 	if (hasTexCoords)
 	{
-		CreateStaticBufferHandle(GAPI, meshes[0].uvs, sizeof(vec2) * totalIndexNb);
-		UploadStaticBufferHandle(GAPI, meshes[0].uvs, (void*)*tex_coords, sizeof(vec2) * totalIndexNb);
+		CreateStaticBufferHandle(GAPI, meshes[0]._Uvs, sizeof(vec2) * totalIndexNb);
+		UploadStaticBufferHandle(GAPI, meshes[0]._Uvs, (void*)*tex_coords, sizeof(vec2) * totalIndexNb);
 	}
 
 	// 4. creating and uploading the normal buffer
 	if (hasNormals)
 	{
-		CreateStaticBufferHandle(GAPI, meshes[0].normals, sizeof(vec3) * totalIndexNb);
-		UploadStaticBufferHandle(GAPI, meshes[0].normals, (void*)*normals, sizeof(vec3) * totalIndexNb);
+		CreateStaticBufferHandle(GAPI, meshes[0]._Normals, sizeof(vec3) * totalIndexNb);
+		UploadStaticBufferHandle(GAPI, meshes[0]._Normals, (void*)*_Normals, sizeof(vec3) * totalIndexNb);
 	}
 
 	//copy the unique vertex buffers inside all meshes, to use same buffers for all
 	for (uint32_t i = 1; i < meshes.Nb(); i++)
 	{
-		meshes[i].positions = meshes[0].positions;
-		meshes[i].indices	= meshes[0].indices;
-		meshes[i].uvs		= meshes[0].uvs;
-		meshes[i].normals	= meshes[0].normals;
+		meshes[i]._Positions = meshes[0]._Positions;
+		meshes[i]._Indices	= meshes[0]._Indices;
+		meshes[i]._Uvs		= meshes[0]._Uvs;
+		meshes[i]._Normals	= meshes[0]._Normals;
 		meshes[i].tangents	= meshes[0].tangents;
 	}
 #else
 	//get the size of the array
 	uint32_t nbVertices = objAttrib.vertices.size() / 3;
 
-	//allocate for the vertices buffers (there may be more uvs or normals in the attribute, but it is always linked to a single vertex anyway)
-	HeapMemory<float> tex_coords{ nbVertices * 2u };
-	HeapMemory<float> normals{ nbVertices * 3u };
+	//allocate for the vertices buffers (there may be more _Uvs or _Normals in the attribute, but it is always linked to a single vertex anyway)
+	MultipleScopedMemory<float> tex_coords{ nbVertices * 2u };
+	MultipleScopedMemory<float> _Normals{ nbVertices * 3u };
 
 	uint32_t totalIndexNb = 0;
 	for (uint32_t i = 0; i < objShape.size(); i++)
 		totalIndexNb += objShape[i].mesh.indices.size();
-	HeapMemory<uint32_t> indices{ totalIndexNb };
+	MultipleScopedMemory<uint32_t> indices{ totalIndexNb };
 
 	uint32_t indexOffset = 0;
 	for (uint32_t i = 0; i < objShape.size(); i++)
 	{
 		uint32_t indexNb = objShape[i].mesh.indices.size();
 
-		//make the indices, texcoords and normal
+		//make the _Indices, texcoords and normal
 		for (uint32_t j = 0; j < indexNb; j++)
 		{
 			const tinyobj::index_t& j_index = objShape[i].mesh.indices[j];
@@ -445,17 +443,17 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* fileName, L
 
 			if (hasNormals && j_index.normal_index > 0)
 			{
-				normals[3 * j_index.vertex_index]	= objAttrib.normals[3 * j_index.normal_index];
-				normals[3 * j_index.vertex_index + 1] = objAttrib.normals[3 * j_index.normal_index + 1];
-				normals[3 * j_index.vertex_index + 2] = objAttrib.normals[3 * j_index.normal_index + 2];
+				_Normals[3 * j_index.vertex_index]	= objAttrib.normals[3 * j_index.normal_index];
+				_Normals[3 * j_index.vertex_index + 1] = objAttrib.normals[3 * j_index.normal_index + 1];
+				_Normals[3 * j_index.vertex_index + 2] = objAttrib.normals[3 * j_index.normal_index + 2];
 			}
 		}
 
-		// set the number of indices to allow drawing of mesh
-		meshes[i].indicesNb = indexNb;
-		//set the offest in the indices buffer to draw the mesh
-		meshes[i].indicesOffset = indexOffset;
-		meshes[i].indicesType = VK_INDEX_TYPE_UINT32;
+		// set the number of _Indices to allow drawing of mesh
+		meshes[i]._indices_nb = indexNb;
+		//set the offest in the _Indices buffer to draw the mesh
+		meshes[i]._indices_offset = indexOffset;
+		meshes[i]._indices_type = VK_INDEX_TYPE_UINT32;
 
 		indexOffset += indexNb;
 	}
@@ -466,12 +464,12 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* fileName, L
 	CreateStaticBufferHandle(VulkanUploader, posBuffer, sizeof(vec3) * nbVertices);
 	UploadStaticBufferHandle(VulkanUploader, posBuffer, (void*)objAttrib.vertices.data(), sizeof(vec3) * nbVertices);
 
-	// 2. creating and uploading the indices buffer (same index buffer is used for all of the meshes, but with different offset)
+	// 2. creating and uploading the _Indices buffer (same index buffer is used for all of the meshes, but with different offset)
 	StaticBufferHandle indexBuffer;
 	CreateStaticBufferHandle(VulkanUploader, indexBuffer, sizeof(uint32_t)* totalIndexNb, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 	UploadStaticBufferHandle(VulkanUploader, indexBuffer, (void*)*indices, sizeof(uint32_t) * totalIndexNb);
 
-	// 3. creating and uploading the uvs buffer
+	// 3. creating and uploading the _Uvs buffer
 	StaticBufferHandle uvBuffer;
 	if (hasTexCoords)
 	{
@@ -484,34 +482,34 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* fileName, L
 	if (hasNormals)
 	{
 		CreateStaticBufferHandle(VulkanUploader, normalBuffer, sizeof(vec3) * nbVertices);
-		UploadStaticBufferHandle(VulkanUploader, normalBuffer, (void*)*normals, sizeof(vec3) * nbVertices);
+		UploadStaticBufferHandle(VulkanUploader, normalBuffer, (void*)*_Normals, sizeof(vec3) * nbVertices);
 	}
 
 	//copy the unique vertex buffers inside all meshes, to use same buffers for all
 	for (uint32_t i = 0; i < meshes.Nb(); i++)
 	{
-		meshes[i].vertexMemoryHandle.Alloc(4);
-		meshes[i].positions				= posBuffer.StaticGPUBuffer;
-		meshes[i].vertexMemoryHandle[0] = posBuffer.StaticGPUMemoryHandle;
-		meshes[i].indices				= indexBuffer.StaticGPUBuffer;
-		meshes[i].vertexMemoryHandle[1] = indexBuffer.StaticGPUMemoryHandle;
-		meshes[i].uvs					= uvBuffer.StaticGPUBuffer;
-		meshes[i].vertexMemoryHandle[2] = uvBuffer.StaticGPUMemoryHandle;
-		meshes[i].normals				= normalBuffer.StaticGPUBuffer;
-		meshes[i].vertexMemoryHandle[3] = normalBuffer.StaticGPUMemoryHandle;
+		meshes[i]._VertexMemoryHandle.Alloc(4);
+		meshes[i]._Positions				= posBuffer._StaticGPUBuffer;
+		meshes[i]._VertexMemoryHandle[0]	= posBuffer._StaticGPUMemoryHandle;
+		meshes[i]._Indices					= indexBuffer._StaticGPUBuffer;
+		meshes[i]._VertexMemoryHandle[1]	= indexBuffer._StaticGPUMemoryHandle;
+		meshes[i]._Uvs						= uvBuffer._StaticGPUBuffer;
+		meshes[i]._VertexMemoryHandle[2]	= uvBuffer._StaticGPUMemoryHandle;
+		meshes[i]._Normals					= normalBuffer._StaticGPUBuffer;
+		meshes[i]._VertexMemoryHandle[3]	= normalBuffer._StaticGPUMemoryHandle;
 		//meshes[i].tangents				= ;
-		//meshes[i].vertexMemoryHandle[4]
+		//meshes[i]._VertexMemoryHandle[4]
 	}
 #endif
 
 }
 
-void VulkanHelper::ClearMesh(const VkDevice& VulkanDevice, Mesh& mesh)
+void VulkanHelper::ClearMesh(const VkDevice& _VulkanDevice, Mesh& mesh)
 {
-	VK_CLEAR_RAW_ARRAY_NO_FREE(mesh.vertexBuffers, 4, vkDestroyBuffer, VulkanDevice);
-	if (mesh.indices != nullptr)
-		vkDestroyBuffer(VulkanDevice, mesh.indices, nullptr);
-	VK_CLEAR_ARRAY(mesh.vertexMemoryHandle, mesh.vertexMemoryHandle.Nb(), vkFreeMemory, VulkanDevice);
+	VK_CLEAR_RAW_ARRAY_NO_FREE(mesh._VertexBuffers, 4, vkDestroyBuffer, _VulkanDevice);
+	if (mesh._Indices != nullptr)
+		vkDestroyBuffer(_VulkanDevice, mesh._Indices, nullptr);
+	VK_CLEAR_ARRAY(mesh._VertexMemoryHandle, mesh._VertexMemoryHandle.Nb(), vkFreeMemory, _VulkanDevice);
 }
 
 
@@ -520,7 +518,7 @@ bool LoadGLTFBuffersInGPU(Uploader& VulkanUploader, const tinygltf::Model& loade
 	bool noError = true;
 
 	//loading every buffer into device memory
-	model.buffersHandle.Alloc(loadedModel.buffers.size());
+	model._BuffersHandle.Alloc(loadedModel.buffers.size());
 	for (uint32_t i = 0; i < loadedModel.buffers.size(); i++)
 	{
 		const tinygltf::Buffer& buffer = loadedModel.buffers[i];
@@ -528,12 +526,12 @@ bool LoadGLTFBuffersInGPU(Uploader& VulkanUploader, const tinygltf::Model& loade
 		//we're using a static because it is easier to upload with, but we actually only want to allocate and send data to device memory
 		StaticBufferHandle tmpBufferHandle;
 		noError &= CreateVulkanBuffer(VulkanUploader, buffer.data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tmpBufferHandle.StaticGPUBuffer, tmpBufferHandle.StaticGPUMemoryHandle, 0);
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tmpBufferHandle._StaticGPUBuffer, tmpBufferHandle._StaticGPUMemoryHandle, 0);
 		noError &= UploadStaticBufferHandle(VulkanUploader, tmpBufferHandle, buffer.data.data(), buffer.data.size());
 
-		model.buffersHandle[i] = tmpBufferHandle.StaticGPUMemoryHandle;
+		model._BuffersHandle[i] = tmpBufferHandle._StaticGPUMemoryHandle;
 
-		vkDestroyBuffer(VulkanUploader.VulkanDevice, tmpBufferHandle.StaticGPUBuffer, nullptr);
+		vkDestroyBuffer(VulkanUploader._VulkanDevice, tmpBufferHandle._StaticGPUBuffer, nullptr);
 	}
 
 	return noError;
@@ -545,7 +543,7 @@ bool LoadGLTFMaterialInGPU(Uploader& VulkanUploader, const tinygltf::Model& load
 	VkResult result = VK_SUCCESS;
 
 	//loading every image into device memory
-	model.textures.Alloc(loadedModel.images.size());
+	model._Textures.Alloc(loadedModel.images.size());
 	for (uint32_t i = 0; i < loadedModel.images.size(); i++)
 	{
 		const tinygltf::Image& image = loadedModel.images[i];
@@ -571,10 +569,10 @@ bool LoadGLTFMaterialInGPU(Uploader& VulkanUploader, const tinygltf::Model& load
 			return false;
 		}
 
-		LoadTexture(VulkanUploader, (void*)image.image.data(), (uint32_t)image.width, (uint32_t)image.height, imageFormat, model.textures[i]);
+		LoadTexture(VulkanUploader, (void*)image.image.data(), (uint32_t)image.width, (uint32_t)image.height, imageFormat, model._Textures[i]);
 	}
 
-	model.samplers.Alloc(loadedModel.samplers.size());
+	model._Samplers.Alloc(loadedModel.samplers.size());
 	for (uint32_t i = 0; i < loadedModel.samplers.size(); i++)
 	{
 		const tinygltf::Sampler& sampler = loadedModel.samplers[i];
@@ -664,48 +662,48 @@ bool LoadGLTFMaterialInGPU(Uploader& VulkanUploader, const tinygltf::Model& load
 			break;
 		};
 
-		VK_CALL_PRINT(vkCreateSampler(VulkanUploader.VulkanDevice, &samplerCreateInfo, nullptr, &model.samplers[i]))
+		VK_CALL_PRINT(vkCreateSampler(VulkanUploader._VulkanDevice, &samplerCreateInfo, nullptr, &model._Samplers[i]))
 	}
 
-	model.materials.Alloc(loadedModel.materials.size());
+	model._Materials.Alloc(loadedModel.materials.size());
 	for (uint32_t i = 0; i < loadedModel.materials.size(); i++)
 	{
 		const tinygltf::Material& material = loadedModel.materials[i];
-		Material& mat = model.materials[i];
+		Material& mat = model._Materials[i];
 
 		uint32_t nb = (material.pbrMetallicRoughness.baseColorTexture.index >= 0)
 			+ (material.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0)
 			+ (material.normalTexture.index >= 0);
-		mat.textures.Alloc(nb);
+		mat._Textures.Alloc(nb);
 
 		uint32_t texIndex = 0;
 		if (material.pbrMetallicRoughness.baseColorTexture.index >= 0)
 		{
 			const tinygltf::Texture& texture = loadedModel.textures[material.pbrMetallicRoughness.baseColorTexture.index];
 
-			model.textures[texture.source].sampler = model.samplers[texture.sampler];
-			model.materials[i].textures[texIndex++] = model.textures[texture.source];
+			model._Textures[texture.source]._Sampler = model._Samplers[texture.sampler];
+			model._Materials[i]._Textures[texIndex++] = model._Textures[texture.source];
 		}
 		if (material.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0)
 		{
 			const tinygltf::Texture& texture = loadedModel.textures[material.pbrMetallicRoughness.metallicRoughnessTexture.index];
 
-			model.textures[texture.source].sampler = model.samplers[texture.sampler];
-			model.materials[i].textures[texIndex++] = model.textures[texture.source];
+			model._Textures[texture.source]._Sampler = model._Samplers[texture.sampler];
+			model._Materials[i]._Textures[texIndex++] = model._Textures[texture.source];
 		}
 		if (material.normalTexture.index >= 0)
 		{
 			const tinygltf::Texture& texture = loadedModel.textures[material.normalTexture.index];
 
-			model.textures[texture.source].sampler = model.samplers[texture.sampler];
-			model.materials[i].textures[texIndex++] = model.textures[texture.source];
+			model._Textures[texture.source]._Sampler = model._Samplers[texture.sampler];
+			model._Materials[i]._Textures[texIndex++] = model._Textures[texture.source];
 		}
 	}
 
 	return noError;
 }
 
-bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* fileName, Model& model)
+bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name, Model& model)
 {
 	tinygltf::TinyGLTF loader;
 	tinygltf::Model loadedModel;
@@ -713,31 +711,31 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* fileName, 
 	std::string warnings;
 
 	//first load model
-	if (!loader.LoadASCIIFromFile(&loadedModel, &err, &warnings, fileName))
+	if (!loader.LoadASCIIFromFile(&loadedModel, &err, &warnings, file_name))
 	{
-		printf("error when reading %s :\nerror : %s\nwarning : %s", fileName, err.c_str(), warnings.c_str());
+		printf("error when reading %s :\nerror : %s\nwarning : %s", file_name, err.c_str(), warnings.c_str());
 		return false;
 	}
 
 	//1. loading every buffer into device memory
 	if (!LoadGLTFBuffersInGPU(VulkanUploader, loadedModel, model))
 	{
-		printf("error loading %s's buffers in GPU.", fileName);
+		printf("error loading %s's buffers in GPU.", file_name);
 		return false;
 	}
 
 	//2. load every image in memory
 	if (!LoadGLTFMaterialInGPU(VulkanUploader, loadedModel, model))
 	{
-		printf("error loading %s's buffers in GPU.", fileName);
+		printf("error loading %s's buffers in GPU.", file_name);
 		return false;
 	}
 
 	uint32_t totalMeshNb = 0;
 	for (uint32_t i = 0; i < loadedModel.meshes.size(); i++)
 		totalMeshNb += loadedModel.meshes[i].primitives.size();
-	model.meshes.Alloc(totalMeshNb);
-	model.materialIndex.Alloc(totalMeshNb);
+	model._Meshes.Alloc(totalMeshNb);
+	model._material_index.Alloc(totalMeshNb);
 
 	//2. creating vulkan buffer interface for meshes
 	uint32_t meshIndex = 0;
@@ -749,29 +747,29 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* fileName, 
 		for (uint32_t j = 0; j < indexMesh.primitives.size(); j++)
 		{
 			tinygltf::Primitive& jPrimitive = indexMesh.primitives[j];
-			model.materialIndex[j] = jPrimitive.material;
+			model._material_index[j] = jPrimitive.material;
 
-			//create indices buffer from preallocated device memory
+			//create _Indices buffer from preallocated device memory
 			{
 				tinygltf::Accessor&	accessor		= loadedModel.accessors[jPrimitive.indices];
 				tinygltf::BufferView& bufferView	= loadedModel.bufferViews[accessor.bufferView];
 
 				CreateVulkanBuffer(VulkanUploader, (bufferView.byteLength - accessor.byteOffset), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-					model.meshes[meshIndex].indices, model.buffersHandle[bufferView.buffer], (bufferView.byteOffset + accessor.byteOffset), false);
+					model._Meshes[meshIndex]._Indices, model._BuffersHandle[bufferView.buffer], (bufferView.byteOffset + accessor.byteOffset), false);
 
-				model.meshes[meshIndex].indicesNb = accessor.count;
-				model.meshes[meshIndex].indicesOffset = 0;
+				model._Meshes[meshIndex]._indices_nb = accessor.count;
+				model._Meshes[meshIndex]._indices_offset = 0;
 
 				switch (accessor.componentType)
 				{
 				case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
-					model.meshes[meshIndex].indicesType = VK_INDEX_TYPE_UINT8_KHR;
+					model._Meshes[meshIndex]._indices_type = VK_INDEX_TYPE_UINT8_KHR;
 					break;
 				case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
-					model.meshes[meshIndex].indicesType = VK_INDEX_TYPE_UINT16;
+					model._Meshes[meshIndex]._indices_type = VK_INDEX_TYPE_UINT16;
 					break;
 				case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
-					model.meshes[meshIndex].indicesType = VK_INDEX_TYPE_UINT32;
+					model._Meshes[meshIndex]._indices_type = VK_INDEX_TYPE_UINT32;
 					break;
 				}
 			}
@@ -783,33 +781,33 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* fileName, 
 				tinygltf::BufferView& bufferView	= loadedModel.bufferViews[accessor.bufferView];
 
 				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-					model.meshes[meshIndex].positions, model.buffersHandle[bufferView.buffer], 0, false);
+					model._Meshes[meshIndex]._Positions, model._BuffersHandle[bufferView.buffer], 0, false);
 
-				model.meshes[meshIndex].posOffset = accessor.byteOffset + bufferView.byteOffset;
+				model._Meshes[meshIndex]._pos_offset = accessor.byteOffset + bufferView.byteOffset;
 			}
 
-			//uvs
+			//_Uvs
 			if (jPrimitive.attributes.count("TEXCOORD_0") > 0)
 			{
 				tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["TEXCOORD_0"]];
 				tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
 
 				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-					model.meshes[meshIndex].uvs, model.buffersHandle[bufferView.buffer], 0, false);
+					model._Meshes[meshIndex]._Uvs, model._BuffersHandle[bufferView.buffer], 0, false);
 
-				model.meshes[meshIndex].uvOffset = bufferView.byteOffset + accessor.byteOffset;
+				model._Meshes[meshIndex]._uv_offset = bufferView.byteOffset + accessor.byteOffset;
 			}
 
-			//normals
+			//_Normals
 			if (jPrimitive.attributes.count("NORMAL") > 0)
 			{
 				tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["NORMAL"]];
 				tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
 
 				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-					model.meshes[meshIndex].normals, model.buffersHandle[bufferView.buffer], 0, false);
+					model._Meshes[meshIndex]._Normals, model._BuffersHandle[bufferView.buffer], 0, false);
 
-				model.meshes[meshIndex].normalOffset = bufferView.byteOffset + accessor.byteOffset;
+				model._Meshes[meshIndex]._normal_offset = bufferView.byteOffset + accessor.byteOffset;
 			}
 
 			//tangents
@@ -819,36 +817,44 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* fileName, 
 				tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
 
 				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-					model.meshes[meshIndex].tangents, model.buffersHandle[bufferView.buffer], 0, false);
+					model._Meshes[meshIndex]._Tangents, model._BuffersHandle[bufferView.buffer], 0, false);
 
-				model.meshes[meshIndex].tangentOffset = bufferView.byteOffset + accessor.byteOffset;
+				model._Meshes[meshIndex]._tangent_offset = bufferView.byteOffset + accessor.byteOffset;
 			}
 
 			meshIndex++;
 		}
 	}
-	
+
 	return true;
 }
 
-void VulkanHelper::ClearModel(const VkDevice& VulkanDevice, Model& model)
+void VulkanHelper::ClearModel(const VkDevice& _VulkanDevice, Model& model)
 {
-	for (uint32_t i = 0; i < model.meshes.Nb(); i++)
+	for (uint32_t i = 0; i < model._Meshes.Nb(); i++)
 	{
-		ClearMesh(VulkanDevice, model.meshes[i]);
+		ClearMesh(_VulkanDevice, model._Meshes[i]);
 	}
-	VK_CLEAR_ARRAY(model.buffersHandle, model.buffersHandle.Nb(), vkFreeMemory, VulkanDevice);
-	for (uint32_t i = 0; i < model.textures.Nb(); i++)
+	model._Meshes.Clear();
+	model._material_index.Clear();
+	VK_CLEAR_ARRAY(model._BuffersHandle, model._BuffersHandle.Nb(), vkFreeMemory, _VulkanDevice);
+	for (uint32_t i = 0; i < model._Textures.Nb(); i++)
 	{
-		ClearTexture(VulkanDevice, model.textures[i]);
+		ClearTexture(_VulkanDevice, model._Textures[i]);
 	}
-	VK_CLEAR_ARRAY(model.samplers, model.samplers.Nb(), vkDestroySampler, VulkanDevice);
+	model._Textures.Clear();
+	VK_CLEAR_ARRAY(model._Samplers, model._Samplers.Nb(), vkDestroySampler, _VulkanDevice);
+	for (uint32_t i = 0; i < model._Materials.Nb(); i++)
+	{
+		model._Materials[i]._Textures.Clear();
+	}
+	model._Materials.Clear();
 }
 
 /* Images/Textures */
 
 
-bool VulkanHelper::CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, VkDeviceMemory& imageMemory, uint32_t width, uint32_t height, uint32_t depth, VkImageType imagetype, VkFormat format, VkImageUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryProperties, uint32_t offset, bool AllocateMemory)
+bool VulkanHelper::CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, VkDeviceMemory& imageMemory, uint32_t width, uint32_t height, uint32_t depth, VkImageType imagetype, VkFormat format, VkImageUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryProperties, uint32_t offset, bool allocate_memory)
 {
 	//will stay the same if we suceed
 	VkResult result = VK_SUCCESS;
@@ -860,7 +866,7 @@ bool VulkanHelper::CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, V
 	imageInfo.format		= format;//that depends on the number of channels
 	imageInfo.extent.width	= width;
 	imageInfo.extent.height = height;
-	imageInfo.extent.depth	= depth;//kept it in case we have 3D textures
+	imageInfo.extent.depth	= depth;//kept it in case we have 3D _Textures
 	imageInfo.mipLevels		= 1u;
 	imageInfo.arrayLayers	= 1u;
 	imageInfo.tiling		= VK_IMAGE_TILING_OPTIMAL;//will only load images from buffers, so no need to change this
@@ -870,30 +876,30 @@ bool VulkanHelper::CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, V
 	imageInfo.samples		= VK_SAMPLE_COUNT_1_BIT;//why would you want more than one sample in a simple app ?
 	imageInfo.flags			= 0; // Optional
 
-	VK_CALL_PRINT(vkCreateImage(VulkanUploader.VulkanDevice, &imageInfo, nullptr, &imageToMake));
+	VK_CALL_PRINT(vkCreateImage(VulkanUploader._VulkanDevice, &imageInfo, nullptr, &imageToMake));
 
-	if (AllocateMemory)
+	if (allocate_memory)
 	{
 		//getting the necessary requirements to create our image
 		VkMemoryRequirements memRequirements;
-		vkGetImageMemoryRequirements(VulkanUploader.VulkanDevice, imageToMake, &memRequirements);
+		vkGetImageMemoryRequirements(VulkanUploader._VulkanDevice, imageToMake, &memRequirements);
 
 		//trying to find a matching memory type between what the app wants and the device's limitation.
 		VkMemoryAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = GetMemoryTypeFromRequirements(memoryProperties, memRequirements, VulkanUploader.MemoryProperties);
+		allocInfo.memoryTypeIndex = GetMemoryTypeFromRequirements(memoryProperties, memRequirements, VulkanUploader._MemoryProperties);
 
 		//allocating and associate the memory to our image.
-		VK_CALL_PRINT(vkAllocateMemory(VulkanUploader.VulkanDevice, &allocInfo, nullptr, &imageMemory));
+		VK_CALL_PRINT(vkAllocateMemory(VulkanUploader._VulkanDevice, &allocInfo, nullptr, &imageMemory));
 	}
 
-	VK_CALL_PRINT(vkBindImageMemory(VulkanUploader.VulkanDevice, imageToMake, imageMemory, offset))
+	VK_CALL_PRINT(vkBindImageMemory(VulkanUploader._VulkanDevice, imageToMake, imageMemory, offset))
 
 	return result == VK_SUCCESS;
 }
 
-bool VulkanHelper::UploadImage(Uploader& VulkanUploader, VkImage& imageToUploadTo, void* imageContent, uint32_t width, uint32_t height, uint32_t channels, uint32_t depth)
+bool VulkanHelper::UploadImage(Uploader& VulkanUploader, VkImage& imageToUploadTo, void* image_content, uint32_t width, uint32_t height, uint32_t channels, uint32_t depth)
 {
 	VkResult result = VK_SUCCESS;
 	uint32_t size = width * height * depth * channels;
@@ -905,9 +911,9 @@ bool VulkanHelper::UploadImage(Uploader& VulkanUploader, VkImage& imageToUploadT
 	CreateVulkanBuffer(VulkanUploader, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, tempBuffer, tempMemory);
 
 	// first copy the data in the CPU memory allocated by Vulkan for transfer
-	VK_CALL_PRINT(vkMapMemory(VulkanUploader.VulkanDevice, tempMemory, 0, size, 0, &CPUHandle));
-	memcpy(CPUHandle, imageContent, size);
-	vkUnmapMemory(VulkanUploader.VulkanDevice, tempMemory);
+	VK_CALL_PRINT(vkMapMemory(VulkanUploader._VulkanDevice, tempMemory, 0, size, 0, &CPUHandle));
+	memcpy(CPUHandle, image_content, size);
+	vkUnmapMemory(VulkanUploader._VulkanDevice, tempMemory);
 
 	// changing the image to allow transfer from buffer
 	VkImageMemoryBarrier barrier{};
@@ -926,7 +932,7 @@ bool VulkanHelper::UploadImage(Uploader& VulkanUploader, VkImage& imageToUploadT
 	barrier.dstAccessMask					= VK_ACCESS_TRANSFER_WRITE_BIT;// ... resources during TRANSFER WRITE
 
 	//layout should change when we go from pipeline doing nothing to transfer stage
-	vkCmdPipelineBarrier(VulkanUploader.CopyBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+	vkCmdPipelineBarrier(VulkanUploader._CopyBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
 	// copying from staging buffer to image
 	VkBufferImageCopy copyRegion{};
@@ -935,24 +941,24 @@ bool VulkanHelper::UploadImage(Uploader& VulkanUploader, VkImage& imageToUploadT
 	copyRegion.imageExtent.width	= width;
 	copyRegion.imageExtent.height	= height;
 	copyRegion.imageExtent.depth	= depth;
-	vkCmdCopyBufferToImage(VulkanUploader.CopyBuffer, tempBuffer, imageToUploadTo, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
+	vkCmdCopyBufferToImage(VulkanUploader._CopyBuffer, tempBuffer, imageToUploadTo, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copyRegion);
 
 	// free allocated memory and buffer
-	VulkanUploader.ToFreeBuffers.Add(tempBuffer);
-	VulkanUploader.ToFreeMemory.Add(tempMemory);
+	VulkanUploader._ToFreeBuffers.Add(tempBuffer);
+	VulkanUploader._ToFreeMemory.Add(tempMemory);
 
 	return result == VK_SUCCESS;
 }
 
 
 
-bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const char* fileName, Texture& texture)
+bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const char* file_name, Texture& texture)
 {
 	VkResult result = VK_SUCCESS;
 
 	// first loading the texture
 	int32_t width, height, channels{0};
-	stbi_uc* pixels = stbi_load(fileName, &width, &height, &channels, STBI_rgb_alpha);
+	stbi_uc* pixels = stbi_load(file_name, &width, &height, &channels, STBI_rgb_alpha);
 
 	if (pixels == nullptr)
 		return false;
@@ -974,7 +980,7 @@ bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const char* fileName, T
 		break;
 		default:
 			imageFormat = VK_FORMAT_UNDEFINED;
-		printf("error when loading %s,  with %d channels.\n is the path correct?", fileName, channels);
+		printf("error when loading %s,  with %d channels.\n is the path correct?", file_name, channels);
 		return false;
 	}
 
@@ -1000,13 +1006,13 @@ bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const void* pixels, uin
 	CreateVulkanBuffer(VulkanUploader, width * height * vkuFormatElementSize(imageFormat), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, tempBuffer, tempMemory);
 
 	//creating image from stbi info
-	if (!CreateImage(VulkanUploader, texture.image, texture.imageMemory, width, height, 1u, VK_IMAGE_TYPE_2D, imageFormat, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT))
+	if (!CreateImage(VulkanUploader, texture._Image, texture._ImageMemory, width, height, 1u, VK_IMAGE_TYPE_2D, imageFormat, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT))
 	{
 		return false;
 	}
 
 	//upload image to buffer
-	if (!UploadImage(VulkanUploader, texture.image, (void*)pixels, width, height, vkuGetFormatInfo(imageFormat).component_count))
+	if (!UploadImage(VulkanUploader, texture._Image, (void*)pixels, width, height, vkuGetFormatInfo(imageFormat).component_count))
 	{
 		return false;
 	}
@@ -1018,7 +1024,7 @@ bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const void* pixels, uin
 	barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;//to transfer dest
 	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
 	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
-	barrier.image = texture.image;
+	barrier.image = texture._Image;
 	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	barrier.subresourceRange.baseMipLevel = 0;
 	barrier.subresourceRange.levelCount = 1;
@@ -1028,19 +1034,19 @@ bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const void* pixels, uin
 	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT; // shaders
 
 	//layout should change when we go from pipeline doing transfer to frament stage. here it does not really matter because there is pipeline attached.
-	vkCmdPipelineBarrier(VulkanUploader.CopyBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+	vkCmdPipelineBarrier(VulkanUploader._CopyBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
 	//create an image view associated with the created image to make it available in shader
 	VkImageViewCreateInfo viewCreateInfo{};
 	viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	viewCreateInfo.format = imageFormat;
-	viewCreateInfo.image = texture.image;
+	viewCreateInfo.image = texture._Image;
 	viewCreateInfo.subresourceRange.layerCount = 1;
 	viewCreateInfo.subresourceRange.levelCount = 1;
 	viewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
 
-	VK_CALL_PRINT(vkCreateImageView(VulkanUploader.VulkanDevice, &viewCreateInfo, nullptr, &texture.imageView));
+	VK_CALL_PRINT(vkCreateImageView(VulkanUploader._VulkanDevice, &viewCreateInfo, nullptr, &texture._ImageView));
 
 	////create a sampler that can be used to sample this texture inside the shader
 	//VkSamplerCreateInfo samplerCreateInfo{};
@@ -1048,24 +1054,24 @@ bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const void* pixels, uin
 	//samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
 	//samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
 	//
-	//VK_CALL_PRINT(vkCreateSampler(VulkanUploader.VulkanDevice, &samplerCreateInfo, nullptr, &texture.sampler))
+	//VK_CALL_PRINT(vkCreateSampler(VulkanUploader._VulkanDevice, &samplerCreateInfo, nullptr, &texture.sampler))
 
 	return result == VK_SUCCESS;
 }
 
 
-void VulkanHelper::ClearTexture(const VkDevice& VulkanDevice, Texture& texture)
+void VulkanHelper::ClearTexture(const VkDevice& _VulkanDevice, Texture& texture)
 {
 	//first release memory
-	if (texture.image != nullptr)
-		vkDestroyImage(VulkanDevice, texture.image, nullptr);
-	if (texture.imageMemory != nullptr)
-		vkFreeMemory(VulkanDevice, texture.imageMemory, nullptr);
-	if (texture.imageView != nullptr)
-		vkDestroyImageView(VulkanDevice, texture.imageView, nullptr);
+	if (texture._Image != nullptr)
+		vkDestroyImage(_VulkanDevice, texture._Image, nullptr);
+	if (texture._ImageMemory != nullptr)
+		vkFreeMemory(_VulkanDevice, texture._ImageMemory, nullptr);
+	if (texture._ImageView != nullptr)
+		vkDestroyImageView(_VulkanDevice, texture._ImageView, nullptr);
 
 	//then memset 0
-	texture.image		= nullptr;
-	texture.imageMemory	= nullptr;
-	texture.imageView	= nullptr;
+	texture._Image = nullptr;
+	texture._ImageMemory = nullptr;
+	texture._ImageView = nullptr;
 }

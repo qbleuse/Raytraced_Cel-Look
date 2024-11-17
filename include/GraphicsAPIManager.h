@@ -10,36 +10,36 @@
 struct GAPIHandle
 {
 	/* Vulkan */
-	VkDevice					VulkanDevice;
-	VkQueue	VulkanQueues[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
-	HeapMemory<VkCommandBuffer>	VulkanCommand;
-	HeapMemory<VkSemaphore>		VulkanCanPresentSemaphore;
-	HeapMemory<VkSemaphore>		VulkanHasPresentedSemaphore;
-	HeapMemory<VkFence>			VulkanIsDrawingFence;
+	VkDevice								_VulkanDevice;
+	VkQueue									_VulkanQueues[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
+	MultipleScopedMemory<VkCommandBuffer>	_VulkanCommand;
+	MultipleScopedMemory<VkSemaphore>		_VulkanCanPresentSemaphore;
+	MultipleScopedMemory<VkSemaphore>		_VulkanHasPresentedSemaphore;
+	MultipleScopedMemory<VkFence>			_VulkanIsDrawingFence;
 
-	uint32_t VulkanCurrentFrame = 0;
-	uint32_t VulkanFrameIndex = 0;
-	uint32_t NbVulkanFrames{ 0 };
+	uint32_t _vk_current_frame = 0;
+	uint32_t _vk_frame_index = 0;
+	uint32_t _nb_vk_frames{ 0 };
 
 	/*
 	* Returns the command buffer currently used for this frame to record commands
 	*/
-	__forceinline const VkCommandBuffer& GetCurrentVulkanCommand()const { return VulkanCommand[VulkanCurrentFrame]; }
+	__forceinline const VkCommandBuffer& GetCurrentVulkanCommand()const noexcept { return _VulkanCommand[_vk_current_frame]; }
 
 	/*
 	* Returns the semaphore currently used for this frame to track if we can preesent
 	*/
-	__forceinline const VkSemaphore& GetCurrentCanPresentSemaphore()const { return VulkanCanPresentSemaphore[VulkanCurrentFrame]; }
+	__forceinline const VkSemaphore& GetCurrentCanPresentSemaphore()const noexcept { return _VulkanCanPresentSemaphore[_vk_current_frame]; }
 
 	/*
 	* Returns the semaphore currently used for this frame to track if frame was presented
 	*/
-	__forceinline const VkSemaphore& GetCurrentHasPresentedSemaphore()const { return VulkanHasPresentedSemaphore[VulkanCurrentFrame]; }
+	__forceinline const VkSemaphore& GetCurrentHasPresentedSemaphore()const noexcept { return _VulkanHasPresentedSemaphore[_vk_current_frame]; }
 
 	/*
 	* Returns the fence currently used for this frame to track if GPU is still executing command
 	*/
-	__forceinline const VkFence& GetCurrentIsDrawingFence()const { return VulkanIsDrawingFence[VulkanCurrentFrame]; }
+	__forceinline const VkFence& GetCurrentIsDrawingFence()const noexcept { return _VulkanIsDrawingFence[_vk_current_frame]; }
 
 };
 
@@ -56,7 +56,7 @@ public:
 
 	~GraphicsAPIManager();
 
-	GAPIHandle				RuntimeHandle;
+	GAPIHandle				_RuntimeHandle;
 
 	/*===== END GRAPHICS API MANAGER =====*/
 #pragma endregion
@@ -68,38 +68,38 @@ public:
 		/* Vulkan */
 
 		//whether this machine supports Vulkan
-		bool vulkan_supported = false;
+		bool _vulkan_supported = false;
 		//whether this machine supports hardware accelerated Raytracing through Vulkan
-		bool vulkan_rt_supported = false;
+		bool _vulkan_rt_supported = false;
 		//the number of supported extension that vulkan has
-		uint32_t vk_extension_count = 0;
+		uint32_t _vk_extension_count = 0;
 		//the vulkan is supported, the array of extension supported by the current machine.
 		//this will be a C-array that you will be able to go through usin vk_extension_count.
-		struct VkExtensionProperties* vk_extensions = nullptr;
+		MultipleScopedMemory<struct VkExtensionProperties> _VkExtensions;
 		//an helper object to upload resources to GPU
-		VulkanHelper::Uploader VulkanUploader;
+		VulkanHelper::Uploader _VulkanUploader;
 		
 		/**
 		* Finds if raytracing extensions is supported by the Vulkan on the specified Physical Device.
 		* /!\ this will change the value of the above flags accordingly as if there is a device that handles raytracing, it should be choosed over any other device.
 		* - returns : whether or not raytracing is supported by this physical device.
 		*/
-		bool FindVulkanRTSupported(VkExtensionProperties* PhysicalDeviceExtensionProperties, uint32_t physicalExtensionNb);
+		bool FindVulkanRTSupported(const MultipleVolatileMemory<struct VkExtensionProperties>& PhysicalDeviceExtensionProperties, uint32_t physicalExtensionNb);
 		
 		/* DirectX*/
 		
 		//whether this machine supports DirectX 12
-		bool DX12_supported = false;
+		bool _DX12_supported = false;
 		//whether this machine supports hardware accelerated Raytracing through DirectX Raytracing
-		bool DXR_supported = false;
+		bool _DXR_supported = false;
 		
 		/* Metal */
 		
 		//whether this machine supports Metal
-		bool metal_supported = false;
+		bool _metal_supported = false;
 		//whether this machine supports hardware accelerated Raytracing through Metal Raytracing 
 		//(for this at least a M3 machine would be necessary so not sure if this will really be implemented or not)
-		bool metal_rt_supported = false;
+		bool _metal_rt_supported = false;
 		
 		/* Agnostic */
 		
@@ -125,36 +125,36 @@ public:
 		/* Vulkan */
 
 		//The Interface allowing the creation of application wide resources
-		VkInstance VulkanInterface {VK_NULL_HANDLE};
+		VkInstance			_VulkanInterface {VK_NULL_HANDLE};
 		//The Interface that represents the chosen GPU
-		VkPhysicalDevice VulkanGPU{ VK_NULL_HANDLE };
+		VkPhysicalDevice	_VulkanGPU{ VK_NULL_HANDLE };
 		//The Interface allowing the creation of hardware resources (usually tied to GPU)
-		VkDevice VulkanDevice{ VK_NULL_HANDLE };
+		VkDevice			_VulkanDevice{ VK_NULL_HANDLE };
 		//The Interface for presenting to screen
-		VkSurfaceKHR VulkanSurface{VK_NULL_HANDLE};
+		VkSurfaceKHR		_VulkanSurface{VK_NULL_HANDLE};
 		//The Interface to control the swap chain
-		VkSwapchainKHR VulkanSwapchain{ VK_NULL_HANDLE };
+		VkSwapchainKHR		_VulkanSwapchain{ VK_NULL_HANDLE };
 		//The chosen format of the framebuffers
-		VkSurfaceFormatKHR VulkanSurfaceFormat{};
+		VkSurfaceFormatKHR	_VulkanSurfaceFormat{};
 		
 		//The actual frames of the swapchain. this is an array containing a number of VkImage (with a minimum of 3)
-		HeapMemory<VkImage> VulkanBackBuffers;
+		MultipleScopedMemory<VkImage>		_VulkanBackBuffers;
 		//The actual frames buffers of the swapchain. this is an array containing a number of VkImageViews equal to the number of frames.
 		//This is the interface that will allow us to write into the actual frames we want to present to the screen.
-		HeapMemory<VkImageView> VulkanBackColourBuffers;
+		MultipleScopedMemory<VkImageView>	_VulkanBackColourBuffers;
 		//The depth buffers. this is an array containing a number of VkImage (with a minimum of 3)
-		HeapMemory<VkImage> VulkanDepthBuffers;
+		MultipleScopedMemory<VkImage>		_VulkanDepthBuffers;
 		//memory where all depth buffer will be allocated.
-		VkDeviceMemory VulkanDepthBufferMemory{VK_NULL_HANDLE};
+		VkDeviceMemory						_VulkanDepthBufferMemory{VK_NULL_HANDLE};
 		//the view object for the depth buffers
-		HeapMemory<VkImageView> VulkanDepthBufferViews;
+		MultipleScopedMemory<VkImageView>	_VulkanDepthBufferViews;
 		//The nb of actual Vulkan framebuffers in the Vulkan swapchain at any given time (this can change between hardware)
-		uint32_t NbVulkanFrames{ 0 };
+		uint32_t							_nb_vk_frames{ 0 };
 
 		//The window linked to Vulkan
-		struct GLFWwindow* VulkanWindow{nullptr};
-		int32_t VulkanWidth{ 0 };
-		int32_t VulkanHeight{ 0 };
+		struct GLFWwindow* _VulkanWindow{nullptr};
+		int32_t _vk_width{ 0 };
+		int32_t _vk_height{ 0 };
 
 		/**
 		* Initializes the VkInstance inside this class
@@ -206,7 +206,7 @@ public:
 		* - returns : whether at least one window was successfully created.
 		*
 		*/
-		bool ResizeSwapChain(SmartLoopArray<class Scene*>& ScenesToChange);
+		bool ResizeSwapChain(ScopedLoopArray<class Scene*>& ScenesToChange);
 
 		/**
 		* Creates any platform specific interface needed to upload resources to GPU
@@ -234,8 +234,8 @@ public:
 		/* Vulkan */
 
 		//The Interface allowing the creation of Command to the chosen physical device
-		uint32_t		VulkanQueueFamily{ 0 };
-		VkCommandPool	VulkanCommandPool[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
+		uint32_t		_vk_queue_family{ 0 };
+		VkCommandPool	_VulkanCommandPool[2]{ VK_NULL_HANDLE, VK_NULL_HANDLE };
 
 		/*
 		* Gets the index of Vulkan's swapchain framebuffer that can be used.

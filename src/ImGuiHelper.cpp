@@ -30,12 +30,12 @@ void InitImGuiVulkan(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResourc
 		pool_info.poolSizeCount = (uint32_t)IM_ARRAYSIZE(pool_sizes);
 		pool_info.pPoolSizes = pool_sizes;
 
-		VK_CALL_PRINT(vkCreateDescriptorPool(GAPI.VulkanDevice, &pool_info, nullptr, &ImGuiResource.ImGuiDescriptorPool));
+		VK_CALL_PRINT(vkCreateDescriptorPool(GAPI._VulkanDevice, &pool_info, nullptr, &ImGuiResource._ImGuiDescriptorPool));
 	}
 
 	//basically, no attachement to the UI renderpass
 	VkAttachmentDescription attachment = {};
-	attachment.format			= GAPI.VulkanSurfaceFormat.format;
+	attachment.format			= GAPI._VulkanSurfaceFormat.format;
 	attachment.samples			= VK_SAMPLE_COUNT_1_BIT;
 	attachment.loadOp			= VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 	attachment.storeOp			= VK_ATTACHMENT_STORE_OP_STORE;
@@ -72,24 +72,24 @@ void InitImGuiVulkan(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResourc
 	renderpass_info.pSubpasses		= &subpass;
 	renderpass_info.dependencyCount = 1;
 	renderpass_info.pDependencies	= &dependency;
-	VK_CALL_PRINT(vkCreateRenderPass(GAPI.VulkanDevice, &renderpass_info, nullptr, &ImGuiResource.ImGuiRenderPass));
+	VK_CALL_PRINT(vkCreateRenderPass(GAPI._VulkanDevice, &renderpass_info, nullptr, &ImGuiResource._ImGuiRenderPass));
 
-	ImGui_ImplGlfw_InitForVulkan(GAPI.VulkanWindow, true);
+	ImGui_ImplGlfw_InitForVulkan(GAPI._VulkanWindow, true);
 
 	ResetImGuiResource(GAPI, ImGuiResource);
 
 	ImGui_ImplVulkan_InitInfo init_info = {};
-	init_info.Instance			= GAPI.VulkanInterface;
-	init_info.PhysicalDevice	= GAPI.VulkanGPU;
-	init_info.Device			= GAPI.VulkanDevice;
-	init_info.QueueFamily		= GAPI.VulkanQueueFamily;
-	init_info.Queue				= GAPI.RuntimeHandle.VulkanQueues[1];//Imgui has its own command queue to avoid mixing drawing and UI.
+	init_info.Instance			= GAPI._VulkanInterface;
+	init_info.PhysicalDevice	= GAPI._VulkanGPU;
+	init_info.Device			= GAPI._VulkanDevice;
+	init_info.QueueFamily		= GAPI._vk_queue_family;
+	init_info.Queue				= GAPI._RuntimeHandle._VulkanQueues[1];//Imgui has its own command queue to avoid mixing drawing and UI.
 	init_info.PipelineCache		= VK_NULL_HANDLE;
-	init_info.DescriptorPool	= ImGuiResource.ImGuiDescriptorPool;
-	init_info.RenderPass		= ImGuiResource.ImGuiRenderPass;
+	init_info.DescriptorPool	= ImGuiResource._ImGuiDescriptorPool;
+	init_info.RenderPass		= ImGuiResource._ImGuiRenderPass;
 	init_info.Subpass			= 0;
 	init_info.MinImageCount		= 3;
-	init_info.ImageCount		= GAPI.NbVulkanFrames;
+	init_info.ImageCount		= GAPI._nb_vk_frames;
 	init_info.MSAASamples		= VK_SAMPLE_COUNT_1_BIT;
 	init_info.Allocator			= nullptr;
 	init_info.CheckVkResultFn	= nullptr;
@@ -103,46 +103,46 @@ bool ResetImGuiResource(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiReso
 	VkResult result = VK_SUCCESS;
 
 
-	VK_CLEAR_ARRAY(ImGuiResource.ImguiFrameBuffer, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
+	VK_CLEAR_ARRAY(ImGuiResource._ImguiFrameBuffer, GAPI._nb_vk_frames, vkDestroyFramebuffer, GAPI._VulkanDevice);
 
-	if (ImGuiResource.ImGuiCommandBuffer != nullptr)
-		vkFreeCommandBuffers(GAPI.VulkanDevice, GAPI.VulkanCommandPool[1], GAPI.NbVulkanFrames, *ImGuiResource.ImGuiCommandBuffer);
+	if (ImGuiResource._ImGuiCommandBuffer != nullptr)
+		vkFreeCommandBuffers(GAPI._VulkanDevice, GAPI._VulkanCommandPool[1], GAPI._nb_vk_frames, *ImGuiResource._ImGuiCommandBuffer);
 
-	VK_CLEAR_ARRAY(ImGuiResource.VulkanHasDrawnUI, GAPI.NbVulkanFrames, vkDestroySemaphore, GAPI.VulkanDevice);
+	VK_CLEAR_ARRAY(ImGuiResource._VulkanHasDrawnUI, GAPI._nb_vk_frames, vkDestroySemaphore, GAPI._VulkanDevice);
 
 
 	VkImageView backbuffers[1];
 	VkFramebufferCreateInfo framebuffer_info = {};
 	framebuffer_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-	framebuffer_info.renderPass = ImGuiResource.ImGuiRenderPass;
+	framebuffer_info.renderPass = ImGuiResource._ImGuiRenderPass;
 	framebuffer_info.attachmentCount = 1;
 	framebuffer_info.pAttachments	= backbuffers;
-	framebuffer_info.width			= GAPI.VulkanWidth;
-	framebuffer_info.height			= GAPI.VulkanHeight;
+	framebuffer_info.width			= GAPI._vk_width;
+	framebuffer_info.height			= GAPI._vk_height;
 	framebuffer_info.layers			= 1;
 
-	ImGuiResource.ImguiFrameBuffer = (VkFramebuffer*)malloc(sizeof(VkFramebuffer) * GAPI.NbVulkanFrames);
-	ImGuiResource.VulkanHasDrawnUI = (VkSemaphore*)malloc(sizeof(VkSemaphore) * GAPI.NbVulkanFrames);
+	ImGuiResource._ImguiFrameBuffer = (VkFramebuffer*)malloc(sizeof(VkFramebuffer) * GAPI._nb_vk_frames);
+	ImGuiResource._VulkanHasDrawnUI = (VkSemaphore*)malloc(sizeof(VkSemaphore) * GAPI._nb_vk_frames);
 
-	for (uint32_t i = 0; i < GAPI.NbVulkanFrames; i++)
+	for (uint32_t i = 0; i < GAPI._nb_vk_frames; i++)
 	{
-		backbuffers[0] = GAPI.VulkanBackColourBuffers[i];
-		VK_CALL_PRINT(vkCreateFramebuffer(GAPI.VulkanDevice, &framebuffer_info, nullptr, &ImGuiResource.ImguiFrameBuffer[i]));
+		backbuffers[0] = GAPI._VulkanBackColourBuffers[i];
+		VK_CALL_PRINT(vkCreateFramebuffer(GAPI._VulkanDevice, &framebuffer_info, nullptr, &ImGuiResource._ImguiFrameBuffer[i]));
 
 		VkSemaphoreCreateInfo semaphoreInfo{};
 		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-		VK_CALL_PRINT(vkCreateSemaphore(GAPI.VulkanDevice, &semaphoreInfo, nullptr, &ImGuiResource.VulkanHasDrawnUI[i]));
+		VK_CALL_PRINT(vkCreateSemaphore(GAPI._VulkanDevice, &semaphoreInfo, nullptr, &ImGuiResource._VulkanHasDrawnUI[i]));
 	}
 
 	{
 		VkCommandBufferAllocateInfo allocInfo{};
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.commandPool = GAPI.VulkanCommandPool[1];
+		allocInfo.commandPool = GAPI._VulkanCommandPool[1];
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocInfo.commandBufferCount = GAPI.NbVulkanFrames;
+		allocInfo.commandBufferCount = GAPI._nb_vk_frames;
 
-		ImGuiResource.ImGuiCommandBuffer = (VkCommandBuffer*)malloc(sizeof(VkCommandBuffer) * GAPI.NbVulkanFrames);
-		VK_CALL_PRINT(vkAllocateCommandBuffers(GAPI.VulkanDevice, &allocInfo, *ImGuiResource.ImGuiCommandBuffer));
+		ImGuiResource._ImGuiCommandBuffer = (VkCommandBuffer*)malloc(sizeof(VkCommandBuffer) * GAPI._nb_vk_frames);
+		VK_CALL_PRINT(vkAllocateCommandBuffers(GAPI._VulkanDevice, &allocInfo, *ImGuiResource._ImGuiCommandBuffer));
 	}
 
 	return result == VK_SUCCESS;
@@ -150,7 +150,7 @@ bool ResetImGuiResource(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiReso
 
 /*===== Draw =====*/
 
-void BeginDrawUIWindow(const GraphicsAPIManager& GAPI, SmartLoopArray<class Scene*>& scenes, AppWideContext& AppContext)
+void BeginDrawUIWindow(const GraphicsAPIManager& GAPI, ScopedLoopArray<class Scene*>& scenes, AppWideContext& AppContext)
 {
 	if (!AppContext.ui_visible)
 		return;
@@ -200,7 +200,7 @@ void BeginDrawUIWindow(const GraphicsAPIManager& GAPI, SmartLoopArray<class Scen
 
 		if (camera_changed)
 		{
-			AppContext.proj_mat = ro_perspective_proj(GAPI.VulkanWidth, GAPI.VulkanHeight, AppContext.fov * RADIANS_TO_DEGREES, AppContext.near_plane, AppContext.far_plane);
+			AppContext.proj_mat = ro_perspective_proj(GAPI._vk_width, GAPI._vk_height, AppContext.fov * RADIANS_TO_DEGREES, AppContext.near_plane, AppContext.far_plane);
 		}
 		return;
 	}
@@ -226,24 +226,24 @@ void FinishDrawUIWindow(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiReso
 	VkResult err;
 
 	{
-		err = vkResetCommandBuffer(ImGuiResource.ImGuiCommandBuffer[GAPI.RuntimeHandle.VulkanCurrentFrame], 0);
+		err = vkResetCommandBuffer(ImGuiResource._ImGuiCommandBuffer[GAPI._RuntimeHandle._vk_current_frame], 0);
 		//check_vk_result(err);
 		VkCommandBufferBeginInfo info = {};
 		info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-		err = vkBeginCommandBuffer(ImGuiResource.ImGuiCommandBuffer[GAPI.RuntimeHandle.VulkanCurrentFrame], &info);
+		err = vkBeginCommandBuffer(ImGuiResource._ImGuiCommandBuffer[GAPI._RuntimeHandle._vk_current_frame], &info);
 		//	check_vk_result(err);
 	}
 	{
 		VkRenderPassBeginInfo info = {};
-		info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		info.renderPass = ImGuiResource.ImGuiRenderPass;
-		info.framebuffer = ImGuiResource.ImguiFrameBuffer[GAPI.RuntimeHandle.VulkanFrameIndex];
-		info.renderArea.extent.width = GAPI.VulkanWidth;
-		info.renderArea.extent.height = GAPI.VulkanHeight;
+		info.sType						= VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		info.renderPass					= ImGuiResource._ImGuiRenderPass;
+		info.framebuffer				= ImGuiResource._ImguiFrameBuffer[GAPI._RuntimeHandle._vk_frame_index];
+		info.renderArea.extent.width	= GAPI._vk_width;
+		info.renderArea.extent.height	= GAPI._vk_height;
 		info.clearValueCount = 0;
 		//info.pClearValues				= &imgui.ImGuiWindow.ClearValue;
-		vkCmdBeginRenderPass(ImGuiResource.ImGuiCommandBuffer[GAPI.RuntimeHandle.VulkanCurrentFrame], &info, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdBeginRenderPass(ImGuiResource._ImGuiCommandBuffer[GAPI._RuntimeHandle._vk_current_frame], &info, VK_SUBPASS_CONTENTS_INLINE);
 	}
 
 
@@ -260,26 +260,26 @@ void FinishDrawUIWindow(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiReso
 	}
 
 	// Record dear imgui primitives into command buffer
-	ImGui_ImplVulkan_RenderDrawData(draw_data, ImGuiResource.ImGuiCommandBuffer[GAPI.RuntimeHandle.VulkanCurrentFrame]);
+	ImGui_ImplVulkan_RenderDrawData(draw_data, ImGuiResource._ImGuiCommandBuffer[GAPI._RuntimeHandle._vk_current_frame]);
 
 
 	// Submit command buffer
-	vkCmdEndRenderPass(ImGuiResource.ImGuiCommandBuffer[GAPI.RuntimeHandle.VulkanCurrentFrame]);
+	vkCmdEndRenderPass(ImGuiResource._ImGuiCommandBuffer[GAPI._RuntimeHandle._vk_current_frame]);
 	{
 		VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 		VkSubmitInfo info = {};
 		info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		info.waitSemaphoreCount = 1;
-		info.pWaitSemaphores = &GAPI.RuntimeHandle.GetCurrentHasPresentedSemaphore();
+		info.pWaitSemaphores = &GAPI._RuntimeHandle.GetCurrentHasPresentedSemaphore();
 		info.pWaitDstStageMask = &wait_stage;
 		info.commandBufferCount = 1;
-		info.pCommandBuffers = &ImGuiResource.ImGuiCommandBuffer[GAPI.RuntimeHandle.VulkanCurrentFrame];
+		info.pCommandBuffers = &ImGuiResource._ImGuiCommandBuffer[GAPI._RuntimeHandle._vk_current_frame];
 		info.signalSemaphoreCount = 1;
-		info.pSignalSemaphores = &ImGuiResource.VulkanHasDrawnUI[GAPI.RuntimeHandle.VulkanCurrentFrame];
+		info.pSignalSemaphores = &ImGuiResource._VulkanHasDrawnUI[GAPI._RuntimeHandle._vk_current_frame];
 
-		err = vkEndCommandBuffer(ImGuiResource.ImGuiCommandBuffer[GAPI.RuntimeHandle.VulkanCurrentFrame]);
+		err = vkEndCommandBuffer(ImGuiResource._ImGuiCommandBuffer[GAPI._RuntimeHandle._vk_current_frame]);
 		//check_vk_result(err);
-		err = vkQueueSubmit(GAPI.RuntimeHandle.VulkanQueues[1], 1, &info, GAPI.RuntimeHandle.GetCurrentIsDrawingFence());
+		err = vkQueueSubmit(GAPI._RuntimeHandle._VulkanQueues[1], 1, &info, GAPI._RuntimeHandle.GetCurrentIsDrawingFence());
 		//check_vk_result(err);
 	}
 }
@@ -291,17 +291,17 @@ void FinishDrawUIWindow(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiReso
 void ClearImGuiResource(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResource)
 {
 
-	VK_CLEAR_ARRAY(ImGuiResource.ImguiFrameBuffer, GAPI.NbVulkanFrames, vkDestroyFramebuffer, GAPI.VulkanDevice);
+	VK_CLEAR_ARRAY(ImGuiResource._ImguiFrameBuffer, GAPI._nb_vk_frames, vkDestroyFramebuffer, GAPI._VulkanDevice);
 
-	if (ImGuiResource.ImGuiCommandBuffer != nullptr)
-		vkFreeCommandBuffers(GAPI.VulkanDevice, GAPI.VulkanCommandPool[1], GAPI.NbVulkanFrames, *ImGuiResource.ImGuiCommandBuffer);
+	if (ImGuiResource._ImGuiCommandBuffer != nullptr)
+		vkFreeCommandBuffers(GAPI._VulkanDevice, GAPI._VulkanCommandPool[1], GAPI._nb_vk_frames, *ImGuiResource._ImGuiCommandBuffer);
 
-	VK_CLEAR_ARRAY(ImGuiResource.VulkanHasDrawnUI, GAPI.NbVulkanFrames, vkDestroySemaphore, GAPI.VulkanDevice);
+	VK_CLEAR_ARRAY(ImGuiResource._VulkanHasDrawnUI, GAPI._nb_vk_frames, vkDestroySemaphore, GAPI._VulkanDevice);
 
-	vkDestroyDescriptorPool(GAPI.VulkanDevice, ImGuiResource.ImGuiDescriptorPool, nullptr);
+	vkDestroyDescriptorPool(GAPI._VulkanDevice, ImGuiResource._ImGuiDescriptorPool, nullptr);
 
-	if (ImGuiResource.ImGuiRenderPass != VK_NULL_HANDLE)
+	if (ImGuiResource._ImGuiRenderPass != VK_NULL_HANDLE)
 	{
-		vkDestroyRenderPass(GAPI.VulkanDevice, ImGuiResource.ImGuiRenderPass, nullptr);
+		vkDestroyRenderPass(GAPI._VulkanDevice, ImGuiResource._ImGuiRenderPass, nullptr);
 	}
 }

@@ -38,7 +38,7 @@
 				call(device, raw_array[i], nullptr); \
 				raw_array[i] = nullptr;\
 			}\
-		free(raw_array);\
+		delete[] raw_array;\
 	}\
 
 #define VK_CLEAR_ARRAY(_array, size, call, device) \
@@ -54,7 +54,7 @@
 	}\
 
 #define VK_CLEAR_LIST(_list, size, call, device) \
-	if (_list.GetNb() > 0)\
+	if (_list.Nb() > 0)\
 	{\
 		auto start = _list.GetHead();\
 		for (uint32_t i = 0; i < size; i++)\
@@ -78,15 +78,15 @@ namespace VulkanHelper
 
 	struct Uploader
 	{
-		VkDevice			VulkanDevice;
-		VkCommandBuffer		CopyBuffer;
-		VkQueue				CopyQueue;
-		VkCommandPool		CopyPool;
+		VkDevice			_VulkanDevice;
+		VkCommandBuffer		_CopyBuffer;
+		VkQueue				_CopyQueue;
+		VkCommandPool		_CopyPool;
 
-		List<VkBuffer>			ToFreeBuffers;
-		List<VkDeviceMemory>	ToFreeMemory;
+		List<VkBuffer>			_ToFreeBuffers;
+		List<VkDeviceMemory>	_ToFreeMemory;
 
-		VkPhysicalDeviceMemoryProperties	MemoryProperties;
+		VkPhysicalDeviceMemoryProperties	_MemoryProperties;
 	};
 
 	// Creates an Uploader Object to use in all other Vulkan Helper method. will create an open command buffer for copy command and such
@@ -97,7 +97,7 @@ namespace VulkanHelper
 
 	/* Shaders */
 
-	bool CreateVulkanShaders(Uploader& VulkanUploader, VkShaderModule& shader, VkShaderStageFlagBits shaderStage, const char* shaderSource, const char* shader_name, const char* entryPoint = "main");
+	bool CreateVulkanShaders(Uploader& VulkanUploader, VkShaderModule& shader, VkShaderStageFlagBits shaderStage, const char* shader_source, const char* shader_name, const char* entry_point = "main");
 
 	/* Buffers */
 
@@ -108,20 +108,20 @@ namespace VulkanHelper
 	*/
 	struct UniformBufferHandle
 	{
-		HeapMemory<VkBuffer>		GPUBuffer;
-		HeapMemory<VkDeviceMemory>	GPUMemoryHandle;
-		HeapMemory<void*>			CPUMemoryHandle;
+		MultipleScopedMemory<VkBuffer>			_GPUBuffer;
+		MultipleScopedMemory<VkDeviceMemory>	_GPUMemoryHandle;
+		MultipleScopedMemory<void*>				_CPUMemoryHandle;
 
-		uint32_t nbBuffer;
+		uint32_t _nb_buffer{0};
 	};
 
 	/* Creates a one dimensionnal buffer of any usage and the association between CPU and GPU. if AllocateMemory is set to false, bufferMemory MUST BE VALID ! */
-	bool CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset = 0, bool AllocateMemory = true);
+	bool CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset = 0, bool allocate_memory = true);
 
 
 	/* Creates all the pointers and handle vulkan needs to create a buffer on the GPU and creates a UniformBufferHandle on the CPU to manage it*/
 	bool CreateUniformBufferHandle(Uploader& VulkanUploader, UniformBufferHandle& bufferHandle, uint32_t bufferNb, VkDeviceSize size,
-		VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, VkBufferUsageFlags usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, bool mapCPUMemoryHandle = true);
+		VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, VkBufferUsageFlags usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, bool map_cpu_memory_handle = true);
 
 	/* Asks for de-allocation of all allocated resources for this UniformBufferHandle, on CPU and GPU*/
 	void ClearUniformBufferHandle(const VkDevice& VulkanDevice, UniformBufferHandle& bufferHandle);
@@ -132,8 +132,8 @@ namespace VulkanHelper
 	*/
 	struct StaticBufferHandle
 	{
-		VkBuffer		StaticGPUBuffer{VK_NULL_HANDLE};
-		VkDeviceMemory	StaticGPUMemoryHandle{ VK_NULL_HANDLE };
+		VkBuffer		_StaticGPUBuffer{VK_NULL_HANDLE};
+		VkDeviceMemory	_StaticGPUMemoryHandle{ VK_NULL_HANDLE };
 	};
 
 	/* Creates all the pointers and handle vulkan needs to create a buffer on the GPU and creates a staging buffer to send the data */
@@ -141,7 +141,7 @@ namespace VulkanHelper
 		VkBufferUsageFlags staticBufferUsage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VkMemoryPropertyFlags staticBufferProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	/* sends the data through the staging buffer to the static buffer */
-	bool UploadStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, const void* data, VkDeviceSize size, bool releaseStagingBuffer = true);
+	bool UploadStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, const void* data, VkDeviceSize size, bool release_staging_buffer = true);
 
 	/* Asks for de-allocation of all allocated resources for this StaticBufferHandle on GPU */
 	void ClearStaticBufferHandle(const VkDevice& VulkanDevice, StaticBufferHandle& bufferHandle);
@@ -160,37 +160,37 @@ namespace VulkanHelper
 		{
 			struct
 			{
-				VkBuffer positions;
-				VkBuffer uvs;
-				VkBuffer normals;
-				VkBuffer tangents;
+				VkBuffer _Positions;
+				VkBuffer _Uvs;
+				VkBuffer _Normals;
+				VkBuffer _Tangents;
 			};
-			VkBuffer vertexBuffers[4] = { VK_NULL_HANDLE, VK_NULL_HANDLE , VK_NULL_HANDLE , VK_NULL_HANDLE };
+			VkBuffer _VertexBuffers[4] = { VK_NULL_HANDLE, VK_NULL_HANDLE , VK_NULL_HANDLE , VK_NULL_HANDLE };
 		};
 
 		union
 		{
 			struct
 			{
-				VkDeviceSize posOffset;
-				VkDeviceSize uvOffset;
-				VkDeviceSize normalOffset;
-				VkDeviceSize tangentOffset;
+				VkDeviceSize _pos_offset;
+				VkDeviceSize _uv_offset;
+				VkDeviceSize _normal_offset;
+				VkDeviceSize _tangent_offset;
 			};
-			VkDeviceSize vertexOffsets[4];
+			VkDeviceSize _vertex_offsets[4];
 		};
 
-		LoopArray<VkDeviceMemory> vertexMemoryHandle;
+		VolatileLoopArray<VkDeviceMemory> _VertexMemoryHandle;
 
-		VkBuffer	indices{ VK_NULL_HANDLE };
-		uint32_t	indicesNb;
-		uint32_t	indicesOffset;
-		VkIndexType indicesType;
+		VkBuffer	_Indices{ VK_NULL_HANDLE };
+		uint32_t	_indices_nb;
+		uint32_t	_indices_offset;
+		VkIndexType _indices_type;
 
 	};
 
 	/* uses tiny obj to load to static buffers into Vulkan */
-	void LoadObjFile(Uploader& VulkanUploader, const char* fileName, LoopArray<Mesh>& Meshes);
+	void LoadObjFile(Uploader& VulkanUploader, const char* file_name, VolatileLoopArray<Mesh>& meshes);
 
 	/* Asks for de-allocation of all allocated resources for this mesh on GPU */
 	void ClearMesh(const VkDevice& VulkanDevice, Mesh& mesh);
@@ -205,24 +205,24 @@ namespace VulkanHelper
 	*/
 	struct Model
 	{
-		LoopArray<Mesh>				meshes;
-		HeapMemory<uint32_t>		materialIndex;//same length as mesh
+		VolatileLoopArray<Mesh>				_Meshes;
+		MultipleVolatileMemory<uint32_t>	_material_index;//same length as mesh
 
-		LoopArray<VkDeviceMemory>	buffersHandle;
+		VolatileLoopArray<VkDeviceMemory>	_BuffersHandle;
 
-		LoopArray<struct Texture>	textures;
-		LoopArray<VkSampler>		samplers;
+		VolatileLoopArray<struct Texture>	_Textures;
+		VolatileLoopArray<VkSampler>		_Samplers;
 
-		SmartLoopArray<struct Material>	materials;
+		VolatileLoopArray<struct Material>	_Materials;
 	};
 
-	bool LoadGLTFFile(Uploader& VulkanUploader, const char* fileName, Model& Meshes);
+	bool LoadGLTFFile(Uploader& VulkanUploader, const char* fileName, Model& meshes);
 	void ClearModel(const VkDevice& VulkanDevice, Model& model);
 
 	/* Images */
 
-	bool CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, VkDeviceMemory& imageMemory, uint32_t width, uint32_t height, uint32_t depth, VkImageType imagetype, VkFormat format, VkImageUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, uint32_t offset = 0u, bool AllocateMemory = true);
-	bool UploadImage(Uploader& VulkanUploader, VkImage& imageToUploadTo, void* imageContent, uint32_t width, uint32_t height, uint32_t channels, uint32_t depth = 1);
+	bool CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, VkDeviceMemory& imageMemory, uint32_t width, uint32_t height, uint32_t depth, VkImageType imagetype, VkFormat format, VkImageUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, uint32_t offset = 0u, bool allocate_memory = true);
+	bool UploadImage(Uploader& VulkanUploader, VkImage& imageToUploadTo, void* image_content, uint32_t width, uint32_t height, uint32_t channels, uint32_t depth = 1);
 
 	/*
 	* a struct representing a single texture. it contains everything a shader would need to use said texture meaning :
@@ -233,13 +233,13 @@ namespace VulkanHelper
 	*/
 	struct Texture
 	{
-		VkImage				image;
-		VkDeviceMemory		imageMemory;
-		VkImageView			imageView;
-		VkSampler			sampler;
+		VkImage				_Image;
+		VkDeviceMemory		_ImageMemory;
+		VkImageView			_ImageView;
+		VkSampler			_Sampler;
 	};
 
-	bool LoadTexture(Uploader& VulkanUploader, const char* fileName, Texture& texture);
+	bool LoadTexture(Uploader& VulkanUploader, const char* file_name, Texture& texture);
 	bool LoadTexture(Uploader& VulkanUploader, const void* pixels, uint32_t width, uint32_t height, VkFormat format, Texture& texture);
 
 	void ClearTexture(const VkDevice& VulkanDevice, Texture& texture);
@@ -252,9 +252,9 @@ namespace VulkanHelper
 	*/
 	struct Material
 	{
-		LoopArray<Texture>			textures;
+		VolatileLoopArray<Texture>	_Textures;
 
-		VkDescriptorSet				textureDescriptors;
+		VkDescriptorSet				_TextureDescriptors;
 	};
 
 };
