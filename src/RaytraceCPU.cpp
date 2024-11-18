@@ -286,7 +286,7 @@ void RaytraceCPU::Prepare(GraphicsAPIManager& GAPI)
 		{
 			float choose_mat = randf();
 			vec3 sphereCenter = vec3{(static_cast<float>(x)+ randf(-1.0f,1.0f)) * 10.0f, 1.5f, (static_cast<float>(z) + randf(-1.0f,1.0f)) * 10.0f };
-
+	
 			if (choose_mat < 0.8f)
 			{
 				_Materials[matNb++] = new diffuse(vec4{randf(),randf(),randf(),1.0f});
@@ -521,6 +521,7 @@ void RaytraceCPU::ResizeVulkanResource(GraphicsAPIManager& GAPI, int32_t width, 
 void RaytraceCPU::Resize(GraphicsAPIManager& GAPI, int32_t old_width, int32_t old_height, uint32_t old_nb_frames)
 {
 	ResizeVulkanResource(GAPI, old_width, old_height, old_nb_frames);
+	_ComputeHeap = MultipleSharedMemory<ray_compute>(_FullScreenScissors.extent.width * _FullScreenScissors.extent.height + _FullScreenScissors.extent.width * _FullScreenScissors.extent.height * _pixel_sample_nb);
 	_need_refresh = true;
 }
 
@@ -529,6 +530,9 @@ void RaytraceCPU::Resize(GraphicsAPIManager& GAPI, int32_t old_width, int32_t ol
 
 void RaytraceCPU::DispatchSceneRay(AppWideContext& AppContext)
 {
+	//AppContext.threadPool.Pause();
+	//AppContext.threadPool.ClearJobs();
+
 	//2D viewport values
 	float windowHeight	= static_cast<float>(_FullScreenScissors.extent.height);
 	float windowWidth	= static_cast<float>(_FullScreenScissors.extent.width);
@@ -550,10 +554,9 @@ void RaytraceCPU::DispatchSceneRay(AppWideContext& AppContext)
 	//first sample dir and sample steps
 	vec3 viewportUpperLeft	= cameraCenter - viewportW - (viewportU * 0.5f) - (viewportV * 0.5f);
 	vec3 firstPixel			= viewportUpperLeft + ((pixelDeltaU + pixelDeltaV) * 0.5f);
-
-	Queue<MultipleSharedMemory<ray_compute>> rayToCompute;
+	
 	{
-		MultipleSharedMemory<ray_compute> computes{ _FullScreenScissors.extent.width * _FullScreenScissors.extent.height };
+		//MultipleSharedMemory<ray_compute> computes{ _FullScreenScissors.extent.width * _FullScreenScissors.extent.height };
 		for (uint32_t h = 0; h < _FullScreenScissors.extent.height; h++)
 			for (uint32_t w = 0; w < _FullScreenScissors.extent.width; w++)
 			{
@@ -565,29 +568,38 @@ void RaytraceCPU::DispatchSceneRay(AppWideContext& AppContext)
 
 				ray pixelRay = ray{ pixelCenter, rayDir };
 
-                computes[(h * _FullScreenScissors.extent.width) + w].launched = pixelRay;
-                computes[(h * _FullScreenScissors.extent.width) + w].pixel = &_RaytracedImage[(h * _FullScreenScissors.extent.width) + w];
+                _ComputeHeap[(h * _FullScreenScissors.extent.width) + w].launched = pixelRay;
+                _ComputeHeap[(h * _FullScreenScissors.extent.width) + w].pixel = &_RaytracedImage[(h * _FullScreenScissors.extent.width) + w];
 			}
 
-		rayToCompute.PushBatch(computes, _FullScreenScissors.extent.width * _FullScreenScissors.extent.height);
+		_batch_fence.lock();
+		_ComputeBatch.Clear();
+		_ComputeBatch.PushBatch(_ComputeHeap, _FullScreenScissors.extent.width * _FullScreenScissors.extent.height);
+		_batch_fence.unlock();
 	}
 
-	_ComputeHeap = MultipleSharedMemory<ray_compute>(_FullScreenScissors.extent.width * _FullScreenScissors.extent.height * _pixel_sample_nb);
+	AppContext.threadPool.Pause();
+	if (!_is_moving)
+		AppContext.threadPool.ClearJobs();
+
 	for (uint32_t i = 0; i < _FullScreenScissors.extent.width * _FullScreenScissors.extent.height;)
 	{
 		uint32_t computeNb = _compute_per_frames;
-		const auto& computes_job = rayToCompute.PopBatch(computeNb);
+		const auto& computes_job = _ComputeBatch.PopBatch(computeNb);
 
 		if (computeNb > 0)
 		{
-			RayBatch newBatch{ computes_job.data,computes_job.index,computes_job.nb };
+			RayBatch newBatch{ computes_job.data,computes_job.offset,computes_job.nb };
 
-			FirstContactRaytraceJob newJob(newBatch,nullptr,*this);
-			AppContext.threadPool.Add(newJob);
+			FirstContactRaytraceJob newJob(newBatch,*this);
+			AppContext.threadPool.SilentAdd(newJob);
 		}
 
 		i += computeNb;
 	}
+	AppContext.threadPool.Resume();
+
+	//_need_refresh = false;
 }
 
 void RaytraceCPU::Act(AppWideContext& AppContext)
@@ -595,15 +607,47 @@ void RaytraceCPU::Act(AppWideContext& AppContext)
 	//UI update
 	if (SceneCanShowUI(AppContext))
 	{
-		_need_refresh |= ImGui::SliderInt("SampleNb", (int*) & _pixel_sample_nb, 1, 1000);
+		_need_refresh |= ImGui::Button("REFRESH");
+		ImGui::Text("Pending Rays to Compute : %d", _ComputeBatch.GetNb());
+
+		bool SampleNbChange = ImGui::SliderInt("SampleNb", (int*)&_pixel_sample_nb, 1, 250);
+		_need_refresh |= SampleNbChange;
 		_need_refresh |= ImGui::SliderInt("ComputesPerFrame", (int*)&_compute_per_frames, 1, 10000);
+
+		_need_refresh |= ImGui::ColorPicker4("Background Gradient Top", _background_gradient_top.scalar);
+		_need_refresh |= ImGui::ColorPicker4("Background Gradient Bottom", _background_gradient_bottom.scalar);
+
+		if (SampleNbChange && _need_refresh)
+			_ComputeHeap = MultipleSharedMemory<ray_compute>(_FullScreenScissors.extent.width * _FullScreenScissors.extent.height + _FullScreenScissors.extent.width * _FullScreenScissors.extent.height * _pixel_sample_nb);
+	}
+	
+	_is_moving = AppContext.in_camera_mode;
+
+	if (_need_refresh || _is_moving)
+		DispatchSceneRay(AppContext);
+	else
+	{
+		_batch_fence.lock();
+		for (uint32_t i = 0; i < AppContext.threadPool.GetThreadsNb(); i++)
+		{
+			uint32_t computeNb = _compute_per_frames;
+			RayBatch& computes = _ComputeBatch.PopBatch(computeNb);
+
+			if (computeNb > 0)
+			{
+				AnyHitRaytraceJob newJob(computes, *this);
+
+				AppContext.threadPool.Add(newJob);
+			}
+			else
+				break;
+			//AppContext.threadPool.Resume();
+		}
+		_batch_fence.unlock();
 	}
 
-	if (_need_refresh || AppContext.in_camera_mode)
-		DispatchSceneRay(AppContext);
-
 	//this is needed in dispatch rays;
-	_need_refresh = AppContext.in_camera_mode;
+	_need_refresh = _is_moving;
 }
 
 /*==== Show =====*/

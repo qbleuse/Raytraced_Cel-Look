@@ -250,7 +250,7 @@ public:
 template<typename T>
 using SingleSharedMemory = SharedHeapMemory<T, true>;
 template<typename T>
-using MultipleSharedMemory = SharedHeapMemory<T, true>;
+using MultipleSharedMemory = SharedHeapMemory<T, false>;
 
 /**
 * A simple class representing a simple array of data you would need to loop through.
@@ -483,7 +483,7 @@ public:
 	{
 		T data{ nullptr };
 
-		uint32_t index{ 0 };
+		uint32_t offset{ 0 };
 		uint32_t nb{ 0 };
 
 		__forceinline T* GetCurrent()const
@@ -549,10 +549,10 @@ public:
 
 		QueueNode& headNode = nodes.GetHead()->data;
 		QueueNode data = headNode;
-		headNode.index++;
+		headNode.offset++;
 		data.nb = 1;
 
-		if (headNode.index >= headNode.nb)
+		if (headNode.offset >= headNode.nb)
 			nodes.Remove(nodes.GetHead(), true);
 
 		nb--;
@@ -571,15 +571,16 @@ public:
 		}
 
 		QueueNode& headNode = nodes.GetHead()->data;
-		uint32_t remaining = (headNode.nb - headNode.index);
+		uint32_t remaining = headNode.nb;
 		if (remaining < wantedBatchNb)
 			wantedBatchNb = remaining;
 
 		QueueNode data = headNode;
-		headNode.index += wantedBatchNb;
+		headNode.offset += wantedBatchNb;
+		headNode.nb -= wantedBatchNb;
 		data.nb = wantedBatchNb;
 
-		if (headNode.index >= headNode.nb)
+		if (headNode.nb <= 0)
 			nodes.Remove(nodes.GetHead(), true);
 
 		nb -= wantedBatchNb;
@@ -625,6 +626,7 @@ private:
 	std::condition_variable_any		thread_wait;
 
 	bool killThread{ false };
+	bool pause{ false };
 
 public:
 
@@ -639,11 +641,12 @@ public:
 		while (!killThread)
 		{
 			{
-				//locks the mutex to try to get a job
 				jobs_mutex.lock();
 
-				//waits for a job to be available
-				thread_wait.wait(jobs_mutex, [this]() {return jobs.GetNb() > 0 || killThread; });
+				thread_wait.wait(jobs_mutex, [this]() {return (jobs.GetNb() > 0 && !pause) || killThread; });
+
+				if (killThread)
+					return;
 
 				//gets the job
 				job = jobs.Pop().data;
@@ -677,6 +680,61 @@ public:
 			jobs_mutex.unlock();
 		}
 		thread_wait.notify_one();
+	}
+
+	template<typename Job>
+	__forceinline void SilentAdd(const Job& job)
+	{
+		{
+			//locks the mutex to try to get a job
+			jobs_mutex.lock();
+
+			//add a new job to do
+			jobs.Push(new Job(job));
+
+			//unlocks the mutex
+			jobs_mutex.unlock();
+		}
+	}
+
+	__forceinline void ClearJobs()
+	{
+		//locks the mutex 
+		jobs_mutex.lock();
+
+		//clears all pending jobs
+		jobs.Clear();
+
+		//unlocks the mutex
+		jobs_mutex.unlock();
+	}
+
+	__forceinline void Pause()
+	{
+		//locks the mutex 
+		jobs_mutex.lock();
+
+		//sets the flag
+		pause = true;
+
+		//unlocks the mutex
+		jobs_mutex.unlock();
+	}
+
+	__forceinline void Resume()
+	{
+		//locks the mutex 
+		jobs_mutex.lock();
+
+		//sets the flag
+		pause = false;
+
+		//unlocks the mutex
+		jobs_mutex.unlock();
+
+		//notify to resume
+		thread_wait.notify_all();
+
 	}
 
 

@@ -18,74 +18,10 @@
 
 #define RAY_TO_COMPUTE_PER_FRAME 2700
 #define PIXEL_SAMPLE_NB 50
+#define BACKGROUND_GRADIENT_TOP vec4{ 0.3f, 0.7f, 1.0f, 1.0f }
+#define BACKGROUND_GRADIENT_BOTTOM vec4{ 1.0f, 1.0f, 1.0f, 1.0f }
 
-/*class AnyHitRaytraceJob : public ThreadJob
-{
-public:
-	RayBatch						computes{ nullptr };
-	ScopedLoopArray<hittable*>*		hittables{ nullptr };
-	float							sampleWeight{0.0f};
-
-	__forceinline vec4 GetRayColor(const ray& incoming)
-	{
-		float backgroundGradient = 0.5f * (incoming.direction.y + 1.0f);
-		return vec4{ 1.0f, 1.0f, 1.0f, 1.0f } *(1.0f - backgroundGradient) + vec4{ 0.3f, 0.7f, 1.0f, 1.0f } *backgroundGradient;
-	}
-
-	__forceinline void Execute()override
-	{
-		ScopedLoopArray<hittable*>& scene = *hittables;
-		//SharedHeapMemory<ray_compute> gen_rays{ computes.nb};
-		uint32_t hit_nb{ 0 };
-		for (uint32_t i = 0; i < computes.nb; i++)
-		{
-			const ray_compute& indexedComputedRay = computes.data[i + computes.index];
-
-			float hasHit = false;
-			hit_record final_hit{};
-			final_hit.distance = FLT_MAX;
-			for (uint32_t i = 0; i < scene.Nb(); i++)
-			{
-				hit_record iHit{};
-				if (scene[i]->hit(indexedComputedRay.launched, iHit))
-				{
-					if (iHit.distance < final_hit.distance)
-					{
-						final_hit = iHit;
-						hasHit = true;
-					}
-				}
-			}
-
-			if (!hasHit && indexedComputedRay.pixel != nullptr)
-				*indexedComputedRay.pixel += indexedComputedRay.color * sampleWeight * GetRayColor(indexedComputedRay.launched);
-
-			if (hasHit && newRays != nullptr)
-			{
-				ray_compute newCompute{};
-
-				newCompute.launched = final_hit.mat->reflect(indexedComputedRay.launched,final_hit);
-				newCompute.pixel = indexedComputedRay.pixel;
-				newCompute.color = final_hit.shade * indexedComputedRay.color;
-
-				computes.data[hit_nb++] = newCompute;
-			}
-		}
-
-		if (newRays && newRaysFence && newRays_wait && hit_nb > 0)
-		{
-			newRaysFence->lock();
-			computes.nb = hit_nb;
-			newRays->PushNode(computes);
-			newRaysFence->unlock();
-		}
-
-		if (ended)
-			*ended = true;
-
-		//free(computes);
-	}
-};*/
+typedef Queue<MultipleSharedMemory<ray_compute>>::QueueNode RayBatch;
 
 
 /**
@@ -224,38 +160,28 @@ public:
 	/*===== CPU Raytracing =====*/
 
 	/*
-	* a simple struct to represent a group of ray_compute to process together
-	*/
-	struct RayBatch
-	{
-		//the shared memory used to create new computes
-		MultipleSharedMemory<ray_compute> _Heap{ nullptr };
-
-		//the index in this heap memory where this batch starts
-		uint32_t index{ 0 };
-		//the number of computes in this batch
-		uint32_t nb{ 0 };
-	};
-
-	/*
 	* the general multithreaded job interface used to compute RayBatches concurrently
 	*/
 	class RaytraceJob : public ThreadJob
 	{
 		public:
-			RaytraceJob(const RayBatch& RayBatch, ThreadPool* ThreadPool, const RaytraceCPU& Owner) :
+			RaytraceJob(const RayBatch& RayBatch, const RaytraceCPU& Owner) :
 				_Computes{RayBatch},
-				_ThreadPool{ThreadPool},
-				_Owner{Owner}
+				_Scene{Owner._Scene},
+				_background_gradient_top{ Owner._background_gradient_top},
+				_background_gradient_bottom{ Owner._background_gradient_bottom }
 			{
 			}
 
 			//the batch this multithreaded job is supposed to accomplish
-			RayBatch						_Computes{ nullptr };
-			//the pool on which this job should be executed
-			ThreadPool*						_ThreadPool{nullptr};
-			//the owner of this job
-			const RaytraceCPU&				_Owner;
+			RayBatch							_Computes;
+			//the scene on which the ray need to be tested
+			const ScopedLoopArray<hittable*>&	_Scene;
+			//the color for the top of the background gradient 
+			vec4								_background_gradient_top;
+			//the color for the bottom of the background gradient 
+			vec4								_background_gradient_bottom;
+
 
 			/*
 			* Processes the ray_compute depending on the hit status with the scene
@@ -269,23 +195,20 @@ public:
 
 			__forceinline void Execute()override
 			{
-				if (_Owner._need_refresh)
-					return;
-
-				const ScopedLoopArray<hittable*>& scene = _Owner._Scene;
+				const MultipleVolatileMemory<ray_compute> computes = &_Computes.data[_Computes.offset];
 
 				uint32_t hit_nb{ 0 };
 				for (uint32_t i = 0; i < _Computes.nb; i++)
 				{
-					const ray_compute& indexedComputedRay = _Computes._Heap[i + _Computes.index];
+					const ray_compute& indexedComputedRay = computes[i];
 
 					float hasHit = false;
 					hit_record final_hit{};
 					final_hit.distance = FLT_MAX;
-					for (uint32_t j = 0; j < scene.Nb(); j++)
+					for (uint32_t j = 0; j < _Scene.Nb(); j++)
 					{
 						hit_record jHit{};
-						if (scene[j]->hit(indexedComputedRay.launched, jHit))
+						if (_Scene[j]->hit(indexedComputedRay.launched, jHit))
 						{
 							if (jHit.distance < final_hit.distance)
 							{
@@ -295,24 +218,80 @@ public:
 						}
 					}
 
+					ProcessRayHit(hasHit, hit_nb, final_hit, indexedComputedRay);
+
 					if (hasHit)
 						hit_nb++;
-
-					ProcessRayHit(hasHit, hit_nb, final_hit, indexedComputedRay);
 				}
-
-				if (_Owner._need_refresh)
-					return;
 
 				DispatchRayHits(hit_nb);
 			}
 	};
 
-	__forceinline vec4 GetRayColor(const ray& incoming)const
+	static __forceinline vec4 GetRayColor(const ray& incoming, const vec4& background_color_top, const vec4& background_color_bottom)
 	{
 		float backgroundGradient = 0.5f * (incoming.direction.y + 1.0f);
-		return vec4{ 1.0f, 1.0f, 1.0f, 1.0f } *(1.0f - backgroundGradient) + vec4{ 0.3f, 0.7f, 1.0f, 1.0f } *backgroundGradient;
+		return background_color_bottom * (1.0f - backgroundGradient) + background_color_top * backgroundGradient;
 	}
+
+	/*
+	* the multithreaded job interface used to compute RayBatches from rays after a first contact ray
+	*/
+	class AnyHitRaytraceJob : public RaytraceJob
+	{
+	public:
+		//the amound each rays contribute to the final image
+		float										_sample_weight;
+		//the queue in which the job should add its genenrated rays
+		Queue<MultipleSharedMemory<ray_compute>>&	_ComputeQueue;
+		//fence for safe concurrent had of generated batch in the queue
+		std::mutex&									_fence;
+
+		AnyHitRaytraceJob(const RayBatch& RayBatch, RaytraceCPU& Owner) :
+			RaytraceJob(RayBatch, Owner),
+			_sample_weight{ 1.0f / static_cast<float>(Owner._pixel_sample_nb) },
+			_ComputeQueue{ Owner._ComputeBatch },
+			_fence{ Owner._batch_fence }
+
+		{
+		}
+
+		/*
+		* Processes the ray_compute depending on the hit status with the scene
+		*/
+		__forceinline virtual void ProcessRayHit(bool hit, uint32_t ray_index, const hit_record& hit_record, const ray_compute& computed_ray)const final
+		{
+			if (!hit && computed_ray.pixel != nullptr)
+				*computed_ray.pixel += computed_ray.color * _sample_weight * GetRayColor(computed_ray.launched, _background_gradient_top, _background_gradient_bottom);
+			else if (hit)
+			{
+				ray_compute newCompute{};
+				
+				newCompute.launched = hit_record.mat->propagate(computed_ray.launched, hit_record);
+				newCompute.pixel = computed_ray.pixel;
+				newCompute.color = hit_record.shade * computed_ray.color;
+				
+				_Computes.data[(_Computes.offset + ray_index)] = newCompute;
+			}
+		}
+
+		/*
+		* Implements the Dispatch of new rays, given the number of hits.
+		*/
+		__forceinline virtual void DispatchRayHits(uint32_t hit_nb)const final
+		{
+			{
+				RayBatch node;
+				node.data = _Computes.data;
+				node.offset = _Computes.offset;
+				node.nb = hit_nb;
+
+				_fence.lock();
+				_ComputeQueue.PushNode(node);
+				_fence.unlock();
+			}
+		}
+	};
 
 	/*
 	* the general multithreaded job interface used to compute RayBatches concurrently
@@ -320,10 +299,25 @@ public:
 	class FirstContactRaytraceJob : public RaytraceJob
 	{
 	public:
+		//an offset in the ray_compute's heap to not overwrite rays computed now
+		uint32_t _offset;
+		//the number of rays needed to be generated for a single pixel
+		uint32_t _pixel_sample_nb;
+		//whether this job should generate rays or not
+		bool _is_moving;
+		//the queue in which the job should add its genenrated rays
+		Queue<MultipleSharedMemory<ray_compute>>&	_ComputeQueue;
+		//fence for safe concurrent had of generated batch in the queue
+		std::mutex& _fence;
 
 
-		FirstContactRaytraceJob(const RayBatch& RayBatch, ThreadPool* ThreadPool, const RaytraceCPU& Owner) :
-			RaytraceJob(RayBatch, ThreadPool, Owner)
+		FirstContactRaytraceJob(const RayBatch& RayBatch, RaytraceCPU& Owner) :
+			RaytraceJob(RayBatch, Owner),
+			_offset{ Owner._FullScreenScissors.extent.width * Owner._FullScreenScissors.extent.height },
+			_pixel_sample_nb{Owner._pixel_sample_nb},
+			_is_moving{Owner._is_moving},
+			_ComputeQueue{Owner._ComputeBatch},
+			_fence{Owner._batch_fence}
 		{
 		}
 
@@ -334,10 +328,11 @@ public:
 		{
 			if (hit)
 			{
-				if (_ThreadPool)
+				if (!_is_moving)
 				{
 					*computed_ray.pixel = vec4{ 0.0f, 0.0f, 0.0f, 1.0f };
-					for (uint32_t i = 0; i < _Owner._pixel_sample_nb; i++)
+					uint32_t globalOffset = _offset + (_Computes.offset + ray_index) * _pixel_sample_nb;
+					for (uint32_t i = 0; i < _pixel_sample_nb; i++)
 					{
 						ray_compute newCompute{};
 
@@ -345,7 +340,7 @@ public:
 						newCompute.pixel = computed_ray.pixel;
 						newCompute.color = hit_record.shade;
 
-						_Computes._Heap[_Computes.index * _Owner._pixel_sample_nb + ray_index] = newCompute;
+						_Computes.data[globalOffset + i] = newCompute;
 					}
 				}
 				else
@@ -353,7 +348,7 @@ public:
 			}
 			else
 			{
-				*computed_ray.pixel = _Owner.GetRayColor(computed_ray.launched);
+				*computed_ray.pixel = GetRayColor(computed_ray.launched, _background_gradient_top, _background_gradient_bottom);
 			}
 		}
 
@@ -362,12 +357,17 @@ public:
 		*/
 		__forceinline virtual void DispatchRayHits(uint32_t hit_nb)const final
 		{
-			//TODO : NOT IMPLEMENTED
+			if (!_is_moving)
+			{
+				RayBatch node;
+				node.data	= _Computes.data;
+				node.offset	= _offset + _Computes.offset * _pixel_sample_nb;
+				node.nb		= hit_nb * _pixel_sample_nb;
 
-			//if (_ThreadPool)
-			//{
-			//
-			//}
+				_fence.lock();
+				_ComputeQueue.PushNode(node);
+				_fence.unlock();
+			}
 		}
 	};
 
@@ -386,18 +386,28 @@ public:
 	//the objects in our scene
 	ScopedLoopArray<hittable*>	_Scene;
 	//the materials for our objects
-	ScopedLoopArray<material*> _Materials;
+	ScopedLoopArray<material*>	_Materials;
 
 	//a heap that to allocate the any hit compute heap
 	MultipleSharedMemory<ray_compute>			_ComputeHeap;
+	//a Queue to append the Ray Batches
+	Queue<MultipleSharedMemory<ray_compute>>	_ComputeBatch;
+	//a mutex to add and remove the batches concurrently
+	std::mutex									_batch_fence;
 
 	//how many rays should we compute per frame refresh ?
-	uint32_t _compute_per_frames{ RAY_TO_COMPUTE_PER_FRAME };
+	uint32_t	_compute_per_frames{ RAY_TO_COMPUTE_PER_FRAME };
 	//the number of sample for a single pixel
-	uint32_t _pixel_sample_nb{ PIXEL_SAMPLE_NB };
+	uint32_t	_pixel_sample_nb{ PIXEL_SAMPLE_NB };
+	//the color for the top of the background gradient 
+	vec4		_background_gradient_top{ BACKGROUND_GRADIENT_TOP };
+	//the color for the bottom of the background gradient 
+	vec4		_background_gradient_bottom{ BACKGROUND_GRADIENT_BOTTOM};
 
 	//need to recompute the frame
 	bool _need_refresh{ true };
+	//need to recompute the frame
+	bool _is_moving{ false };
 
 	/*===== END CPU Raytracing =====*/
 #pragma endregion
