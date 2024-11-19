@@ -45,13 +45,22 @@ struct vec2
 
 	};
 
-	//vec2() = default;
-	//vec2(const vec2&) = default;
-	//vec2(float _x, float _y) :
-	//	x{ _x },
-	//	y{ _y }
-	//{
-	//}
+	vec2() = default;
+	vec2(const vec2&) = default;
+	vec2(vec2&&) = default;
+	vec2(float x_, float y_) :
+		x{ x_ },
+		y{ y_ }
+	{
+	}
+	vec2(float scalar_[2]) :
+		x{ scalar_[0]},
+		y{scalar_[1]}
+	{
+	}
+
+	/* assignement */
+	__forceinline vec2& operator=(const vec2&) = default;
 
 	/* accessor */
 
@@ -65,7 +74,7 @@ struct vec2
 	__forceinline vec2& operator*=(const float& mult) { x *= mult; y *= mult; return *this; }
 	__forceinline vec2& operator/=(const float& div) { x -= div; y -= div; return *this; }
 
-	__forceinline vec2 operator-() const { return vec2{ -scalar[0], -scalar[1] }; }
+	__forceinline vec2 operator-() const { return vec2{ -x, -y }; }
 
 };
 
@@ -76,18 +85,20 @@ typedef vec2 Vec2;
 
 /* math operation */
 
-__forceinline vec2 operator+(const vec2& lhs, const vec2& rhs) { return {{lhs.x + rhs.x, lhs.y + rhs.y}}; }
-__forceinline vec2 operator-(const vec2& lhs, const vec2& rhs) { return {{lhs.x - rhs.x, lhs.y - rhs.y}}; }
-__forceinline vec2 operator*(const vec2& lhs, const vec2& rhs) { return { {lhs.x * rhs.x, lhs.y * rhs.y} }; }
-__forceinline vec2 operator/(const vec2& lhs, const vec2& rhs) { return { {lhs.x / rhs.x, lhs.y / rhs.y} }; }
+__forceinline vec2 operator+(const vec2& lhs, const vec2& rhs) { return vec2{lhs.x + rhs.x, lhs.y + rhs.y}; }
+__forceinline vec2 operator-(const vec2& lhs, const vec2& rhs) { return vec2{lhs.x - rhs.x, lhs.y - rhs.y}; }
+__forceinline vec2 operator*(const vec2& lhs, const vec2& rhs) { return vec2{lhs.x * rhs.x, lhs.y * rhs.y}; }
+__forceinline vec2 operator/(const vec2& lhs, const vec2& rhs) { return vec2{lhs.x / rhs.x, lhs.y / rhs.y}; }
 
 
-__forceinline vec2 operator*(const vec2& vec, const float& scalar) { return { {vec.x * scalar, vec.y * scalar} }; }
-__forceinline vec2 operator/(const vec2& vec, const float& scalar) { return { {vec.x / scalar, vec.y / scalar} }; }
+__forceinline vec2 operator*(const vec2& vec, const float& scalar) { return vec2{vec.x * scalar, vec.y * scalar}; }
+__forceinline vec2 operator/(const vec2& vec, const float& scalar) { return vec2{vec.x / scalar, vec.y / scalar}; }
+__forceinline vec2 operator*(const float& scalar, const vec2& vec) { return vec2{vec.x * scalar, vec.y * scalar}; }
+__forceinline vec2 operator/(const float& scalar, const vec2& vec) { return vec2{vec.x / scalar, vec.y / scalar}; }
 
 __forceinline float dot(const vec2& lhs, const vec2& rhs) { return lhs.x * rhs.x + lhs.y * rhs.y; }
 __forceinline float length(const vec2& vec) { return vec.x + vec.y == 0 ? 0 : sqrtf(vec.x * vec.x + vec.y * vec.y); }
-__forceinline vec2	normalize(const vec2& vec) { float l = length(vec); return l == 0 ? vec2{{0, 0}} : vec2{{vec.x / l, vec.y / l}}; }
+__forceinline vec2	normalize(const vec2& vec) { float l = length(vec); return l == 0 ? vec2{0, 0} : vec2{vec.x / l, vec.y / l}; }
 
 /* struct representing a mathematical 3 dimensional vector. it has been made to resemble the one you may encounter in glsl or hlsl. */
 struct vec3
@@ -112,14 +123,31 @@ struct vec3
 		vec2 rg;
 	};
 
-	//vec3() = default;
-	//vec3(const vec3&) = default;
-	//vec3(float _x, float _y, float _z) :
-	//	x{ _x },
-	//	y{ _y },
-	//	z{_z}
-	//{
-	//}
+	vec3() = default;
+	vec3(const vec3&) = default;
+	vec3(vec3&&) = default;
+	vec3(float x_, float y_, float z_) :
+		x{ x_ },
+		y{ y_ },
+		z{ z_ }
+	{
+	}
+	vec3(float scalar_[3]) :
+		x{ scalar_[0]},
+		y{ scalar_[1]},
+		z{ scalar_[2]}
+	{
+	}
+	vec3(const vec2& vec) :
+		x{ vec.x },
+		y{ vec.y },
+		z{ 0.0f }
+	{
+	}
+
+	/* assignement */
+	__forceinline vec3& operator= (const vec2& other) { xy = other; return *this; }
+	__forceinline vec3& operator= (const vec3&) = default;
 
 	/* accessor */
 
@@ -133,7 +161,7 @@ struct vec3
 	__forceinline vec3& operator*=(const float& mult) { x *= mult; y *= mult; z *= mult; return *this; }
 	__forceinline vec3& operator/=(const float& div) { x -= div; y -= div; z -= div; return *this; }
 
-	__forceinline vec3 operator-() const { return vec3{ -scalar[0], -scalar[1], -scalar[2] }; }
+	__forceinline vec3 operator-() const { return vec3{ -x, -y, -z }; }
 };
 
 /* typedef */
@@ -143,18 +171,20 @@ typedef vec3 Vec3;
 
 /* math operation */
 
-__forceinline vec3 operator+(const vec3& lhs, const vec3& rhs) { return {{lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z}}; }
-__forceinline vec3 operator-(const vec3& lhs, const vec3& rhs) { return {{lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z}}; }
-__forceinline vec3 operator*(const vec3& lhs, const vec3& rhs) { return { {lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z} }; }
-__forceinline vec3 operator/(const vec3& lhs, const vec3& rhs) { return { {lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z} }; }
+__forceinline vec3 operator+(const vec3& lhs, const vec3& rhs) { return vec3{lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z}; }
+__forceinline vec3 operator-(const vec3& lhs, const vec3& rhs) { return vec3{lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z}; }
+__forceinline vec3 operator*(const vec3& lhs, const vec3& rhs) { return vec3{lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z}; }
+__forceinline vec3 operator/(const vec3& lhs, const vec3& rhs) { return vec3{lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z}; }
 
-__forceinline vec3 operator*(const vec3& vec, const float& scalar) { return { {vec.x * scalar, vec.y * scalar, vec.z * scalar} }; }
-__forceinline vec3 operator/(const vec3& vec, const float& scalar) { return { {vec.x / scalar, vec.y / scalar, vec.z / scalar} }; }
+__forceinline vec3 operator*(const vec3& vec, const float& scalar) { return vec3{vec.x * scalar, vec.y * scalar, vec.z * scalar}; }
+__forceinline vec3 operator/(const vec3& vec, const float& scalar) { return vec3{vec.x / scalar, vec.y / scalar, vec.z / scalar}; }
+__forceinline vec3 operator*(const float& scalar, const vec3& vec) { return vec3{vec.x * scalar, vec.y * scalar, vec.z * scalar}; }
+__forceinline vec3 operator/(const float& scalar, const vec3& vec) { return vec3{vec.x / scalar, vec.y / scalar, vec.z / scalar}; }
 
 __forceinline float dot(const vec3& lhs, const vec3& rhs) { return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z; }
 __forceinline float length(const vec3& vec) { return vec.x + vec.y + vec.z == 0.0f ? 0.0f : sqrtf(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z); }
-__forceinline vec3	normalize(const vec3& vec) { float l = length(vec); return l == 0 ? vec3{{0.0f, 0.0f, 0.0f}} : vec3{{vec.x / l, vec.y / l, vec.z / l}}; }
-__forceinline vec3	cross(const vec3& lhs, const vec3& rhs) { return {{lhs.y * rhs.z - lhs.z * rhs.y, lhs.z * rhs.x - lhs.x * rhs.z, lhs.x * rhs.y - lhs.y * rhs.x}}; }
+__forceinline vec3	normalize(const vec3& vec) { float l = length(vec); return l == 0 ? vec3{0.0f, 0.0f, 0.0f} : vec3{vec.x / l, vec.y / l, vec.z / l}; }
+__forceinline vec3	cross(const vec3& lhs, const vec3& rhs) { return vec3{lhs.y * rhs.z - lhs.z * rhs.y, lhs.z * rhs.x - lhs.x * rhs.z, lhs.x * rhs.y - lhs.y * rhs.x}; }
 
 
 /* struct representing a mathematical 4 dimensional vector. it has been made to resemble the one you may encounter in glsl or hlsl. */
@@ -192,15 +222,44 @@ struct vec4
 		vec3 rgb;
 	};
 
-	//vec4() = default;
-	//vec4(const vec4&) = default;
-	//vec4(float _x, float _y, float _z, float _w) :
-	//	x{ _x },
-	//	y{ _y },
-	//	z{ _z },
-	//	w{ _w }
-	//{
-	//}
+	vec4() = default;
+	vec4(const vec4&) = default;
+	vec4(float x_, float y_, float z_, float w_) :
+		x{ x_ },
+		y{ y_ },
+		z{ z_ },
+		w{ w_ }
+	{
+	}
+	vec4(float scalar_[4]) :
+		x{ scalar_[0] },
+		y{ scalar_[1] },
+		z{ scalar_[2] },
+		w{ scalar_[3] }
+	{
+	}
+	vec4(const vec2& vec) :
+		x{ vec.x },
+		y{ vec.y },
+		z{ 0.0f },
+		w{ 0.0f }
+	{
+	}
+	vec4(const vec3& vec) :
+		x{ vec.x },
+		y{ vec.y },
+		z{ vec.z },
+		w{ 0.0f }
+	{
+	}
+
+	/* assignement */
+
+	__forceinline vec4& operator= (const vec2& other) { xy = other; return *this; }
+	__forceinline vec4& operator= (const vec3& other) { xyz = other; return *this; }
+	__forceinline vec4& operator= (const vec4&) = default;
+
+
 
 	/* accessor */
 
@@ -214,7 +273,7 @@ struct vec4
 	__forceinline vec4& operator*=(const float& mult) { x *= mult; y *= mult; z *= mult; w *= mult;  return *this; }
 	__forceinline vec4& operator/=(const float& div) { x -= div; y -= div; z -= div; w *= div;  return *this; }
 
-	__forceinline vec4 operator-() const { return vec4{ -scalar[0], -scalar[1], -scalar[2], -scalar[3]}; }
+	__forceinline vec4 operator-() const { return vec4{ -x, -y, -z, -w}; }
 
 };
 
@@ -225,19 +284,21 @@ typedef vec4 Vec4;
 
 /* math operation */
 
-__forceinline vec4 operator+(const vec4& lhs, const vec4& rhs) { return {{lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z, lhs.w + rhs.w}}; }
-__forceinline vec4 operator-(const vec4& lhs, const vec4& rhs) { return {{lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z, lhs.w - rhs.w}}; }
-__forceinline vec4 operator*(const vec4& lhs, const vec4& rhs) { return { {lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z, lhs.w * rhs.w} }; }
-__forceinline vec4 operator/(const vec4& lhs, const vec4& rhs) { return { {lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z, lhs.w / rhs.w} }; }
+__forceinline vec4 operator+(const vec4& lhs, const vec4& rhs) { return vec4{lhs.x + rhs.x, lhs.y + rhs.y, lhs.z + rhs.z, lhs.w + rhs.w}; }
+__forceinline vec4 operator-(const vec4& lhs, const vec4& rhs) { return vec4{lhs.x - rhs.x, lhs.y - rhs.y, lhs.z - rhs.z, lhs.w - rhs.w}; }
+__forceinline vec4 operator*(const vec4& lhs, const vec4& rhs) { return vec4{lhs.x * rhs.x, lhs.y * rhs.y, lhs.z * rhs.z, lhs.w * rhs.w}; }
+__forceinline vec4 operator/(const vec4& lhs, const vec4& rhs) { return vec4{lhs.x / rhs.x, lhs.y / rhs.y, lhs.z / rhs.z, lhs.w / rhs.w}; }
 
 
-__forceinline vec4 operator*(const vec4& vec, const float& scalar) { return { {vec.x * scalar, vec.y * scalar, vec.z * scalar, vec.w * scalar} }; }
-__forceinline vec4 operator/(const vec4& vec, const float& scalar) { return { {vec.x / scalar, vec.y / scalar, vec.z / scalar, vec.w / scalar} }; }
+__forceinline vec4 operator*(const vec4& vec, const float& scalar) { return vec4{vec.x * scalar, vec.y * scalar, vec.z * scalar, vec.w * scalar}; }
+__forceinline vec4 operator/(const vec4& vec, const float& scalar) { return vec4{vec.x / scalar, vec.y / scalar, vec.z / scalar, vec.w / scalar}; }
+__forceinline vec4 operator*(const float& scalar, const vec4& vec) { return vec4{ vec.x * scalar, vec.y * scalar, vec.z * scalar, vec.w * scalar }; }
+__forceinline vec4 operator/(const float& scalar, const vec4& vec) { return vec4{ vec.x / scalar, vec.y / scalar, vec.z / scalar, vec.w / scalar }; }
 
 __forceinline float dot(const vec4& lhs, const vec4& rhs) { return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w; }
 __forceinline float length(const vec4& vec) { return vec.x + vec.y + vec.z + vec.w == 0.0f ? 0.0f : sqrtf(vec.x * vec.x + vec.y * vec.y + vec.z * vec.z + vec.w * vec.w); }
-__forceinline vec4	normalize(const vec4& vec) { float l = length(vec); return l == 0 ? vec4{{0.0f, 0.0f, 0.0f, 0.0f}} : vec4{{vec.x / l, vec.y / l, vec.z / l, vec.w / l}}; }
-__forceinline vec4	cross(const vec4& lhs, const vec4& rhs) { return {{lhs.y * rhs.z - lhs.z * rhs.y, lhs.z * rhs.w - lhs.w * rhs.z, lhs.w * rhs.x - lhs.x * rhs.w, lhs.x * rhs.y - lhs.y * rhs.x}}; }
+__forceinline vec4	normalize(const vec4& vec) { float l = length(vec); return l == 0 ? vec4{0.0f, 0.0f, 0.0f, 0.0f} : vec4{vec.x / l, vec.y / l, vec.z / l, vec.w / l}; }
+__forceinline vec4	cross(const vec4& lhs, const vec4& rhs) { return vec4{lhs.y * rhs.z - lhs.z * rhs.y, lhs.z * rhs.w - lhs.w * rhs.z, lhs.w * rhs.x - lhs.x * rhs.w, lhs.x * rhs.y - lhs.y * rhs.x}; }
 
 /* struct representing a mathematical 4 dimensional vector. it has been made to resemble the one you may encounter in glsl or hlsl. */
 struct mat4
@@ -256,9 +317,13 @@ struct mat4
 		};
 	};
 
-	//mat4() = default;
-	//mat4(const mat4&) = default;
+	mat4() = default;
+	mat4(const mat4&) = default;
+	mat4(mat4&&) = default;
 
+	/* assignement */
+
+	__forceinline mat4& operator=(const mat4&) = default;
 
 	/* accessor */
 
