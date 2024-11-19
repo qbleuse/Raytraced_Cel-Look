@@ -530,9 +530,6 @@ void RaytraceCPU::Resize(GraphicsAPIManager& GAPI, int32_t old_width, int32_t ol
 
 void RaytraceCPU::DispatchSceneRay(AppWideContext& AppContext)
 {
-	//AppContext.threadPool.Pause();
-	//AppContext.threadPool.ClearJobs();
-
 	//2D viewport values
 	float windowHeight	= static_cast<float>(_FullScreenScissors.extent.height);
 	float windowWidth	= static_cast<float>(_FullScreenScissors.extent.width);
@@ -556,50 +553,55 @@ void RaytraceCPU::DispatchSceneRay(AppWideContext& AppContext)
 	vec3 firstPixel			= viewportUpperLeft + ((pixelDeltaU + pixelDeltaV) * 0.5f);
 	
 	{
-		//MultipleSharedMemory<ray_compute> computes{ _FullScreenScissors.extent.width * _FullScreenScissors.extent.height };
+		//going over every pixel
 		for (uint32_t h = 0; h < _FullScreenScissors.extent.height; h++)
 			for (uint32_t w = 0; w < _FullScreenScissors.extent.width; w++)
 			{
-				//first get the pixel's "3D position"
+				//first get the pixel's "3D position", (we anti-aliase using random)
 				vec3 pixelCenter = firstPixel + pixelDeltaU * (static_cast<float>(w) + randf() - 0.5f) 
 												+ pixelDeltaV * (static_cast<float>(h) + randf() - 0.5f);
 				//create a direction from the camera's position to the 3D viewport for this pixel
-				vec3 rayDir = normalize(pixelCenter - cameraCenter);//normalizing is very slow, we'll still do it, but you may want to ignore it
+				vec3 rayDir = normalize(pixelCenter - cameraCenter);//normalizing is very slow, we'll still do it, but you may want to remove it
 
 				ray pixelRay = ray{ pixelCenter, rayDir };
 
                 _ComputeHeap[(h * _FullScreenScissors.extent.width) + w].launched = pixelRay;
                 _ComputeHeap[(h * _FullScreenScissors.extent.width) + w].pixel = &_RaytracedImage[(h * _FullScreenScissors.extent.width) + w];
 			}
-
+		
+		//clearing the current work and sending the new one
 		_batch_fence.lock();
 		_ComputeBatch.Clear();
 		_ComputeBatch.PushBatch(_ComputeHeap, _FullScreenScissors.extent.width * _FullScreenScissors.extent.height);
 		_batch_fence.unlock();
 	}
 
+	//pause the thread loop to add the new concurrent work
 	AppContext.threadPool.Pause();
-	if (!_is_moving)
+	if (!_is_moving)//if we are moving the old work are obsolete
 		AppContext.threadPool.ClearJobs();
 
+	//going over all the screen
 	for (uint32_t i = 0; i < _FullScreenScissors.extent.width * _FullScreenScissors.extent.height;)
 	{
-		uint32_t computeNb = _compute_per_frames;
-		const auto& computes_job = _ComputeBatch.PopBatch(computeNb);
+		//asking for a Batch for the job to work on with the size user chose
+		uint32_t computeNb				= _compute_per_frames;
+		const RayBatch& computes_job	= _ComputeBatch.PopBatch(computeNb);
 
 		if (computeNb > 0)
 		{
 			RayBatch newBatch{ computes_job.data,computes_job.offset,computes_job.nb };
 
+			//adding the job without asking for immediate execution
 			FirstContactRaytraceJob newJob(newBatch,*this);
 			AppContext.threadPool.SilentAdd(newJob);
 		}
 
+		//adding the number of processed pixel
 		i += computeNb;
 	}
+	//now asking for all thread to start working
 	AppContext.threadPool.Resume();
-
-	//_need_refresh = false;
 }
 
 void RaytraceCPU::Act(AppWideContext& AppContext)
@@ -612,6 +614,7 @@ void RaytraceCPU::Act(AppWideContext& AppContext)
 
 		bool SampleNbChange = ImGui::SliderInt("SampleNb", (int*)&_pixel_sample_nb, 1, 250);
 		_need_refresh |= SampleNbChange;
+		_need_refresh |= ImGui::SliderInt("Max Bounce Depth", (int*)&_max_depth, 1, 50);
 		_need_refresh |= ImGui::SliderInt("ComputesPerFrame", (int*)&_compute_per_frames, 1, 10000);
 
 		_need_refresh |= ImGui::ColorPicker4("Background Gradient Top", _background_gradient_top.scalar);
@@ -623,30 +626,32 @@ void RaytraceCPU::Act(AppWideContext& AppContext)
 	
 	_is_moving = AppContext.in_camera_mode;
 
+	//if refresh is needed or requested, we create a new image
 	if (_need_refresh || _is_moving)
 		DispatchSceneRay(AppContext);
-	else
+	else//otherwise we try to converge the current image
 	{
 		_batch_fence.lock();
 		for (uint32_t i = 0; i < AppContext.threadPool.GetThreadsNb(); i++)
 		{
-			uint32_t computeNb = _compute_per_frames;
-			RayBatch& computes = _ComputeBatch.PopBatch(computeNb);
+			//asking for a Batch for the job to work on with the size user chose
+			uint32_t computeNb			= _compute_per_frames;
+			const RayBatch& computes	= _ComputeBatch.PopBatch(computeNb);
 
 			if (computeNb > 0)
 			{
 				AnyHitRaytraceJob newJob(computes, *this);
 
+				//adding the job and asking for immediate execution
 				AppContext.threadPool.Add(newJob);
 			}
 			else
 				break;
-			//AppContext.threadPool.Resume();
 		}
 		_batch_fence.unlock();
 	}
 
-	//this is needed in dispatch rays;
+	//if we suddenly stop moving, we can start converging, but for that we need a final refresh
 	_need_refresh = _is_moving;
 }
 

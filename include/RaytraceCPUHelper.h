@@ -45,11 +45,13 @@ struct hit_record
 struct ray_compute
 {
 	//said launched ray that we need to compute if it hits anything
-	ray launched{};
+	ray launched;
 	//the final pixel we want to shade
 	vec4* pixel{ nullptr };
 	//the color the ray has computed so far
 	vec4 color;
+	//the number of time the same pixel has been computed
+	uint32_t depth{0};
 };
 
 /*
@@ -60,6 +62,9 @@ struct hittable
 	//a method to implement the collision beween the hittable object and a ray
 	__forceinline virtual bool hit(const ray& incomming, hit_record& record)const = 0;
 
+
+	//a method to implement the reflected ray from a hit.
+	// careful, calling twice this method with the same parameter may not have the same result
 	__forceinline virtual ray propagate(const ray& in, const hit_record& record)const = 0;
 
 	//a method to implement what color does the hit returns

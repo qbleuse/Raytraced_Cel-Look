@@ -235,7 +235,7 @@ int main()
 
 		//resources for main loop
 		AppWideContext AppContext;
-		AppContext.threadPool.MakeThreads(std::thread::hardware_concurrency());
+		AppContext.threadPool.MakeThreads(std::thread::hardware_concurrency() - 1);
 		ScopedLoopArray<Scene*> scenes(3);
 		scenes[0] = new RasterTriangle();
 		scenes[1] = new RasterObject();

@@ -16,10 +16,12 @@
 //for multithreading
 #include <mutex>
 
+//defines for init values
 #define RAY_TO_COMPUTE_PER_FRAME 2700
 #define PIXEL_SAMPLE_NB 50
 #define BACKGROUND_GRADIENT_TOP vec4{ 0.3f, 0.7f, 1.0f, 1.0f }
 #define BACKGROUND_GRADIENT_BOTTOM vec4{ 1.0f, 1.0f, 1.0f, 1.0f }
+#define INIT_BOUNCE_DEPTH 10
 
 typedef Queue<MultipleSharedMemory<ray_compute>>::QueueNode RayBatch;
 
@@ -169,7 +171,8 @@ public:
 				_Computes{RayBatch},
 				_Scene{Owner._Scene},
 				_background_gradient_top{ Owner._background_gradient_top},
-				_background_gradient_bottom{ Owner._background_gradient_bottom }
+				_background_gradient_bottom{ Owner._background_gradient_bottom },
+				_depth{Owner._max_depth}
 			{
 			}
 
@@ -181,6 +184,8 @@ public:
 			vec4								_background_gradient_top;
 			//the color for the bottom of the background gradient 
 			vec4								_background_gradient_bottom;
+			//the max allowed generated rays depth
+			uint32_t							_depth;
 
 
 			/*
@@ -195,35 +200,51 @@ public:
 
 			__forceinline void Execute()override
 			{
+				//the start of our ray heap we need to compute
 				const MultipleVolatileMemory<ray_compute> computes = &_Computes.data[_Computes.offset];
 
+				//the nb of rays that hit an object in the scene
 				uint32_t hit_nb{ 0 };
+				//going over all the rays
 				for (uint32_t i = 0; i < _Computes.nb; i++)
 				{
+					//getting the current ray
 					const ray_compute& indexedComputedRay = computes[i];
 
-					float hasHit = false;
-					hit_record final_hit{};
-					final_hit.distance = FLT_MAX;
+					if (indexedComputedRay.pixel == nullptr)
+						continue;
+
+					//whether this ray has intersected with an object in the scene
+					float has_hit{ false };
+					//the record of the closest hit between the ray and the objects in the scene
+					hit_record closest_hit;
+					//basically saying making the distance "INFINITY"
+					closest_hit.distance = FLT_MAX;
 					for (uint32_t j = 0; j < _Scene.Nb(); j++)
 					{
+						//compute hit with each object in the scene
 						hit_record jHit{};
 						if (_Scene[j]->hit(indexedComputedRay.launched, jHit))
 						{
-							if (jHit.distance < final_hit.distance)
+							//if we hit the ray intersect with multiple objects, we take the closest to the ray's origin
+							if (jHit.distance < closest_hit.distance)
 							{
-								final_hit = jHit;
-								hasHit = true;
+								closest_hit = jHit;
+								has_hit = true;
 							}
 						}
 					}
 
-					ProcessRayHit(hasHit, hit_nb, final_hit, indexedComputedRay);
+					//giving the pixel color, or generating a bouncing ray
+					ProcessRayHit(has_hit, hit_nb, closest_hit, indexedComputedRay);
 
-					if (hasHit)
+					//hit_nb helps to record how many rays we may need to generate,but also acts as an index in the heap,
+					//that we reuse for generated rays, thus we add it *after* the ray has been processed
+					if (has_hit && indexedComputedRay.depth < _depth)
 						hit_nb++;
 				}
 
+				//if needed, generate a new request to process a new batch of ray compute
 				DispatchRayHits(hit_nb);
 			}
 	};
@@ -261,15 +282,23 @@ public:
 		*/
 		__forceinline virtual void ProcessRayHit(bool hit, uint32_t ray_index, const hit_record& hit_record, const ray_compute& computed_ray)const final
 		{
-			if (!hit && computed_ray.pixel != nullptr)
+			//if the ray does not intersect with anything, we may say that it comes from our light source (which in this demo, is "the sky")
+			//we make it contribute to the final image, depending on the sample weight (as we launched multiple ray for the same pixel), and with the color of the light
+			if (!hit)
 				*computed_ray.pixel += computed_ray.color * _sample_weight * GetRayColor(computed_ray.launched, _background_gradient_top, _background_gradient_bottom);
-			else if (hit)
+			else if (computed_ray.depth < _depth)//if it hit, we did not found where the light came from, so requesting a new compute to the bounced ray from the hit
 			{
+				//the new ray to compute
 				ray_compute newCompute{};
 				
+				//the bounced ray
 				newCompute.launched = hit_record.mat->propagate(computed_ray.launched, hit_record);
+				//still computing the same pixel
 				newCompute.pixel = computed_ray.pixel;
+				//if it bounced, the object absorbed some of the light's spectrum
 				newCompute.color = hit_record.shade * computed_ray.color;
+				//adding to the bounce number, as we limit the number of rebounce (as the contribution is close to 0 at a certain point)
+				newCompute.depth = computed_ray.depth + 1;
 				
 				_Computes.data[(_Computes.offset + ray_index)] = newCompute;
 			}
@@ -280,16 +309,18 @@ public:
 		*/
 		__forceinline virtual void DispatchRayHits(uint32_t hit_nb)const final
 		{
-			{
-				RayBatch node;
-				node.data = _Computes.data;
-				node.offset = _Computes.offset;
-				node.nb = hit_nb;
+			//as hit_nb <= _Computes.nb, we recycle the heap to dispatch our rebounced rays.
 
-				_fence.lock();
-				_ComputeQueue.PushNode(node);
-				_fence.unlock();
-			}
+			//the batch of ray to compute
+			RayBatch node;
+			node.data	= _Computes.data;//the data was already filled up in the ProcessRay Hits
+			node.offset = _Computes.offset;
+			node.nb		= hit_nb;
+
+			//sending it away when the resource is available
+			_fence.lock();
+			_ComputeQueue.PushNode(node);
+			_fence.unlock();
 		}
 	};
 
@@ -328,26 +359,35 @@ public:
 		{
 			if (hit)
 			{
+				//whether we move changes we should launch new ray or draw a "basic image"
 				if (!_is_moving)
 				{
+					//clearing the screen
 					*computed_ray.pixel = vec4{ 0.0f, 0.0f, 0.0f, 1.0f };
 					uint32_t globalOffset = _offset + (_Computes.offset + ray_index) * _pixel_sample_nb;
 					for (uint32_t i = 0; i < _pixel_sample_nb; i++)
 					{
+						//the new ray to compute
 						ray_compute newCompute{};
 
+						//the bounced ray
 						newCompute.launched = hit_record.mat->propagate(computed_ray.launched, hit_record);
+						//we want them all to compute the same pixel
 						newCompute.pixel = computed_ray.pixel;
+						//if it bounced, the object absorbed some of the light's spectrum
 						newCompute.color = hit_record.shade;
+						//we initialize the number of rebounce, as this is the first hit
+						newCompute.depth = 0;
 
 						_Computes.data[globalOffset + i] = newCompute;
 					}
 				}
-				else
+				else//helping the user to move into the scene by rendering a simple representation of the scene
 					*computed_ray.pixel = hit_record.shade;
 			}
 			else
 			{
+				//whether we move or not, we still render the sky
 				*computed_ray.pixel = GetRayColor(computed_ray.launched, _background_gradient_top, _background_gradient_bottom);
 			}
 		}
@@ -357,13 +397,21 @@ public:
 		*/
 		__forceinline virtual void DispatchRayHits(uint32_t hit_nb)const final
 		{
+			//dispatching rays when the image is recomputed every frame would be stupid
 			if (!_is_moving)
 			{
+				//the batch of rays to compute
 				RayBatch node;
-				node.data	= _Computes.data;
+				//the same heap is being used, but also is widly over-allocated to allow this.
+				//the size of the heap is basically of one per pixel, then one ray compute for each sample of each pixel
+				node.data = _Computes.data;
+				//which means the offset is basically : going over the space allocated for the screen
+				//then going to the nth pixel considering that every pixel samples
 				node.offset	= _offset + _Computes.offset * _pixel_sample_nb;
+				//and for every hit, we have at least _pixel_sample_nb ray compute created
 				node.nb		= hit_nb * _pixel_sample_nb;
 
+				//sending it away when the resource is available
 				_fence.lock();
 				_ComputeQueue.PushNode(node);
 				_fence.unlock();
@@ -403,6 +451,8 @@ public:
 	vec4		_background_gradient_top{ BACKGROUND_GRADIENT_TOP };
 	//the color for the bottom of the background gradient 
 	vec4		_background_gradient_bottom{ BACKGROUND_GRADIENT_BOTTOM};
+	//the maximum ray bounce generation allowed
+	uint32_t	_max_depth{ INIT_BOUNCE_DEPTH };
 
 	//need to recompute the frame
 	bool _need_refresh{ true };
