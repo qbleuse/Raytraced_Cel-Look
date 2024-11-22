@@ -250,10 +250,10 @@ bool VulkanHelper::CreateUniformBufferHandle(Uploader& VulkanUploader, UniformBu
 	return result == VK_SUCCESS;
 }
 
-void VulkanHelper::ClearUniformBufferHandle(const VkDevice& _VulkanDevice, UniformBufferHandle& bufferHandle)
+void VulkanHelper::ClearUniformBufferHandle(const VkDevice& VulkanDevice, UniformBufferHandle& bufferHandle)
 {
-	VK_CLEAR_ARRAY(bufferHandle._GPUBuffer, bufferHandle._nb_buffer, vkDestroyBuffer, _VulkanDevice);
-	VK_CLEAR_ARRAY(bufferHandle._GPUMemoryHandle, bufferHandle._nb_buffer, vkFreeMemory, _VulkanDevice);
+	VK_CLEAR_ARRAY(bufferHandle._GPUBuffer, bufferHandle._nb_buffer, vkDestroyBuffer, VulkanDevice);
+	VK_CLEAR_ARRAY(bufferHandle._GPUMemoryHandle, bufferHandle._nb_buffer, vkFreeMemory, VulkanDevice);
 	bufferHandle._CPUMemoryHandle.Clear();
 }
 
@@ -299,13 +299,13 @@ bool VulkanHelper::UploadStaticBufferHandle(Uploader& VulkanUploader, StaticBuff
 	return result == VK_SUCCESS;
 }
 
-void VulkanHelper::ClearStaticBufferHandle(const VkDevice& _VulkanDevice, StaticBufferHandle& bufferHandle)
+void VulkanHelper::ClearStaticBufferHandle(const VkDevice& VulkanDevice, StaticBufferHandle& bufferHandle)
 {
 	if (bufferHandle._StaticGPUBuffer != nullptr)
-		vkDestroyBuffer(_VulkanDevice, bufferHandle._StaticGPUBuffer, nullptr);
+		vkDestroyBuffer(VulkanDevice, bufferHandle._StaticGPUBuffer, nullptr);
 	bufferHandle._StaticGPUBuffer = nullptr;
 	if (bufferHandle._StaticGPUMemoryHandle != nullptr)
-		vkFreeMemory(_VulkanDevice, bufferHandle._StaticGPUMemoryHandle, nullptr);
+		vkFreeMemory(VulkanDevice, bufferHandle._StaticGPUMemoryHandle, nullptr);
 	bufferHandle._StaticGPUMemoryHandle = nullptr;
 }
 
@@ -504,12 +504,12 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* file_name, 
 
 }
 
-void VulkanHelper::ClearMesh(const VkDevice& _VulkanDevice, Mesh& mesh)
+void VulkanHelper::ClearMesh(const VkDevice& VulkanDevice, Mesh& mesh)
 {
-	VK_CLEAR_RAW_ARRAY_NO_FREE(mesh._VertexBuffers, 4, vkDestroyBuffer, _VulkanDevice);
+	VK_CLEAR_RAW_ARRAY_NO_FREE(mesh._VertexBuffers, 4, vkDestroyBuffer, VulkanDevice);
 	if (mesh._Indices != nullptr)
-		vkDestroyBuffer(_VulkanDevice, mesh._Indices, nullptr);
-	VK_CLEAR_ARRAY(mesh._VertexMemoryHandle, mesh._VertexMemoryHandle.Nb(), vkFreeMemory, _VulkanDevice);
+		vkDestroyBuffer(VulkanDevice, mesh._Indices, nullptr);
+	VK_CLEAR_ARRAY(mesh._VertexMemoryHandle, mesh._VertexMemoryHandle.Nb(), vkFreeMemory, VulkanDevice);
 }
 
 
@@ -829,21 +829,21 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 	return true;
 }
 
-void VulkanHelper::ClearModel(const VkDevice& _VulkanDevice, Model& model)
+void VulkanHelper::ClearModel(const VkDevice& VulkanDevice, Model& model)
 {
 	for (uint32_t i = 0; i < model._Meshes.Nb(); i++)
 	{
-		ClearMesh(_VulkanDevice, model._Meshes[i]);
+		ClearMesh(VulkanDevice, model._Meshes[i]);
 	}
 	model._Meshes.Clear();
 	model._material_index.Clear();
-	VK_CLEAR_ARRAY(model._BuffersHandle, model._BuffersHandle.Nb(), vkFreeMemory, _VulkanDevice);
+	VK_CLEAR_ARRAY(model._BuffersHandle, model._BuffersHandle.Nb(), vkFreeMemory, VulkanDevice);
 	for (uint32_t i = 0; i < model._Textures.Nb(); i++)
 	{
-		ClearTexture(_VulkanDevice, model._Textures[i]);
+		ClearTexture(VulkanDevice, model._Textures[i]);
 	}
 	model._Textures.Clear();
-	VK_CLEAR_ARRAY(model._Samplers, model._Samplers.Nb(), vkDestroySampler, _VulkanDevice);
+	VK_CLEAR_ARRAY(model._Samplers, model._Samplers.Nb(), vkDestroySampler, VulkanDevice);
 	for (uint32_t i = 0; i < model._Materials.Nb(); i++)
 	{
 		model._Materials[i]._Textures.Clear();
@@ -1060,18 +1060,147 @@ bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const void* pixels, uin
 }
 
 
-void VulkanHelper::ClearTexture(const VkDevice& _VulkanDevice, Texture& texture)
+void VulkanHelper::ClearTexture(const VkDevice& VulkanDevice, Texture& texture)
 {
 	//first release memory
 	if (texture._Image != nullptr)
-		vkDestroyImage(_VulkanDevice, texture._Image, nullptr);
+		vkDestroyImage(VulkanDevice, texture._Image, nullptr);
 	if (texture._ImageMemory != nullptr)
-		vkFreeMemory(_VulkanDevice, texture._ImageMemory, nullptr);
+		vkFreeMemory(VulkanDevice, texture._ImageMemory, nullptr);
 	if (texture._ImageView != nullptr)
-		vkDestroyImageView(_VulkanDevice, texture._ImageView, nullptr);
+		vkDestroyImageView(VulkanDevice, texture._ImageView, nullptr);
 
 	//then memset 0
 	texture._Image = nullptr;
 	texture._ImageMemory = nullptr;
 	texture._ImageView = nullptr;
+}
+
+/* Acceleration Structures */
+
+//creating a bottom level AS for each mesh of model
+bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh)
+{
+	//if an error happens...
+	VkResult result = VK_SUCCESS;
+
+	//preparing the struct we'll use in the loop
+
+	//used to get back the GPU adress of buffers
+	VkBufferDeviceAddressInfo addressInfo{};
+	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+
+	//used to build the Acceleration structure
+	VkAccelerationStructureGeometryTrianglesDataKHR bottomLevelMeshASData{};
+	bottomLevelMeshASData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
+
+	//will be used to create the acceleration structure
+	VkAccelerationStructureCreateInfoKHR ASCreateInfo{};
+	ASCreateInfo.sType	= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+	ASCreateInfo.type	= VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+
+	//Note QB : this makes quite a lot of stack memory allocated, but it would be quite slow to allocate heap memory for this
+
+	//array for the actual geometry description (in our case triangles)
+	MultipleVolatileMemory<VkAccelerationStructureGeometryKHR>			bottomLevelMeshAS{ (VkAccelerationStructureGeometryKHR*)alloca(sizeof(VkAccelerationStructureGeometryKHR) * mesh.Nb()) };
+	//array for the build requests (one for each mesh)
+	MultipleVolatileMemory<VkAccelerationStructureBuildGeometryInfoKHR> bottomLevelMeshASInfo{ (VkAccelerationStructureBuildGeometryInfoKHR*)alloca(sizeof(VkAccelerationStructureBuildGeometryInfoKHR) * mesh.Nb()) };
+	//the extent of the buffer of each meshes' geometry
+	MultipleVolatileMemory<VkAccelerationStructureBuildRangeInfoKHR>	bottomLevelMeshASRangeInfo{ (VkAccelerationStructureBuildRangeInfoKHR*)alloca(sizeof(VkAccelerationStructureBuildRangeInfoKHR) * mesh.Nb()) };
+
+	//allocating buffer and memory beforehand, as there will be one acceleration structure for each mesh
+	raytracedGeometry._AccelerationStructure.Alloc(mesh.Nb());
+	raytracedGeometry._AccelerationStructureBuffer.Alloc(mesh.Nb());
+	raytracedGeometry._AccelerationStructureMemory.Alloc(mesh.Nb());
+
+	//describing gemetry and creating necessarry buyffer for each mesh
+	for (uint32_t i = 0; i < mesh.Nb(); i++)
+	{
+		//the current mesh we'll work on
+		const VulkanHelper::Mesh& iMesh = mesh[i];
+
+		//getting back the positions' GPU address
+		addressInfo.buffer = iMesh._Positions;
+		VkDeviceAddress GPUBufferAddress = vkGetBufferDeviceAddress(VulkanUploader._VulkanDevice, &addressInfo);
+
+		//giving the position data
+		bottomLevelMeshASData.vertexData	= VkDeviceOrHostAddressConstKHR{ GPUBufferAddress };// this is sure to be a static buffer as we will not change vertex data
+		bottomLevelMeshASData.vertexFormat	= VK_FORMAT_R32G32B32_SFLOAT;//pos is vec3
+		bottomLevelMeshASData.vertexStride	= sizeof(vec3);//pos is vec3
+		//we do not have the data to know "bottomLevelMeshAS.maxVertex"
+
+		//getting back the indices' GPU address
+		addressInfo.buffer = iMesh._Indices;
+		GPUBufferAddress = vkGetBufferDeviceAddress(VulkanUploader._VulkanDevice, &addressInfo);
+
+		//giving the indices
+		bottomLevelMeshASData.indexData = VkDeviceOrHostAddressConstKHR{ GPUBufferAddress };// this is sure to be a static buffer as we will not change vertex data
+		bottomLevelMeshASData.indexType = iMesh._indices_type;
+
+		//we now have a proper triangle geometry
+		VkAccelerationStructureGeometryKHR& meshAS = bottomLevelMeshAS[i];
+		meshAS.sType		= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+		meshAS.geometryType = VK_GEOMETRY_TYPE_TRIANGLES_KHR;
+		meshAS.flags		= VK_GEOMETRY_OPAQUE_BIT_KHR;
+		meshAS.geometry.triangles = bottomLevelMeshASData;
+
+		//for each triangle geometry description, we want to build
+		VkAccelerationStructureBuildGeometryInfoKHR& meshASBuild = bottomLevelMeshASInfo[i];
+		meshASBuild.sType			= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+		meshASBuild.type			= VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;//we are specifying a geometry, this makes it a bottom level
+		meshASBuild.pGeometries		= &meshAS;
+		meshASBuild.geometryCount	= 1;
+		meshASBuild.mode			= VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;//we are creating it for the fist (and propably last) time
+
+		//setting the bounds of our mesh (as when loading from models, the buffer for multiple geometry may have been the same)
+		VkAccelerationStructureBuildRangeInfoKHR& meshASRange = bottomLevelMeshASRangeInfo[i];
+		meshASRange.firstVertex		= iMesh._pos_offset;
+		meshASRange.primitiveOffset = iMesh._indices_offset;
+		meshASRange.primitiveCount	= iMesh._indices_nb;
+		meshASRange.transformOffset = 0;
+
+		//the size the AS buffer will need to be considering the geometry we've referenced above
+		VkAccelerationStructureBuildSizesInfoKHR buildSize{};
+		VK_CALL_KHR(VulkanUploader._VulkanDevice, vkGetAccelerationStructureBuildSizesKHR, VulkanUploader._VulkanDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &meshASBuild, &meshASRange.primitiveCount, &buildSize);
+
+		//unfortunately, we cannot use the same memory for all the acceleration structure buffer, as size may defer between acceleration structure
+		VulkanHelper::CreateVulkanBuffer(VulkanUploader, buildSize.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
+			raytracedGeometry._AccelerationStructureBuffer[i], raytracedGeometry._AccelerationStructureMemory[i]);
+
+		//setting our newly created buffer to create our acceleration structure object
+		ASCreateInfo.buffer = raytracedGeometry._AccelerationStructureBuffer[i];
+		ASCreateInfo.size	= buildSize.accelerationStructureSize;
+		//creating a new acceleration structure
+		VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCreateAccelerationStructureKHR, VulkanUploader._VulkanDevice, &ASCreateInfo, nullptr, &raytracedGeometry._AccelerationStructure[i]);
+
+		//set our new Acceleration Structure Object to be the one receiving the geometry we've specified
+		meshASBuild.dstAccelerationStructure = raytracedGeometry._AccelerationStructure[i];
+
+		//to create the acceleration structure, vulkan needs a temporary copy buffer.
+		//fortunately we just have to give it a buffer and it handles everything else
+		VkBuffer scratchBuffer;
+		VkDeviceMemory scratchMemory;
+		VulkanHelper::CreateVulkanBuffer(VulkanUploader, buildSize.buildScratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+			scratchBuffer, scratchMemory);
+
+		//get the address of our newly created buffer and give it to our build data
+		addressInfo.buffer = scratchBuffer;
+		GPUBufferAddress = vkGetBufferDeviceAddress(VulkanUploader._VulkanDevice, &addressInfo);
+		meshASBuild.scratchData = VkDeviceOrHostAddressKHR{ GPUBufferAddress };
+
+		//do not forget to free teh temporary buffer
+		VulkanUploader._ToFreeBuffers.Add(scratchBuffer);
+		VulkanUploader._ToFreeMemory.Add(scratchMemory);
+	}
+
+	//finally, asking to build all of the acceleration structures at once (this is basically a copy command, so it is a defered call)
+	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCmdBuildAccelerationStructuresKHR, VulkanUploader._CopyBuffer, mesh.Nb(), *bottomLevelMeshASInfo, &bottomLevelMeshASRangeInfo);
+
+	return result == VK_SUCCESS;
+}
+
+void VulkanHelper::ClearRaytracedGeometry(const VkDevice& VulkanDevice, RaytracedGeometry& raytracedGeometry)
+{
+	VK_CLEAR_ARRAY(raytracedGeometry._AccelerationStructureBuffer, raytracedGeometry._AccelerationStructureBuffer.Nb(), vkDestroyBuffer, VulkanDevice);
+	VK_CLEAR_ARRAY(raytracedGeometry._AccelerationStructureMemory, raytracedGeometry._AccelerationStructureMemory.Nb(), vkFreeMemory, VulkanDevice);
 }

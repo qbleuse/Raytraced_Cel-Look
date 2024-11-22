@@ -131,9 +131,9 @@ void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppCo
 	{
 		//2. camera position
 		{
-			vec3 right = normalize(vec3{ {AppContext.view_mat[0], AppContext.view_mat[4], AppContext.view_mat[8]} });
-			vec3 up = normalize(vec3{ {AppContext.view_mat[1], AppContext.view_mat[5], AppContext.view_mat[9]} });
-			vec3 forward = normalize(vec3{ {AppContext.view_mat[2], AppContext.view_mat[6], AppContext.view_mat[10]} });
+			vec3 right = normalize(AppContext.view_mat.x.xyz);
+			vec3 up = normalize(AppContext.view_mat.y.xyz);
+			vec3 forward = normalize(AppContext.view_mat.z.xyz);
 
 			if (ImGui::IsKeyDown(ImGuiKey_W))
 			{

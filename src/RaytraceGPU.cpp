@@ -11,12 +11,20 @@
 
 void RaytraceGPU::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& RaytraceShader)
 {
-	
+	/* import model */
 
+	//load the model
+	VulkanHelper::LoadObjFile(GAPI._VulkanUploader, "../../../media/teapot/teapot.obj", _RayModel._Meshes);
+
+	//create bottom level AS from model
+	VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _RayModel._Meshes);
 }
 
 void RaytraceGPU::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RaytraceShader)
 {
+	
+	
+	
 }
 
 void RaytraceGPU::Prepare(class GraphicsAPIManager& GAPI)

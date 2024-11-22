@@ -65,7 +65,18 @@
 		_list.Clear();\
 	}\
 
-
+#define VK_CALL_KHR(device, vk_call, ...) \
+	{\
+		auto func = (PFN_##vk_call) vkGetDeviceProcAddr(device, #vk_call);\
+		if (func)\
+		{\
+			func(__VA_ARGS__);\
+		}\
+		else\
+		{\
+			printf("Vulkan extension call error : we could not find %s .\n", #vk_call); \
+		}\
+	}\
 
 
 /* forward def */
@@ -256,6 +267,24 @@ namespace VulkanHelper
 
 		VkDescriptorSet				_TextureDescriptors;
 	};
+
+
+	/* Acceleration Structures */
+
+	/*
+	* a struct representing a raytraced geometry.
+	* it exists to be the representation of a mesh array in the GPU Raytraced Pipeline.
+	* In practice, it is a list of Bottom Level Acceleration Structures.
+	*/
+	struct RaytracedGeometry
+	{
+		VolatileLoopArray<VkAccelerationStructureKHR>	_AccelerationStructure;
+		VolatileLoopArray<VkBuffer>						_AccelerationStructureBuffer;
+		VolatileLoopArray<VkDeviceMemory>				_AccelerationStructureMemory;
+	};
+
+	bool CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh);
+	void ClearRaytracedGeometry(const VkDevice& VulkanDevice, RaytracedGeometry& raytracedGeometry);
 
 };
 

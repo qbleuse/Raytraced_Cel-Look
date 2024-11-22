@@ -93,9 +93,9 @@ bool GraphicsAPIManager::FindVulkanRTSupported(const MultipleVolatileMemory<VkEx
 	//sadly extremely ineffective but necessary look up of all the extensions to see if we support raytracing
 	for (uint32_t i = 0; i < physicalExtensionNb; i++)
 	{
-		if (strcmp(PhysicalDeviceExtensionProperties[i].extensionName, "VK_KHR_acceleration_structure") == 0
-			|| strcmp(PhysicalDeviceExtensionProperties[i].extensionName, "VK_KHR_ray_tracing_pipeline") == 0
-			|| strcmp(PhysicalDeviceExtensionProperties[i].extensionName, "VK_KHR_ray_query") == 0)
+		if (strcmp(PhysicalDeviceExtensionProperties[i].extensionName, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) == 0
+			|| strcmp(PhysicalDeviceExtensionProperties[i].extensionName, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME) == 0
+			|| strcmp(PhysicalDeviceExtensionProperties[i].extensionName, VK_KHR_RAY_QUERY_EXTENSION_NAME) == 0)
 		{
 			if (++needed_extensions >= 3)
 				break;
@@ -335,9 +335,9 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	deviceCreateInfo.queueCreateInfoCount = 1;
 
 #ifdef __APPLE__
-    const char* deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_portability_subset",  "VK_KHR_acceleration_structure" , "VK_KHR_ray_tracing_pipeline", "VK_KHR_ray_query", "VK_KHR_deferred_host_operations"};
+    const char* deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_portability_subset",  VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, VK_KHR_RAY_QUERY_EXTENSION_NAME, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME };
 #else
-	const char* deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_acceleration_structure" , "VK_KHR_ray_tracing_pipeline", "VK_KHR_ray_query", "VK_KHR_deferred_host_operations" };
+	const char* deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, VK_KHR_RAY_QUERY_EXTENSION_NAME, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME};
 #endif
 	deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions;
 	if (_vulkan_rt_supported)
@@ -387,6 +387,11 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 		VK_CALL_PRINT(vkCreateCommandPool(_VulkanDevice, &poolInfo, nullptr, &_VulkanCommandPool[0]));
 		//making the second command pool
 		VK_CALL_PRINT(vkCreateCommandPool(_VulkanDevice, &poolInfo, nullptr, &_VulkanCommandPool[1]));
+	}
+
+	//load the raytracing funtion if we have a capable GPU
+	if (_vulkan_rt_supported)
+	{
 	}
 
 	return true;

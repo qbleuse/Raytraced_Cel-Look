@@ -61,6 +61,8 @@ private:
 	VulkanHelper::UniformBufferHandle	_RayMatBufferHandle;
 	//a struct containing the preallocated Vulkan memory and buffer of a loaded model
 	VulkanHelper::Model					_RayModel;
+	//the 3D geometry of the model in the GPU raytracing pipeline format
+	VulkanHelper::RaytracedGeometry		_RayBottomAS;
 
 	/*
 	* Creates the necessary resources for displaying with vulkan.

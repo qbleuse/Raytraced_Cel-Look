@@ -71,6 +71,11 @@ public:
 		return _raw_data;
 	}
 
+	__forceinline T*const* operator&()const noexcept
+	{
+		return &_raw_data;
+	}
+
 	/*===== Assignement =====*/
 
 	HeapMemory& operator=(T* raw_data)
