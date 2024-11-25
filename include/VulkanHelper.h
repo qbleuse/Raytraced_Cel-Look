@@ -286,6 +286,23 @@ namespace VulkanHelper
 	bool CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh);
 	void ClearRaytracedGeometry(const VkDevice& VulkanDevice, RaytracedGeometry& raytracedGeometry);
 
+	/*
+	* a struct representing a raytraced model.
+	* it exists to be a representation of a model in the GPU Raytraced Pipeline.
+	* In practice, it is a list of Top Level Acceleration Structures, containing reference to multiple Bottom Level AS.
+	*/
+	struct RaytracedModel
+	{
+		VkAccelerationStructureKHR	_AccelerationStructure;
+		VkBuffer					_AccelerationStructureBuffer;
+		VkDeviceMemory				_AccelerationStructureMemory;
+	};
+
+	bool UploadRaytracedModelFromGeometry(Uploader& VulkanUploader, RaytracedModel& raytracedObject, const mat4& transform, const RaytracedGeometry& geometry, bool isUpdate = false);
+	void ClearRaytracedObject(const VkDevice& VulkanDevice, RaytracedGeometry& raytracedGeometry);
+
+
+
 };
 
 #endif //__VULKAN_HELPER_H__
