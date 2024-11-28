@@ -73,6 +73,42 @@ void RaytraceGPU::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& R
 	shaderGroups[2].anyHitShader		= VK_SHADER_UNUSED_KHR;
 	shaderGroups[2].intersectionShader	= VK_SHADER_UNUSED_KHR;
 
+	/*===== PIPELINE ATTACHEMENT =====*/
+
+	{
+		//creating our acceleration structure binder
+		VkDescriptorSetLayoutBinding ASLayoutBinding{};
+		ASLayoutBinding.binding			= 0;
+		ASLayoutBinding.descriptorType	= VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+		ASLayoutBinding.descriptorCount = 1;
+		ASLayoutBinding.stageFlags		= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
+		//create a binding for our colour buffers
+		VkDescriptorSetLayoutBinding colourBackBufferBinding{};
+		samplerLayoutBinding.binding			= 1;
+		samplerLayoutBinding.descriptorType		= VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+		samplerLayoutBinding.descriptorCount	= 1;
+		samplerLayoutBinding.stageFlags			= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+
+
+		VkDescriptorSetLayoutCreateInfo layoutInfo{};
+		layoutInfo.sType		= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		layoutInfo.bindingCount = 2;
+		VkDescriptorSetLayoutBinding* layoutsBinding = { ASLayoutBinding , colourBackBufferBinding };
+		layoutInfo.pBindings = &layoutsBinding;
+
+		VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI._VulkanDevice, &layoutInfo, nullptr, &_RayDescriptorLayout));
+	}
+
+	{
+		//our pipeline layout is the same as the descriptor layout
+		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+		pipelineLayoutInfo.sType			= VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipelineLayoutInfo.pSetLayouts		= 1_RayDescriptorLayout;
+		pipelineLayoutInfo.setLayoutCount	= 1;
+
+		VK_CALL_PRINT(vkCreatePipelineLayout(GAPI._VulkanDevice, &pipelineLayoutInfo, nullptr, &_RayLayout));
+	}
 
 	/*===== PIPELINE CREATION =====*/
 
@@ -84,7 +120,7 @@ void RaytraceGPU::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& R
 	pipelineInfo.groupCount						= 3;
 	pipelineInfo.pGroups						= *shaderGroups;
 	pipelineInfo.maxPipelineRayRecursionDepth	= 10;//for the moment we'll hardcode the value, we'll see if we'll make it editable
-	pipelineInfo.layout = VK_NULL_HANDLE;//TODO : ADD DESCRIPTOR LAYOUT AND CREATE PIPELINE LAYOUT FROM IT
+	pipelineInfo.layout							= _RayLayout;//describe the attachement
 
 	VK_CALL_KHR(GAPI._VulkanDevice, vkCreateRayTracingPipelinesKHR, GAPI._VulkanDevice, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_RayPipeline);
 

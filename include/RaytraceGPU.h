@@ -30,9 +30,7 @@ private:
 	//This scene's renderpass, defining what is attached to the pipeline, and what is outputed
 	VkRenderPass				_RayRenderPass{};
 	//This scene's descriptor uniform buffer layout, defining how to use the uniform buffer
-	VkDescriptorSetLayout		_RayBufferDescriptorLayout{};
-	//This scene's descriptor sampler layout, defining how to use the sampler
-	VkDescriptorSetLayout		_RaySamplerDescriptorLayout{};
+	VkDescriptorSetLayout		_RayDescriptorLayout{};
 	//This scene's pipeline layout, defining all the descriptors our pipeline will need (uniform and sampler, basically)
 	VkPipelineLayout			_RayLayout{};
 	//This scene's pipeline, defining the behaviour of all fixed function alongside the render pass and shaders.
@@ -57,8 +55,6 @@ private:
 	MultipleScopedMemory<VkDescriptorSet>	_RaySamplerDescriptorSet;
 
 
-	//A handle containing the 3D matrices data
-	VulkanHelper::UniformBufferHandle	_RayMatBufferHandle;
 	//a struct containing the preallocated Vulkan memory and buffer of a loaded model
 	VulkanHelper::Model					_RayModel;
 	//the 3D geometry of the model in the GPU raytracing pipeline format (BLAS)
@@ -141,25 +137,6 @@ public:
 	* Releases all the resources allocated in Prepare
 	*/
 	virtual void Close(class GraphicsAPIManager& GAPI)final;
-
-
-	struct ObjectData
-	{
-		vec3 pos;
-		vec3 euler_angles;
-		vec3 scale;
-	};
-	//a struct to group the data that can be changed by user
-	ObjectData _RayObjData;
-
-	struct UniformBuffer
-	{
-		mat4 model;
-		mat4 view;
-		mat4 proj;
-	};
-	//a buffer to allow sending the data changed by user at once
-	UniformBuffer _RayMatBuffer;
 
 
 	/*===== END Scene Interface =====*/
