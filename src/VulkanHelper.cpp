@@ -1240,51 +1240,52 @@ bool VulkanHelper::UploadRaytracedModelFromGeometry(Uploader& VulkanUploader, Ra
 		iASInstance.accelerationStructureReference = GPUBufferAddress;
 	}
 
+	//to create the acceleration structure, we need a temporary buffer to put the instances
+	VkBuffer		tmpBuffer;
+	VkDeviceMemory	tmpMemory;
+	VkDeviceSize	tmpSize = sizeof(VkAccelerationStructureInstanceKHR) * geometry._AccelerationStructure.Nb();
+	//creating temp buffer
+	VulkanHelper::CreateVulkanBuffer(VulkanUploader, tmpSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+		tmpBuffer, tmpMemory);
+
+	// copy to the temporary buffer
+	void* tmpHandle;
+	VK_CALL_PRINT(vkMapMemory(VulkanUploader._VulkanDevice, tmpMemory, 0, tmpSize, 0, &tmpHandle));
+	memcpy(tmpHandle, *ASInstances, tmpSize);
+	vkUnmapMemory(VulkanUploader._VulkanDevice, tmpMemory);
+
+	//getting back the address
+	addressInfo.buffer = tmpBuffer;
+	VkDeviceAddress GPUBufferAddress = vkGetBufferDeviceAddress(VulkanUploader._VulkanDevice, &addressInfo);
+
+	//set our instances data 
+	VkAccelerationStructureGeometryInstancesDataKHR ASInstancesData{};
+	ASInstancesData.sType	= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
+	ASInstancesData.data	= VkDeviceOrHostAddressConstKHR{ GPUBufferAddress };
+
+	//all the instances make one model's "geometry"
+	VkAccelerationStructureGeometryKHR instancesAS{};
+	instancesAS.sType				= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+	instancesAS.geometryType		= VK_GEOMETRY_TYPE_INSTANCES_KHR;
+	instancesAS.flags				= VK_GEOMETRY_OPAQUE_BIT_KHR;
+	instancesAS.geometry.instances	= ASInstancesData;
+
+	//building all the instances into a single top level AS
+	VkAccelerationStructureBuildGeometryInfoKHR instanceASBuild{};
+	instanceASBuild.sType			= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+	instanceASBuild.type			= VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;//we are specifying an instance, so it is a top level
+	instanceASBuild.pGeometries		= &instancesAS;
+	instanceASBuild.geometryCount	= 1;
+	instanceASBuild.mode			= isUpdate ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;//choose between creation and update
+
+
+	VkAccelerationStructureBuildSizesInfoKHR buildSize{};
+	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkGetAccelerationStructureBuildSizesKHR, VulkanUploader._VulkanDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &instanceASBuild, &instanceASBuild.geometryCount, &buildSize);
+
 	//we first need to create the Top Level AS Buffer
 	if (!isUpdate)
 	{
-		//to create the acceleration structure, we need a temporary buffer to put the instances
-		VkBuffer		tmpBuffer;
-		VkDeviceMemory	tmpMemory;
-		VkDeviceSize	tmpSize = sizeof(VkAccelerationStructureInstanceKHR) * geometry._AccelerationStructure.Nb();
-		//creating temp buffer
-		VulkanHelper::CreateVulkanBuffer(VulkanUploader, tmpSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-			tmpBuffer, tmpMemory);
-
-		// copy to the temporary buffer
-		void* tmpHandle;
-		VK_CALL_PRINT(vkMapMemory(VulkanUploader._VulkanDevice, tmpMemory, 0, tmpSize, 0, &tmpHandle));
-		memcpy(tmpHandle, *ASInstances, tmpSize);
-		vkUnmapMemory(VulkanUploader._VulkanDevice, tmpMemory);
-
-		//getting back the address
-		addressInfo.buffer = tmpBuffer;
-		VkDeviceAddress GPUBufferAddress = vkGetBufferDeviceAddress(VulkanUploader._VulkanDevice, &addressInfo);
-
-		//set our instances data 
-		VkAccelerationStructureGeometryInstancesDataKHR ASInstancesData{};
-		ASInstancesData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
-		ASInstancesData.data = VkDeviceOrHostAddressConstKHR{ GPUBufferAddress };
-
-		//all the instances make one model's "geometry"
-		VkAccelerationStructureGeometryKHR instancesAS{};
-		instancesAS.sType				= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
-		instancesAS.geometryType		= VK_GEOMETRY_TYPE_INSTANCES_KHR;
-		instancesAS.flags				= VK_GEOMETRY_OPAQUE_BIT_KHR;
-		instancesAS.geometry.instances	= ASInstancesData;
-
-		//building all the instances into a single top level AS
-		VkAccelerationStructureBuildGeometryInfoKHR instanceASBuild{};
-		instanceASBuild.sType			= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-		instanceASBuild.type			= VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;//we are specifying a geometry, this makes it a bottom level
-		instanceASBuild.pGeometries		= &instancesAS;
-		instanceASBuild.geometryCount	= 1;
-		instanceASBuild.mode			= VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;//we are creating it for the fist (and propably last) time
-
-
-		VkAccelerationStructureBuildSizesInfoKHR buildSize{};
-		vkGetAccelerationStructureBuildSizesKHR(VulkanUploader._VulkanDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &instanceASBuild, &instanceASBuild.geometryCount, &buildSize);
-
+	
 		//creating our acceleration structure buffer
 		VulkanHelper::CreateVulkanBuffer(VulkanUploader, buildSize.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
 			raytracedModel._AccelerationStructureBuffer, raytracedModel._AccelerationStructureMemory);
@@ -1296,20 +1297,42 @@ bool VulkanHelper::UploadRaytracedModelFromGeometry(Uploader& VulkanUploader, Ra
 		instanceASCreateInfo.size	= buildSize.accelerationStructureSize;
 		
 		VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCreateAccelerationStructureKHR, VulkanUploader._VulkanDevice, &instanceASCreateInfo, nullptr, &raytracedModel._AccelerationStructure);
-
-
+	}
+	else
+	{
+		instanceASBuild.srcAccelerationStructure = raytracedModel._AccelerationStructure;
 	}
 
+	instanceASBuild.dstAccelerationStructure = raytracedModel._AccelerationStructure;
 
-	VkAccelerationStructureGeometryDataKHR data;
-	//data.instances.
+	//make the scratch buffer 
+	VkBuffer		scratchBuffer;
+	VkDeviceMemory	scratchMemory;
+	VkDeviceSize	scratchSize = isUpdate ? buildSize.updateScratchSize : buildSize.buildScratchSize;
+	VulkanHelper::CreateVulkanBuffer(VulkanUploader, scratchSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+		raytracedModel._AccelerationStructureBuffer, raytracedModel._AccelerationStructureMemory);
 
 
-	//vkCreateAccelerationStructureKHR();
+	//getting back the address
+	addressInfo.buffer = scratchBuffer;
+	VkDeviceAddress GPUBufferAddress = vkGetBufferDeviceAddress(VulkanUploader._VulkanDevice, &addressInfo);
 
-	VkAccelerationStructureBuildGeometryInfoKHR buildInfo;
+	instanceASBuild.scratchData = VkDeviceOrHostAddressKHR{GPUBufferAddress};
 
-	buildInfo.
+	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCmdBuildAccelerationStructuresKHR, VulkanUploader._CopyBuffer, 1, &instanceASBuild, nullptr);
+
+	//deffered clear of all temporary memory
+	VulkanUploader._ToFreeBuffers.Add(tmpBuffer);
+	VulkanUploader._ToFreeBuffers.Add(scratchBuffer);
+	VulkanUploader._ToFreeMemory.Add(tmpMemory);
+	VulkanUploader._ToFreeMemory.Add(scratchMemory);
 
 	return result == VK_SUCCESS;
+}
+
+void VulkanHelper::ClearRaytracedModel(const VkDevice& VulkanDevice, RaytracedModel& raytracedModel)
+{
+	vkDestroyAccelerationStructureKHR(VulkanDevice, raytracedModel._AccelerationStructure, nullptr);
+	vkDestroyBuffer(VulkanDevice, raytracedModel._AccelerationStructureBuffer, nullptr);
+	vkFreeMemory(VulkanDevice, raytracedModel._AccelerationStructureMemory, nullptr);
 }

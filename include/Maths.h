@@ -332,6 +332,15 @@ struct mat4
 
 };
 
+
+/* creates an indetity matrix */
+__forceinline mat4 identity() noexcept
+{
+	return mat4{1.0f, 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f, 0.0f, 0.0f,
+		0.0f, 0.0f, 1.0f, 0.0f };
+}
+
 /* creates a 4 dimension scale matrix to scale uniformly on x, y, z */
 __forceinline mat4 uniform_scale(float scale)
 {

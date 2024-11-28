@@ -8,7 +8,6 @@
 
 #include "Utilities.h"
 
-
 /* defines */
 
 #define VK_CALL_PRINT(vk_call)\
@@ -82,6 +81,7 @@
 /* forward def */
 class GraphicsAPIManager;
 struct GAPIHandle;
+struct mat4;
 
 namespace VulkanHelper
 {
@@ -299,7 +299,7 @@ namespace VulkanHelper
 	};
 
 	bool UploadRaytracedModelFromGeometry(Uploader& VulkanUploader, RaytracedModel& raytracedObject, const mat4& transform, const RaytracedGeometry& geometry, bool isUpdate = false);
-	void ClearRaytracedObject(const VkDevice& VulkanDevice, RaytracedGeometry& raytracedGeometry);
+	void ClearRaytracedModel(const VkDevice& VulkanDevice, RaytracedModel& raytracedGeometry);
 
 
 

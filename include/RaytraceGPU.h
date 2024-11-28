@@ -61,8 +61,10 @@ private:
 	VulkanHelper::UniformBufferHandle	_RayMatBufferHandle;
 	//a struct containing the preallocated Vulkan memory and buffer of a loaded model
 	VulkanHelper::Model					_RayModel;
-	//the 3D geometry of the model in the GPU raytracing pipeline format
+	//the 3D geometry of the model in the GPU raytracing pipeline format (BLAS)
 	VulkanHelper::RaytracedGeometry		_RayBottomAS;
+	//the Instance encapsulating the raytraced gemometry (TLAS)
+	VulkanHelper::RaytracedModel		_RayTopAS;
 
 	/*
 	* Creates the necessary resources for displaying with vulkan.
@@ -74,12 +76,12 @@ private:
 	* - the Model
 	* - DescriptorSets Objects for the model's samplers (using Descriptor Pool)
 	*/
-	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& RaytraceShader);
+	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader);
 
 	/*
 	* Compiles the shaders to use in the Pipeline Object creation
 	*/
-	void PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RaytraceShader);
+	void PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader);
 
 	/*
 	* Deallocate previously allocated resources, then recreate resources using the window's new properties.
