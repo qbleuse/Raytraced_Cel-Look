@@ -27,8 +27,8 @@ private:
 
 	/* Vulkan */
 
-	//This scene's renderpass, defining what is attached to the pipeline, and what is outputed
-	VkRenderPass				_RayRenderPass{};
+	////This scene's renderpass, defining what is attached to the pipeline, and what is outputed
+	//VkRenderPass				_RayRenderPass{};
 	//This scene's descriptor uniform buffer layout, defining how to use the uniform buffer
 	VkDescriptorSetLayout		_RayDescriptorLayout{};
 	//This scene's pipeline layout, defining all the descriptors our pipeline will need (uniform and sampler, basically)
@@ -36,23 +36,22 @@ private:
 	//This scene's pipeline, defining the behaviour of all fixed function alongside the render pass and shaders.
 	VkPipeline					_RayPipeline{};
 
+	//The binding table creatd from the raytracing shader
+	MultipleScopedMemory<VkStridedDeviceAddressRegionKHR>	_RayShaderBindingAddress;
+	//the buffer for the shader binding table
+	VkBuffer												_RayShaderBindingBuffer{ VK_NULL_HANDLE };
+	//the memory for the shader binding table
+	VkDeviceMemory											_RayShaderBindingMemory{VK_NULL_HANDLE};
+
 	//our scene's viewport (usually takes the whole screen. can change at runtime, as window can be resized)
 	VkViewport					_RayViewport{};
 	//our scene's scissors (usually takes the whole screen, therefore not doing any cuts)
 	VkRect2D					_RayScissors{};
 
-	//The outputs attached to the scene's pipeline as described in the renderpass. Here, back buffer and depth.
-	MultipleScopedMemory<VkFramebuffer>		_RayOutput;
-
-	//A pool to allocate the descriptor needed to use our uniform buffers
-	VkDescriptorPool						_RayBufferDescriptorPool{};
-	//the descriptor to use our Uniform Buffers (one per frame)
-	MultipleScopedMemory<VkDescriptorSet>	_RayBufferDescriptorSet;
-
-	//A pool to allocate the descriptor needed to use our samplers
-	VkDescriptorPool						_RaySamplerDescriptorPool{};
-	//the descriptor to use our samplers (one per texture of the loaded model)
-	MultipleScopedMemory<VkDescriptorSet>	_RaySamplerDescriptorSet;
+	//A pool to allocate the descriptor sets needed
+	VkDescriptorPool						_RayDescriptorPool{};
+	//the descriptor sets to use (one per frame)
+	MultipleScopedMemory<VkDescriptorSet>	_RayDescriptorSet;
 
 
 	//a struct containing the preallocated Vulkan memory and buffer of a loaded model

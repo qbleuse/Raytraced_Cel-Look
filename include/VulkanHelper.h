@@ -85,6 +85,30 @@ struct mat4;
 
 namespace VulkanHelper
 {
+	/* Utilities */
+
+	/*
+	* Aligns a size or offset to the alignement given in parameter, making the offset a multiple of the alignement.
+	*/
+	inline uint32_t AlignUp(uint32_t size, uint32_t alignment) 
+	{
+		/*
+		* Bitwise operation do still feel hisoteric even for me today so I'll explain what it does.
+		* Tl;DR : if size < alignement it rounds up to alignement, otherwise it kind of removes the bits from alignement - 1 to make it a multiple.
+		* 
+		* here is an example : size = 3, aligment = 8
+		* - (size + alignement - 1) = 3 + 8 - 1 = 10 ; in binary 0011 + 1000 - 0001 = 1010. This gives us a size that is over the original alignement.
+		* - ~(alignement - 1) = NOT(1000 - 0001) = NOT(0111) = ...1000. with this all the bits of an uint_32t except the 3 Less Signicant Bit are ones
+		* - 1010 & ...1000 = 1000. we get back "alignement" so we succefully got a size that is aligned.
+		* 
+		* another example : size = 10, alignement 8
+		* - (size + alignement - 1) = 10 + 8 - 1 = 17 ; in binary 1010 + 1000 - 0001 = 10001. same as above
+		* - ~(alignement - 1) ; same as above
+		* 10001 & ...1000 = 10000. it removed the 1 bit at the end, making it successfully aligned with 1000.
+		*/
+		return (size + alignment - 1) & ~(alignment - 1);
+	}
+
 	/* Uploader */
 
 	struct Uploader
