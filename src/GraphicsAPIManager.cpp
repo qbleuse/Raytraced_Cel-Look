@@ -333,6 +333,27 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
 	deviceCreateInfo.queueCreateInfoCount = 1;
+	
+
+	//if we can do raytracing, we need to activate the feature
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracingFeatures{};
+	raytracingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+	raytracingFeatures.rayTracingPipeline = _vulkan_rt_supported;
+
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{};
+	accelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+	accelerationStructureFeatures.accelerationStructure = _vulkan_rt_supported;
+	accelerationStructureFeatures.pNext = &raytracingFeatures;
+
+	//raytracing means we are on vulan1.3 (as GPU raytracing was introduced in 1.3), so 1.2 is given. still activating basic feature needed for raytracing.
+	VkPhysicalDeviceVulkan12Features vulkan12Features{};
+	vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+	vulkan12Features.bufferDeviceAddress = _vulkan_rt_supported;
+	vulkan12Features.pNext = &accelerationStructureFeatures;
+
+	deviceCreateInfo.pNext = &vulkan12Features;
+
+
 
 #ifdef __APPLE__
     const char* deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, "VK_KHR_portability_subset",  VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, VK_KHR_RAY_QUERY_EXTENSION_NAME, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME };

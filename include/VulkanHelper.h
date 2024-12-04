@@ -151,7 +151,7 @@ namespace VulkanHelper
 	};
 
 	/* Creates a one dimensionnal buffer of any usage and the association between CPU and GPU. if AllocateMemory is set to false, bufferMemory MUST BE VALID ! */
-	bool CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset = 0, bool allocate_memory = true);
+	bool CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset = 0, bool allocate_memory = true, VkMemoryAllocateFlags flags = 0);
 
 
 	/* Creates all the pointers and handle vulkan needs to create a buffer on the GPU and creates a UniformBufferHandle on the CPU to manage it*/
@@ -212,7 +212,7 @@ namespace VulkanHelper
 				VkDeviceSize _normal_offset;
 				VkDeviceSize _tangent_offset;
 			};
-			VkDeviceSize _vertex_offsets[4];
+			VkDeviceSize _vertex_offsets[4] = {0,0,0,0};
 		};
 
 		VolatileLoopArray<VkDeviceMemory> _VertexMemoryHandle;

@@ -53,6 +53,8 @@ private:
 	//the descriptor sets to use (one per frame)
 	MultipleScopedMemory<VkDescriptorSet>	_RayDescriptorSet;
 
+	//the image usd as framebuffer in the raytracing pipeline.
+	ScopedLoopArray<VkImage> _RayWriteImage;
 
 	//a struct containing the preallocated Vulkan memory and buffer of a loaded model
 	VulkanHelper::Model					_RayModel;

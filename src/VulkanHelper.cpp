@@ -113,21 +113,27 @@ bool VulkanHelper::CreateVulkanShaders(Uploader& VulkanUploader, VkShaderModule&
 		break;
 	case VK_SHADER_STAGE_RAYGEN_BIT_KHR:
 		shader_kind = shaderc_raygen_shader;
+		shaderc_compile_options_set_target_spirv(compile_options, shaderc_spirv_version_1_4);//raytracing extensions requires at least spirv 1.4
 		break;
 	case VK_SHADER_STAGE_ANY_HIT_BIT_KHR:
 		shader_kind = shaderc_anyhit_shader;
+		shaderc_compile_options_set_target_spirv(compile_options, shaderc_spirv_version_1_4);//raytracing extensions requires at least spirv 1.4
 		break;
 	case VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR:
 		shader_kind = shaderc_closesthit_shader;
+		shaderc_compile_options_set_target_spirv(compile_options, shaderc_spirv_version_1_4);//raytracing extensions requires at least spirv 1.4
 		break;
 	case VK_SHADER_STAGE_MISS_BIT_KHR:
 		shader_kind = shaderc_miss_shader;
+		shaderc_compile_options_set_target_spirv(compile_options, shaderc_spirv_version_1_4);//raytracing extensions requires at least spirv 1.4
 		break;
 	case VK_SHADER_STAGE_INTERSECTION_BIT_KHR:
 		shader_kind = shaderc_intersection_shader;
+		shaderc_compile_options_set_target_spirv(compile_options, shaderc_spirv_version_1_4);//raytracing extensions requires at least spirv 1.4
 		break;
 	case VK_SHADER_STAGE_CALLABLE_BIT_KHR:
 		shader_kind = shaderc_callable_shader;
+		shaderc_compile_options_set_target_spirv(compile_options, shaderc_spirv_version_1_4);//raytracing extensions requires at least spirv 1.4
 		break;
 	case VK_SHADER_STAGE_TASK_BIT_EXT:
 		shader_kind = shaderc_task_shader;
@@ -141,7 +147,6 @@ bool VulkanHelper::CreateVulkanShaders(Uploader& VulkanUploader, VkShaderModule&
 
 	//compiling our shader into byte code
 	shaderc_compilation_result_t compiled_shader = shaderc_compile_into_spv(shader_compiler, shader_source, strlen(shader_source), shader_kind, shader_name, entry_point, compile_options);
-
 
 	// make compiled shader, vulkan shaders
 	if (shaderc_result_get_compilation_status(compiled_shader) == shaderc_compilation_status_success)
@@ -157,7 +162,10 @@ bool VulkanHelper::CreateVulkanShaders(Uploader& VulkanUploader, VkShaderModule&
 	}
 	else
 	{
-		printf("Shader compilation failed:\n%s", shaderc_result_get_error_message(compiled_shader));
+		uint32_t version, revision;
+		shaderc_get_spv_version(&version, &revision);
+
+		printf("Shader compilation failed (SPIRV-V v.%u.%u):\n%s",version, revision, shaderc_result_get_error_message(compiled_shader));
 		return false;
 	}
 
@@ -186,7 +194,7 @@ uint32_t VulkanHelper::GetMemoryTypeFromRequirements(const VkMemoryPropertyFlags
 	return 0;
 }
 
-bool VulkanHelper::CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset, bool allocate_memory)
+bool VulkanHelper::CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset, bool allocate_memory, VkMemoryAllocateFlags flags)
 {
 	//to know if we succeeded
 	VkResult result = VK_SUCCESS;
@@ -213,6 +221,14 @@ bool VulkanHelper::CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize siz
 		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize = memRequirements.size;
 		allocInfo.memoryTypeIndex = GetMemoryTypeFromRequirements(properties, memRequirements, VulkanUploader._MemoryProperties);
+
+		VkMemoryAllocateFlagsInfo flagsInfo{};
+		if (flags != 0)
+		{
+			flagsInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO;
+			flagsInfo.flags = flags;
+			allocInfo.pNext = &flagsInfo;
+		}
 
 		VK_CALL_PRINT(vkAllocateMemory(VulkanUploader._VulkanDevice, &allocInfo, nullptr, &bufferMemory))
 	}
@@ -261,7 +277,7 @@ void VulkanHelper::ClearUniformBufferHandle(const VkDevice& VulkanDevice, Unifor
 bool VulkanHelper::CreateStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, VkDeviceSize size, VkBufferUsageFlags staticBufferUsage, VkMemoryPropertyFlags staticBufferProperties)
 {
 	//creating the static buffer
-	return CreateVulkanBuffer(VulkanUploader, size, staticBufferUsage, staticBufferProperties, bufferHandle._StaticGPUBuffer, bufferHandle._StaticGPUMemoryHandle, 0);
+	return CreateVulkanBuffer(VulkanUploader, size, staticBufferUsage | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, staticBufferProperties, bufferHandle._StaticGPUBuffer, bufferHandle._StaticGPUMemoryHandle, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 }
 
 /* sends the data through the staging buffer to the static buffer */
@@ -1103,10 +1119,13 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 
 	//array for the actual geometry description (in our case triangles)
 	MultipleVolatileMemory<VkAccelerationStructureGeometryKHR>			bottomLevelMeshAS{ (VkAccelerationStructureGeometryKHR*)alloca(sizeof(VkAccelerationStructureGeometryKHR) * mesh.Nb()) };
+	memset(*bottomLevelMeshAS, 0, sizeof(VkAccelerationStructureGeometryKHR) * mesh.Nb());
 	//array for the build requests (one for each mesh)
 	MultipleVolatileMemory<VkAccelerationStructureBuildGeometryInfoKHR> bottomLevelMeshASInfo{ (VkAccelerationStructureBuildGeometryInfoKHR*)alloca(sizeof(VkAccelerationStructureBuildGeometryInfoKHR) * mesh.Nb()) };
+	memset(*bottomLevelMeshASInfo, 0, sizeof(VkAccelerationStructureBuildGeometryInfoKHR) * mesh.Nb());
 	//the extent of the buffer of each meshes' geometry
 	MultipleVolatileMemory<VkAccelerationStructureBuildRangeInfoKHR>	bottomLevelMeshASRangeInfo{ (VkAccelerationStructureBuildRangeInfoKHR*)alloca(sizeof(VkAccelerationStructureBuildRangeInfoKHR) * mesh.Nb()) };
+	memset(*bottomLevelMeshASRangeInfo, 0, sizeof(VkAccelerationStructureBuildRangeInfoKHR) * mesh.Nb());
 
 	//allocating buffer and memory beforehand, as there will be one acceleration structure for each mesh
 	raytracedGeometry._AccelerationStructure.Alloc(mesh.Nb());
@@ -1155,12 +1174,13 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 		//setting the bounds of our mesh (as when loading from models, the buffer for multiple geometry may have been the same)
 		VkAccelerationStructureBuildRangeInfoKHR& meshASRange = bottomLevelMeshASRangeInfo[i];
 		meshASRange.firstVertex		= iMesh._pos_offset;
-		meshASRange.primitiveOffset = iMesh._indices_offset;
-		meshASRange.primitiveCount	= iMesh._indices_nb;
+		meshASRange.primitiveOffset = iMesh._indices_offset / 3;
+		meshASRange.primitiveCount	= iMesh._indices_nb / 3;
 		meshASRange.transformOffset = 0;
 
 		//the size the AS buffer will need to be considering the geometry we've referenced above
 		VkAccelerationStructureBuildSizesInfoKHR buildSize{};
+		buildSize.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
 		VK_CALL_KHR(VulkanUploader._VulkanDevice, vkGetAccelerationStructureBuildSizesKHR, VulkanUploader._VulkanDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &meshASBuild, &meshASRange.primitiveCount, &buildSize);
 
 		//unfortunately, we cannot use the same memory for all the acceleration structure buffer, as size may defer between acceleration structure
@@ -1181,7 +1201,7 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 		VkBuffer scratchBuffer;
 		VkDeviceMemory scratchMemory;
 		VulkanHelper::CreateVulkanBuffer(VulkanUploader, buildSize.buildScratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scratchBuffer, scratchMemory);
+			scratchBuffer, scratchMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 
 		//get the address of our newly created buffer and give it to our build data
 		addressInfo.buffer = scratchBuffer;
@@ -1315,7 +1335,7 @@ bool VulkanHelper::UploadRaytracedModelFromGeometry(Uploader& VulkanUploader, Ra
 
 	//getting back the address
 	addressInfo.buffer = scratchBuffer;
-	VkDeviceAddress GPUBufferAddress = vkGetBufferDeviceAddress(VulkanUploader._VulkanDevice, &addressInfo);
+	GPUBufferAddress = vkGetBufferDeviceAddress(VulkanUploader._VulkanDevice, &addressInfo);
 
 	instanceASBuild.scratchData = VkDeviceOrHostAddressKHR{GPUBufferAddress};
 
@@ -1332,7 +1352,7 @@ bool VulkanHelper::UploadRaytracedModelFromGeometry(Uploader& VulkanUploader, Ra
 
 void VulkanHelper::ClearRaytracedModel(const VkDevice& VulkanDevice, RaytracedModel& raytracedModel)
 {
-	vkDestroyAccelerationStructureKHR(VulkanDevice, raytracedModel._AccelerationStructure, nullptr);
+	VK_CALL_KHR(VulkanDevice, vkDestroyAccelerationStructureKHR, VulkanDevice, raytracedModel._AccelerationStructure, nullptr);
 	vkDestroyBuffer(VulkanDevice, raytracedModel._AccelerationStructureBuffer, nullptr);
 	vkFreeMemory(VulkanDevice, raytracedModel._AccelerationStructureMemory, nullptr);
 }

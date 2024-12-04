@@ -11,6 +11,8 @@
 
 void RaytraceGPU::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader)
 {
+	VkResult result = VK_SUCCESS;
+
 	/*===== MODEL LOADING & AS BUILDING ======*/
 
 	//load the model
@@ -25,10 +27,10 @@ void RaytraceGPU::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& R
 	/*===== DESCRIBE SHADER STAGE AND GROUPS =====*/
 
 	//the shader stages we'll give to the pipeline
-	VolatileMemoryHeap<VkPipelineShaderStageCreateInfo> shaderStages{ static_cast<VkPipelineShaderStageCreateInfo*>(alloca(sizeof(VkPipelineShaderStageCreateInfo) * 3)) };
+	MultipleVolatileMemory<VkPipelineShaderStageCreateInfo> shaderStages{ static_cast<VkPipelineShaderStageCreateInfo*>(alloca(sizeof(VkPipelineShaderStageCreateInfo) * 3)) };
 	memset(*shaderStages, 0, sizeof(VkPipelineShaderStageCreateInfo) * 3);
 	//the shader groups, to allow the pipeline to create the shader table
-	VolatileMemoryHeap<VkRayTracingShaderGroupCreateInfoKHR> shaderGroups{ static_cast<VkRayTracingShaderGroupCreateInfoKHR*>(alloca(sizeof(VkRayTracingShaderGroupCreateInfoKHR) * 3)) };
+	MultipleVolatileMemory<VkRayTracingShaderGroupCreateInfoKHR> shaderGroups{ static_cast<VkRayTracingShaderGroupCreateInfoKHR*>(alloca(sizeof(VkRayTracingShaderGroupCreateInfoKHR) * 3)) };
 	memset(*shaderGroups, 0, sizeof(VkRayTracingShaderGroupCreateInfoKHR) * 3);
 
 	//first, we'll describe ray gen
@@ -85,17 +87,17 @@ void RaytraceGPU::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& R
 
 		//create a binding for our colour buffers
 		VkDescriptorSetLayoutBinding colourBackBufferBinding{};
-		samplerLayoutBinding.binding			= 1;
-		samplerLayoutBinding.descriptorType		= VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-		samplerLayoutBinding.descriptorCount	= 1;
-		samplerLayoutBinding.stageFlags			= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+		colourBackBufferBinding.binding			= 1;
+		colourBackBufferBinding.descriptorType		= VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+		colourBackBufferBinding.descriptorCount	= 1;
+		colourBackBufferBinding.stageFlags			= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
 
 		VkDescriptorSetLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType		= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 		layoutInfo.bindingCount = 2;
-		VkDescriptorSetLayoutBinding* layoutsBinding = { ASLayoutBinding , colourBackBufferBinding };
-		layoutInfo.pBindings = &layoutsBinding;
+		VkDescriptorSetLayoutBinding layoutsBinding[2] = {ASLayoutBinding , colourBackBufferBinding};
+		layoutInfo.pBindings = layoutsBinding;
 
 		VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI._VulkanDevice, &layoutInfo, nullptr, &_RayDescriptorLayout));
 	}
@@ -104,7 +106,7 @@ void RaytraceGPU::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& R
 		//our pipeline layout is the same as the descriptor layout
 		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
 		pipelineLayoutInfo.sType			= VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutInfo.pSetLayouts		= 1_RayDescriptorLayout;
+		pipelineLayoutInfo.pSetLayouts		= &_RayDescriptorLayout;
 		pipelineLayoutInfo.setLayoutCount	= 1;
 
 		VK_CALL_PRINT(vkCreatePipelineLayout(GAPI._VulkanDevice, &pipelineLayoutInfo, nullptr, &_RayLayout));
@@ -113,8 +115,8 @@ void RaytraceGPU::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& R
 	/*===== PIPELINE CREATION =====*/
 
 	//our raytracing pipeline
-	vkRaytracingPipelineCreateInfo pipelineInfo{};
-	pipelineInfo.stype							= VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+	VkRayTracingPipelineCreateInfoKHR pipelineInfo{};
+	pipelineInfo.sType							= VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
 	pipelineInfo.stageCount						= 3;
 	pipelineInfo.pStages						= *shaderStages;
 	pipelineInfo.groupCount						= 3;
@@ -165,12 +167,12 @@ void RaytraceGPU::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& R
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _RayShaderBindingBuffer, _RayShaderBindingMemory);
 
 		//get back handle from shader group created in pipeline
-		MultipleVolatileMemory<void> shaderGroupHandle{ alloca(3 * startSizeAligned) };
-		vkGetRayTracingShaderGroupHandlesKHR(GAPI._VulkanDevice, _RayPipeline, 0, 3, 3 * startSizeAligned, *shaderGroupHandle);
+		MultipleVolatileMemory<uint32_t> shaderGroupHandle{ (uint32_t*)alloca(3 * startSizeAligned) };
+		VK_CALL_KHR( GAPI._VulkanDevice, vkGetRayTracingShaderGroupHandlesKHR, GAPI._VulkanDevice, _RayPipeline, 0, 3, 3 * startSizeAligned, *shaderGroupHandle);
 
 		//mapping memory to buffer
-		void* CPUSBTBufferMap;
-		vkMapMemory(GAPI._VulkanDevice, _RayShaderBindingMemory, 0, 3 * startSizeAligned, nullptr, &CPUSBTBufferMap);
+		uint32_t* CPUSBTBufferMap;
+		vkMapMemory(GAPI._VulkanDevice, _RayShaderBindingMemory, 0, 3 * startSizeAligned, 0, (void**)(& CPUSBTBufferMap));
 
 		//copying every address to the shader table
 		memcpy(CPUSBTBufferMap, *shaderGroupHandle, handleSize);
@@ -197,17 +199,17 @@ void RaytraceGPU::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderM
 	//define ray gen shader
 	const char* ray_gen_shader =
 		R"(#version 460
-			#etension GL_EXT_ray_tracing : enable
+			#extension GL_EXT_ray_tracing : enable
 
-			layout(location = 0) rayPayloadInEXT vec3 payload;
+			layout(location = 0) rayPayloadEXT vec3 payload;
 
-			layout(binding = 0) uniform accelrationStructureExt topLevelAS;
-			layout(binding = 1) uniform image2D image;
+			layout(binding = 0) uniform accelerationStructureEXT topLevelAS;
+			layout(binding = 1, rgba32f) uniform image2D image;
 
 			void main()
 			{
 				//finding the pixel we are computing from the ray launch arguments
-				vec2 uv = (vec2(gl_LaunchIDEXT.xy) + vec2(0.5)) / vec2(gl_LaunchSizeExt.xy);
+				vec2 uv = (vec2(gl_LaunchIDEXT.xy) + vec2(0.5)) / vec2(gl_LaunchSizeEXT.xy);
 
 				//for the moment, fixed
 				vec3 origin = vec3(0, 0, 5);
@@ -218,7 +220,7 @@ void RaytraceGPU::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderM
 				//creating a direction for our ray
 				vec3 direction = normalize(target - origin);
 
-				payload = vec3(0.0);
+				//payload = vec3(0.0);
 
 				//tracing rays
 				traceRayEXT(
@@ -241,10 +243,9 @@ void RaytraceGPU::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderM
 	//define miss shader
 	const char* miss_shader =
 		R"(#version 460
-			#etension GL_EXT_ray_tracing : enable
+			#extension GL_EXT_ray_tracing : enable
 
-			layout(location = 0) rayPaylodInExt vec3 payload;
-			hitAttribEXT vec3 attribs;
+			layout(location = 0) rayPayloadInEXT vec3 payload;
 
 			void main()
 			{
@@ -259,10 +260,10 @@ void RaytraceGPU::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderM
 	//define closest hit shader
 	const char* closest_hit_shader =
 		R"(#version 460
-			#etension GL_EXT_ray_tracing : enable
+			#extension GL_EXT_ray_tracing : enable
 
 			layout(location = 0) rayPayloadInEXT vec3 payload;
-			hitAttribEXT vec3 attribs;
+			hitAttributeEXT vec3 attribs;
 
 			void main()
 			{
@@ -278,16 +279,12 @@ void RaytraceGPU::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderM
 void RaytraceGPU::Prepare(class GraphicsAPIManager& GAPI)
 {
 	//the shaders needed
-	VkShaderModule RaytraceShader;
+	VkShaderModule RayGenShader, MissShader, HitShader;
 
 	//compile the shaders here...
-	PrepareVulkanScripts(GAPI, RaytraceShader);
+	PrepareVulkanScripts(GAPI, RayGenShader, MissShader, HitShader);
 	//then create the pipeline
-	PrepareVulkanProps(GAPI, RaytraceShader);
-
-	//a "zero init" of the transform values
-	_RayObjData.scale = vec3{ 1.0f, 1.0f, 1.0f };
-	_RayObjData.pos = vec3{ 0.0f, 0.0f, 1.0f };
+	PrepareVulkanProps(GAPI, RayGenShader, MissShader, HitShader);
 }
 
 /*===== Resize =====*/
@@ -299,7 +296,8 @@ void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t w
 	/*===== CLEAR RESOURCES ======*/
 
 	//first, we clear previously used resources
-	vkDestroyDescriptorPool(GAPI._VulkanDevice, _RayBufferDescriptorPool, nullptr);
+	vkDestroyDescriptorPool(GAPI._VulkanDevice, _RayDescriptorPool, nullptr);
+	_RayWriteImage.Clear();
 
 	/*===== VIEWPORT AND SCISSORS ======*/
 
@@ -334,12 +332,12 @@ void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t w
 		poolInfo.pPoolSizes		= poolSizes;
 		poolInfo.maxSets		= GAPI._nb_vk_frames;
 
-		VK_CALL_PRINT(vkCreateDescriptorPool(GAPI._VulkanDevice, &poolInfo, nullptr, &_RayBufferDescriptorPool))
+		VK_CALL_PRINT(vkCreateDescriptorPool(GAPI._VulkanDevice, &poolInfo, nullptr, &_RayDescriptorPool))
 
 		//allocating a descriptor set for each of our framebuffer (a uniform buffer per frame)
 		VkDescriptorSetAllocateInfo allocInfo{};
 		allocInfo.sType					= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		allocInfo.descriptorPool		= _RayBufferDescriptorPool;
+		allocInfo.descriptorPool		= _RayDescriptorPool;
 		allocInfo.descriptorSetCount	= GAPI._nb_vk_frames;
 
 		//copying the same layout for every descriptor set
@@ -349,11 +347,13 @@ void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t w
 		allocInfo.pSetLayouts = layouts;
 
 		//then create the resource
-		_RayBufferDescriptorSet.Alloc(GAPI._nb_vk_frames);
-		VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI._VulkanDevice, &allocInfo, *_RayBufferDescriptorSet));
+		_RayDescriptorSet.Alloc(GAPI._nb_vk_frames);
+		VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI._VulkanDevice, &allocInfo, *_RayDescriptorSet));
 	}
 
-	_RayOutput.Alloc(GAPI._nb_vk_frames);
+
+	_RayWriteImage.Alloc(GAPI._nb_vk_frames);
+	memcpy(*_RayWriteImage, *GAPI._VulkanBackBuffers, sizeof(VkImage) * _RayWriteImage.Nb());
 
 	/*===== LINKING RESOURCES ======*/
 
@@ -367,7 +367,7 @@ void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t w
 		
 		VkWriteDescriptorSet ASDescriptorWrite{};
 		ASDescriptorWrite.sType				= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		ASDescriptorWrite.dstSet			= _RayBufferDescriptorSet[i];
+		ASDescriptorWrite.dstSet			= _RayDescriptorSet[i];
 		ASDescriptorWrite.dstBinding		= 0;
 		ASDescriptorWrite.dstArrayElement	= 0;
 		ASDescriptorWrite.descriptorType	= VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
@@ -381,7 +381,7 @@ void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t w
 
 		VkWriteDescriptorSet imageDescriptorWrite{};
 		imageDescriptorWrite.sType				= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		imageDescriptorWrite.dstSet				= _RayBufferDescriptorSet[i];
+		imageDescriptorWrite.dstSet				= _RayDescriptorSet[i];
 		imageDescriptorWrite.dstBinding			= 1;
 		imageDescriptorWrite.dstArrayElement	= 0;
 		imageDescriptorWrite.descriptorType		= VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
@@ -389,7 +389,7 @@ void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t w
 		imageDescriptorWrite.pImageInfo			= &imageInfo;
 
 		VkWriteDescriptorSet descriptorWrites[2] = { ASDescriptorWrite,  imageDescriptorWrite };
-		vkUpdateDescriptorSets(GAPI._VulkanDevice, 2, &descriptorWrites, 0, nullptr);
+		vkUpdateDescriptorSets(GAPI._VulkanDevice, 2, descriptorWrites, 0, nullptr);
 	}
 }
 
@@ -404,22 +404,22 @@ void RaytraceGPU::Resize(class GraphicsAPIManager& GAPI, int32_t old_width, int3
 void RaytraceGPU::Act(struct AppWideContext& AppContext)
 {
 
-	_RayObjData.euler_angles.y += AppContext.delta_time;
-
-	//it will change every frame
-	{
-		_RayMatBuffer.proj = AppContext.proj_mat;
-		_RayMatBuffer.view = AppContext.view_mat;
-		_RayMatBuffer.model = scale(_RayObjData.scale.x, _RayObjData.scale.y, _RayObjData.scale.z) * ro_intrinsic_rot(_RayObjData.euler_angles.x, _RayObjData.euler_angles.y, _RayObjData.euler_angles.z) * ro_translate(_RayObjData.pos);
-	}
-
-	//UI update
-	if (SceneCanShowUI(AppContext))
-	{
-		ImGui::SliderFloat3("Object Postion", _RayObjData.pos.scalar, -100.0f, 100.0f);
-		ImGui::SliderFloat3("Object Rotation", _RayObjData.euler_angles.scalar, -180.0f, 180.0f);
-		ImGui::SliderFloat3("Object Scale", _RayObjData.scale.scalar, 0.0f, 1.0f, "%0.01f");
-	}
+	//_RayObjData.euler_angles.y += AppContext.delta_time;
+	//
+	////it will change every frame
+	//{
+	//	_RayMatBuffer.proj = AppContext.proj_mat;
+	//	_RayMatBuffer.view = AppContext.view_mat;
+	//	_RayMatBuffer.model = scale(_RayObjData.scale.x, _RayObjData.scale.y, _RayObjData.scale.z) * ro_intrinsic_rot(_RayObjData.euler_angles.x, _RayObjData.euler_angles.y, _RayObjData.euler_angles.z) * ro_translate(_RayObjData.pos);
+	//}
+	//
+	////UI update
+	//if (SceneCanShowUI(AppContext))
+	//{
+	//	ImGui::SliderFloat3("Object Postion", _RayObjData.pos.scalar, -100.0f, 100.0f);
+	//	ImGui::SliderFloat3("Object Rotation", _RayObjData.euler_angles.scalar, -180.0f, 180.0f);
+	//	ImGui::SliderFloat3("Object Scale", _RayObjData.scale.scalar, 0.0f, 1.0f, "%0.01f");
+	//}
 
 }
 
@@ -455,7 +455,7 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 	barrier.newLayout			= VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;//to transfer dest
 	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
 	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
-	barrier.image				= ;
+	barrier.image				= _RayWriteImage[GAPIHandle._vk_frame_index];
 	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	barrier.subresourceRange.baseMipLevel = 0;
 	barrier.subresourceRange.levelCount = 1;
@@ -475,16 +475,15 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 	vkCmdSetViewport(commandBuffer, 0, 1, &_RayViewport);
 	vkCmdSetScissor(commandBuffer, 0, 1, &_RayScissors);
 
-	vkCmdTraceRaysKHR(commandBuffer, &_RayShaderBindingAddress[0], &_RayShaderBindingAddress[1], &_RayShaderBindingAddress[2], nullptr, _RayScissors.extent.x, _RayScissors.extent.y, 1);
+	VK_CALL_KHR(GAPIHandle._VulkanDevice, vkCmdTraceRaysKHR, commandBuffer, &_RayShaderBindingAddress[0], &_RayShaderBindingAddress[1], &_RayShaderBindingAddress[2], nullptr, _RayScissors.extent.width, _RayScissors.extent.height, 1);
 
 	// changing the back buffer to be able to being written by pipeline
-	VkImageMemoryBarrier barrier{};
 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 	barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;//from nothing
 	barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;//to transfer dest
 	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
 	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
-	barrier.image = ;
+	barrier.image = _RayWriteImage[GAPIHandle._vk_frame_index];
 	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	barrier.subresourceRange.baseMipLevel = 0;
 	barrier.subresourceRange.levelCount = 1;
@@ -523,23 +522,16 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 
 void RaytraceGPU::Close(class GraphicsAPIManager& GAPI)
 {
-	//releasing the "per frames" objects
-	VK_CLEAR_ARRAY(_RayOutput, GAPI._nb_vk_frames, vkDestroyFramebuffer, GAPI._VulkanDevice);
-	ClearUniformBufferHandle(GAPI._VulkanDevice, _RayMatBufferHandle);
-
 	//the memory allocated by the Vulkan Helper is volatile : it must be explecitly freed !
 	ClearModel(GAPI._VulkanDevice, _RayModel);
 
 	//release descriptors
-	vkDestroyDescriptorPool(GAPI._VulkanDevice, _RayBufferDescriptorPool, nullptr);
-	vkDestroyDescriptorPool(GAPI._VulkanDevice, _RaySamplerDescriptorPool, nullptr);
-	_RayBufferDescriptorSet.Clear();
-	_RaySamplerDescriptorSet.Clear();
-	vkDestroyDescriptorSetLayout(GAPI._VulkanDevice, _RayBufferDescriptorLayout, nullptr);
-	vkDestroyDescriptorSetLayout(GAPI._VulkanDevice, _RaySamplerDescriptorLayout, nullptr);
+	vkDestroyDescriptorPool(GAPI._VulkanDevice, _RayDescriptorPool, nullptr);
+	_RayDescriptorSet.Clear();
+	vkDestroyDescriptorSetLayout(GAPI._VulkanDevice, _RayDescriptorLayout, nullptr);
+
 
 	//release pipeline objects
 	vkDestroyPipelineLayout(GAPI._VulkanDevice, _RayLayout, nullptr);
 	vkDestroyPipeline(GAPI._VulkanDevice, _RayPipeline, nullptr);
-	vkDestroyRenderPass(GAPI._VulkanDevice, _RayRenderPass, nullptr);
 }

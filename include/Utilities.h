@@ -651,7 +651,10 @@ public:
 				thread_wait.wait(jobs_mutex, [this]() {return (jobs.GetNb() > 0 && !pause) || killThread; });
 
 				if (killThread)
+				{
+					jobs_mutex.unlock();
 					return;
+				}
 
 				//gets the job
 				job = jobs.Pop().data;
