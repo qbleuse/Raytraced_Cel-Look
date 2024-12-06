@@ -245,7 +245,7 @@ void RasterObject::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& 
 		//one to get the 3D matrices, and one to sample from a texture
 		VkDescriptorSetLayout layouts[2] = {_ObjBufferDescriptorLayout, _ObjSamplerDescriptorLayout};
 		pipelineLayoutInfo.pSetLayouts = layouts;
-		pipelineLayoutInfo.setLayoutCount = 2;
+		pipelineLayoutInfo.setLayoutCount = 1;
 
 		VK_CALL_PRINT(vkCreatePipelineLayout(GAPI._VulkanDevice, &pipelineLayoutInfo, nullptr, &_ObjLayout));
 	}
@@ -285,7 +285,7 @@ void RasterObject::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& 
 	/*===== MODEL LOADING =====*/
 
 	//load vertex buffer and textures
-	VulkanHelper::LoadGLTFFile(GAPI._VulkanUploader, "../../../media/Duck/Duck.gltf",_ObjModel);
+	VulkanHelper::LoadObjFile(GAPI._VulkanUploader, "../../../media/teapot/teapot.obj",_ObjModel._Meshes);
 
 	/*===== MODEL DESCRIPTORS ======*/
 
@@ -627,7 +627,8 @@ void RasterObject::Show(GAPIHandle& GAPIHandle)
 	for (uint32_t i = 0; i < _ObjModel._Meshes.Nb(); i++)
 	{
 		//first bind the "material", basically the three compibined sampler descriptors ...
-		vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _ObjLayout, 1, 1, &_ObjModel._Materials[_ObjModel._material_index[i]]._TextureDescriptors, 0, nullptr);
+		if (_ObjModel._Materials.Nb() > 0)
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _ObjLayout, 1, 1, &_ObjModel._Materials[_ObjModel._material_index[i]]._TextureDescriptors, 0, nullptr);
 		//... then bind the vertex buffer as described in the input layout of the pipeline ...
 		vkCmdBindVertexBuffers(commandBuffer, 0, 3, _ObjModel._Meshes[i]._VertexBuffers, (VkDeviceSize*)_ObjModel._Meshes[i]._vertex_offsets);
 		//... and the index buffers associated with the vertex buffers ...

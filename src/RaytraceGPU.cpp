@@ -164,7 +164,7 @@ void RaytraceGPU::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& R
 
 		//creating a GPU buffer for the Shader Binding Table
 		VulkanHelper::CreateVulkanBuffer(GAPI._VulkanUploader, 3 * startSizeAligned, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _RayShaderBindingBuffer, _RayShaderBindingMemory);
+			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _RayShaderBindingBuffer, _RayShaderBindingMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 
 		//get back handle from shader group created in pipeline
 		MultipleVolatileMemory<uint32_t> shaderGroupHandle{ (uint32_t*)alloca(3 * startSizeAligned) };
@@ -362,6 +362,7 @@ void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t w
 
 		//Adding our Top Level AS in each descriptor set
 		VkWriteDescriptorSetAccelerationStructureKHR ASInfo{};
+		ASInfo.sType						= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
 		ASInfo.pAccelerationStructures		= &_RayTopAS._AccelerationStructure;
 		ASInfo.accelerationStructureCount	= 1;
 		
@@ -384,7 +385,7 @@ void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t w
 		imageDescriptorWrite.dstSet				= _RayDescriptorSet[i];
 		imageDescriptorWrite.dstBinding			= 1;
 		imageDescriptorWrite.dstArrayElement	= 0;
-		imageDescriptorWrite.descriptorType		= VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
+		imageDescriptorWrite.descriptorType		= VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 		imageDescriptorWrite.descriptorCount	= 1;
 		imageDescriptorWrite.pImageInfo			= &imageInfo;
 
@@ -452,7 +453,7 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 	VkImageMemoryBarrier barrier{};
 	barrier.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 	barrier.oldLayout			= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;//from nothing
-	barrier.newLayout			= VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;//to transfer dest
+	barrier.newLayout			= VK_IMAGE_LAYOUT_GENERAL;//to transfer dest
 	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
 	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
 	barrier.image				= _RayWriteImage[GAPIHandle._vk_frame_index];
@@ -472,14 +473,15 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _RayLayout, 0, 1, &_RayDescriptorSet[GAPIHandle._vk_current_frame], 0, nullptr);
 
 	//set viewport and scissors to draw on all screen
-	vkCmdSetViewport(commandBuffer, 0, 1, &_RayViewport);
-	vkCmdSetScissor(commandBuffer, 0, 1, &_RayScissors);
+	//vkCmdSetViewport(commandBuffer, 0, 1, &_RayViewport);
+	//vkCmdSetScissor(commandBuffer, 0, 1, &_RayScissors);
 
-	VK_CALL_KHR(GAPIHandle._VulkanDevice, vkCmdTraceRaysKHR, commandBuffer, &_RayShaderBindingAddress[0], &_RayShaderBindingAddress[1], &_RayShaderBindingAddress[2], nullptr, _RayScissors.extent.width, _RayScissors.extent.height, 1);
+	VkStridedDeviceAddressRegionKHR tmp{};
+	VK_CALL_KHR(GAPIHandle._VulkanDevice, vkCmdTraceRaysKHR, commandBuffer, &_RayShaderBindingAddress[0], &_RayShaderBindingAddress[1], &_RayShaderBindingAddress[2], &tmp, _RayScissors.extent.width, _RayScissors.extent.height, 1);
 
 	// changing the back buffer to be able to being written by pipeline
 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;//from nothing
+	barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;//from nothing
 	barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;//to transfer dest
 	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
 	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future

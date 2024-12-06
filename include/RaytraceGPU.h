@@ -118,7 +118,7 @@ public:
 	/*
 	* The name of this scene. This can be hardcoded or a member, but it should never fail.
 	*/
-	__forceinline virtual const char* Name()const noexcept override { return "Raster Object"; }
+	__forceinline virtual const char* Name()const noexcept override { return "Raytrace GPU"; }
 
 	/*
 	* called once per frame.
