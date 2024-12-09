@@ -27,13 +27,11 @@ private:
 
 	/* Vulkan */
 
-	////This scene's renderpass, defining what is attached to the pipeline, and what is outputed
-	//VkRenderPass				_RayRenderPass{};
-	//This scene's descriptor uniform buffer layout, defining how to use the uniform buffer
+	//This scene's raytracing descriptor layout, defining how to use the AS and what image to store the result in
 	VkDescriptorSetLayout		_RayDescriptorLayout{};
-	//This scene's pipeline layout, defining all the descriptors our pipeline will need (uniform and sampler, basically)
+	//This scene's raytracing pipeline layout, defining all the descriptors our raytracing pipeline will need (basically the above descriptor's copy)
 	VkPipelineLayout			_RayLayout{};
-	//This scene's pipeline, defining the behaviour of all fixed function alongside the render pass and shaders.
+	//This scene's raytracing pipeline, defining shader groups.
 	VkPipeline					_RayPipeline{};
 
 	//The binding table creatd from the raytracing shader
@@ -43,18 +41,18 @@ private:
 	//the memory for the shader binding table
 	VkDeviceMemory											_RayShaderBindingMemory{VK_NULL_HANDLE};
 
-	//our scene's viewport (usually takes the whole screen. can change at runtime, as window can be resized)
-	VkViewport					_RayViewport{};
-	//our scene's scissors (usually takes the whole screen, therefore not doing any cuts)
-	VkRect2D					_RayScissors{};
-
 	//A pool to allocate the descriptor sets needed
 	VkDescriptorPool						_RayDescriptorPool{};
 	//the descriptor sets to use (one per frame)
 	MultipleScopedMemory<VkDescriptorSet>	_RayDescriptorSet;
 
-	//the image usd as framebuffer in the raytracing pipeline.
-	ScopedLoopArray<VkImage> _RayWriteImage;
+	//the image we will write on with the raytracing pipeline
+	ScopedLoopArray<VkImage>		_RayWriteImage;
+	//the image view associated with our image to write.
+	ScopedLoopArray<VkImageView>	_RayWriteImageView;
+	//the allocated memory on GPU in which the local image is
+	VkDeviceMemory					_RayImageMemory{ VK_NULL_HANDLE };
+
 
 	//a struct containing the preallocated Vulkan memory and buffer of a loaded model
 	VulkanHelper::Model					_RayModel;
@@ -64,7 +62,7 @@ private:
 	VulkanHelper::RaytracedModel		_RayTopAS;
 
 	/*
-	* Creates the necessary resources for displaying with vulkan.
+	* Creates the necessary resources for raytracing with vulkan.
 	* This includes:
 	* - RenderPass Object
 	* - DescriptorSet Layouts
@@ -73,12 +71,61 @@ private:
 	* - the Model
 	* - DescriptorSets Objects for the model's samplers (using Descriptor Pool)
 	*/
-	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader);
+	void PrepareVulkanRaytracingProps(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader);
 
 	/*
-	* Compiles the shaders to use in the Pipeline Object creation
+	* Compiles the shaders to use in the Raytracing Pipeline Object creation
 	*/
-	void PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader);
+	void PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader);
+
+	//This scene's renderpass, defining what is attached to the pipeline, and what is outputed
+	VkRenderPass				_CopyRenderPass{ VK_NULL_HANDLE };
+	//This scene's descriptor layout, defining how to use our resources
+	VkDescriptorSetLayout		_CopyDescriptorLayout{ VK_NULL_HANDLE };
+	//This scene's pipeline layout, defining all the descriptors our pipeline will need
+	VkPipelineLayout			_CopyLayout{ VK_NULL_HANDLE };
+	//This scene's pipeline, defining the behaviour of all fixed function alongside the render pass and shaders.
+	VkPipeline					_CopyPipeline{ VK_NULL_HANDLE };
+
+	//our scene's viewport (usually takes the whole screen)
+	VkViewport					_CopyViewport{};
+	//our scene's scissors (usually takes the whole screen, therefore not doing any cuts)
+	VkRect2D					_CopyScissors{};
+
+	//The outputs attached to the scene's pipeline as described in the renderpass
+	MultipleScopedMemory<VkFramebuffer>		_CopyOutput;
+	//A pool to allocate the descriptor needed to use our uniform buffers
+	VkDescriptorPool						_CopyDescriptorPool{ VK_NULL_HANDLE };
+	//the descriptor to use our Uniform Buffers
+	MultipleScopedMemory<VkDescriptorSet>	_CopyDescriptorSet;
+	//sampler used to sample out the Raytraced Write Image to our framebuffer
+	VkSampler								_CopySampler{ VK_NULL_HANDLE };
+
+
+	/*
+	* Creates the necessary resources for copying teh raytraced image with vulkan.
+	* This includes:
+	* - RenderPass Object
+	* - DescriptorSet Layouts
+	* - Pipeline Layout
+	* - Pipeline Object
+	* - DescriptorSets Objects for the model's samplers (using Descriptor Pool)
+	*/
+	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
+
+	/*
+	* Compiles the shaders to use in the Copy Pipeline Object creation
+	*/
+	void PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
+
+
+	/*
+	* Deallocate previously allocated raytracing resources, then recreate resources using the window's new properties.
+	* This includes:
+	* - DescriptorSets Objects for the Acceleration Structures
+	* - Output Images
+	*/
+	void ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames);
 
 	/*
 	* Deallocate previously allocated resources, then recreate resources using the window's new properties.
@@ -86,8 +133,7 @@ private:
 	* - Viewport (though not allocated)
 	* - Scissors (though not allocated)
 	* - Framebuffers
-	* - DescriptorSets Objects for the matrices (using Descriptor Pool)
-	* - 3D matrices Uniform Buffer
+	* - Descriptor sets for out put raytracing output images as asampled image
 	*/
 	void ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames);
 

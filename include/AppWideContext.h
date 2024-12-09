@@ -34,7 +34,7 @@ struct AppWideContext
 	//is the user controlling a 3D camera or using the UI
 	bool		in_camera_mode{ false };
 	//the camera's position
-	vec3		camera_pos{0.0f,5.0f,0.0f};
+	vec3		camera_pos{0.0f, 0.0f, 5.0f};
 	// the camera's translate speed
 	float		camera_translate_speed{ 10.0f };
 	//the camera's euler rotation (it does have rotation lock). each component of the vector is the angle to rotate on said axis (roll will not exist).

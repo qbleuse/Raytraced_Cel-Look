@@ -9,7 +9,7 @@
 
 /*==== Prepare =====*/
 
-void RaytraceGPU::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader)
+void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader)
 {
 	VkResult result = VK_SUCCESS;
 
@@ -167,13 +167,14 @@ void RaytraceGPU::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& R
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _RayShaderBindingBuffer, _RayShaderBindingMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 
 		//get back handle from shader group created in pipeline
-		MultipleVolatileMemory<uint32_t> shaderGroupHandle{ (uint32_t*)alloca(3 * startSizeAligned) };
+		MultipleVolatileMemory<uint8_t> shaderGroupHandle{ (uint8_t*)alloca(3 * startSizeAligned) };
 		VK_CALL_KHR( GAPI._VulkanDevice, vkGetRayTracingShaderGroupHandlesKHR, GAPI._VulkanDevice, _RayPipeline, 0, 3, 3 * startSizeAligned, *shaderGroupHandle);
 
 		//mapping memory to buffer
-		uint32_t* CPUSBTBufferMap;
+		uint8_t* CPUSBTBufferMap;
 		vkMapMemory(GAPI._VulkanDevice, _RayShaderBindingMemory, 0, 3 * startSizeAligned, 0, (void**)(& CPUSBTBufferMap));
 
+		//memcpy(CPUSBTBufferMap, *shaderGroupHandle, 3 * startSizeAligned);
 		//copying every address to the shader table
 		memcpy(CPUSBTBufferMap, *shaderGroupHandle, handleSize);
 		memcpy(CPUSBTBufferMap + startSizeAligned, *shaderGroupHandle + handleSize, handleSize);
@@ -194,7 +195,7 @@ void RaytraceGPU::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& R
 	}
 }
 
-void RaytraceGPU::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader)
+void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader)
 {
 	//define ray gen shader
 	const char* ray_gen_shader =
@@ -212,15 +213,15 @@ void RaytraceGPU::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderM
 				vec2 uv = (vec2(gl_LaunchIDEXT.xy) + vec2(0.5)) / vec2(gl_LaunchSizeEXT.xy);
 
 				//for the moment, fixed
-				vec3 origin = vec3(0, 0, 5);
+				vec3 origin = vec3(0, 1.5, 14);
 
 				//the targets are on a viewport ahead of us by 3
-				vec3 target = vec3((uv * 2.0) - 1.0, 2.0);
+				vec3 target = vec3((uv * 2.0) - 1.0, -1.0);
 
 				//creating a direction for our ray
 				vec3 direction = normalize(target - origin);
 
-				//payload = vec3(0.0);
+				payload = vec3(0.0);
 
 				//tracing rays
 				traceRayEXT(
@@ -267,7 +268,7 @@ void RaytraceGPU::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderM
 
 			void main()
 			{
-				payload = attribs;
+				payload = vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
 
 			})";
 
@@ -276,20 +277,269 @@ void RaytraceGPU::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderM
 	CreateVulkanShaders(GAPI._VulkanUploader, HitShader, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, closest_hit_shader, "Raytrace GPU Closest");
 }
 
+
+void RaytraceGPU::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader)
+{
+	VkResult result = VK_SUCCESS;
+
+	/*===== SHADER ======*/
+
+	//describe vertex shader stage
+	VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+	vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+	vertShaderStageInfo.module = VertexShader;
+	vertShaderStageInfo.pName = "main";
+
+	//describe fragment shader stage
+	VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+	fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	fragShaderStageInfo.module = FragmentShader;
+	fragShaderStageInfo.pName = "main";
+
+	/*===== INTPUT ASSEMBLY ======*/
+
+	//to do a full screen, you actually do not need any vertex
+	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexInputInfo.vertexBindingDescriptionCount	= 0;
+	vertexInputInfo.pVertexBindingDescriptions		= nullptr; // Optional
+	vertexInputInfo.vertexAttributeDescriptionCount = 0;
+	vertexInputInfo.pVertexAttributeDescriptions	= nullptr; // Optional
+
+	//the description of the input assembly stage. by the fact we won't have any vertex, the input assembly will basically only give the indices (basically 0,1,2 if we ask for a draw command of three vertices)
+	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+	inputAssembly.sType					= VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	inputAssembly.topology				= VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+	/*===== VIEWPORT/SCISSORS  =====*/
+
+	//as window can be resized, I set viewport and scissors as dynamic so it is always the size of the output window
+	VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
+	dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	dynamicStateInfo.dynamicStateCount = 2;
+	VkDynamicState viewportState[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+	dynamicStateInfo.pDynamicStates = viewportState;
+
+	//setting our starting viewport
+	VkPipelineViewportStateCreateInfo viewportStateInfo{};
+	viewportStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewportStateInfo.viewportCount = 1;
+	viewportStateInfo.pViewports	= &_CopyViewport;
+	viewportStateInfo.scissorCount	= 1;
+	viewportStateInfo.pScissors		= &_CopyScissors;
+
+
+	/*==== RASTERIZER =====*/
+
+	//Here, our rasterizer actually does the conversion from the vertex created inthe vertex shader and pixel coordinates\
+	//it is the same as always, and frankly does not do much 
+	VkPipelineRasterizationStateCreateInfo rasterizer{};
+	rasterizer.sType			= VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizer.depthClampEnable = VK_FALSE;
+	rasterizer.polygonMode		= VK_POLYGON_MODE_FILL;
+	rasterizer.cullMode			= VK_CULL_MODE_NONE;
+	rasterizer.frontFace		= VK_FRONT_FACE_CLOCKWISE;
+	rasterizer.lineWidth		= 1.0f;
+
+	/*===== MSAA =====*/
+
+	//MSAA would be way overkill for what wee are doing, so just disabling it
+	VkPipelineMultisampleStateCreateInfo multisampling{};
+	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisampling.sampleShadingEnable = VK_FALSE;
+	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+	/*===== FRAMEBUFFER BLEND ======*/
+
+	//we'll write the texture as-is
+	VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT
+		| VK_COLOR_COMPONENT_G_BIT
+		| VK_COLOR_COMPONENT_B_BIT
+		| VK_COLOR_COMPONENT_A_BIT;
+	colorBlendAttachment.blendEnable = VK_FALSE;
+
+	//nothing crazy in colour blending, as we just want to show our CPU texture
+	VkPipelineColorBlendStateCreateInfo colorBlending{};
+	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	colorBlending.logicOpEnable = VK_FALSE;
+	colorBlending.attachmentCount = 1;
+	colorBlending.pAttachments = &colorBlendAttachment;
+
+	{
+		/*===== FRAMEBUFFER OUTPUT ======*/
+
+		//describing the format of the output (our framebuffers)
+		VkAttachmentDescription frameColourBufferAttachment{};
+		frameColourBufferAttachment.format			= GAPI._VulkanSurfaceFormat.format;
+		frameColourBufferAttachment.samples			= VK_SAMPLE_COUNT_1_BIT;//one pixel will have exactly one calculation done
+		frameColourBufferAttachment.loadOp			= VK_ATTACHMENT_LOAD_OP_CLEAR;//we'll make the pipeline clear
+		frameColourBufferAttachment.storeOp			= VK_ATTACHMENT_STORE_OP_STORE;//we want to write into the framebuffer
+		frameColourBufferAttachment.initialLayout	= VK_IMAGE_LAYOUT_UNDEFINED;//we write onto the entire vewport so it will be completely replaced, what was before does not interests us
+		frameColourBufferAttachment.finalLayout		= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;//there is no post process this is immediate writing into frame buffer
+
+		/*===== SUBPASS DESCRIPTION ======*/
+
+		//describing the output in the subpass
+		VkAttachmentReference frameColourBufferAttachmentRef{};
+		frameColourBufferAttachmentRef.attachment	= 0;
+		frameColourBufferAttachmentRef.layout		= VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+		//describing the subpass of our main renderpass
+		VkSubpassDescription subpass{};
+		subpass.pipelineBindPoint		= VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount	= 1;
+		subpass.pColorAttachments		= &frameColourBufferAttachmentRef;
+
+		//describing our renderpass
+		VkRenderPassCreateInfo renderPassInfo{};
+		renderPassInfo.sType			= VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		renderPassInfo.attachmentCount	= 1;
+		renderPassInfo.pAttachments		= &frameColourBufferAttachment;
+		renderPassInfo.subpassCount		= 1;
+		renderPassInfo.pSubpasses		= &subpass;
+		VkSubpassDependency dependency{};
+		dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+		dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+		dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+		VK_CALL_PRINT(vkCreateRenderPass(GAPI._VulkanDevice, &renderPassInfo, nullptr, &_CopyRenderPass));
+	}
+
+	/*===== SUBPASS ATTACHEMENT ======*/
+
+	{
+		// a very basic sampler will be fine
+		VkSamplerCreateInfo samplerInfo{};
+		samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		vkCreateSampler(GAPI._VulkanDevice, &samplerInfo, nullptr, &_CopySampler);
+
+
+		//the sampler and image to sample the CPU texture
+		VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+		samplerLayoutBinding.binding = 0;
+		samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		samplerLayoutBinding.descriptorCount = 1;
+		samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		samplerLayoutBinding.pImmutableSamplers = &_CopySampler;
+
+
+		//the descriptor layout that include the immutable sampler and the local GPU image
+		VkDescriptorSetLayoutCreateInfo layoutInfo{};
+		layoutInfo.sType		= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		layoutInfo.bindingCount = 1;
+		layoutInfo.pBindings	= &samplerLayoutBinding;
+
+		VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI._VulkanDevice, &layoutInfo, nullptr, &_CopyDescriptorLayout));
+
+	}
+
+	{
+		//the pipeline layout from the descriptor layout
+		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		pipelineLayoutInfo.pSetLayouts = &_CopyDescriptorLayout;
+		pipelineLayoutInfo.setLayoutCount = 1;
+
+		VK_CALL_PRINT(vkCreatePipelineLayout(GAPI._VulkanDevice, &pipelineLayoutInfo, nullptr, &_CopyLayout));
+	}
+
+	/*===== PIPELINE ======*/
+
+	//finally creating our pipeline
+	VkGraphicsPipelineCreateInfo pipelineInfo{};
+	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+
+	//putting our two shader stages
+	VkPipelineShaderStageCreateInfo stages[2] = { vertShaderStageInfo, fragShaderStageInfo };
+	pipelineInfo.pStages = stages;
+	pipelineInfo.stageCount = 2;
+
+	//fill up the pipeline description
+	pipelineInfo.pVertexInputState		= &vertexInputInfo;
+	pipelineInfo.pInputAssemblyState	= &inputAssembly;
+	pipelineInfo.pViewportState			= &viewportStateInfo;
+	pipelineInfo.pRasterizationState	= &rasterizer;
+	pipelineInfo.pMultisampleState		= &multisampling;
+	pipelineInfo.pDepthStencilState		= nullptr;
+	pipelineInfo.pColorBlendState		= &colorBlending;
+	pipelineInfo.pDynamicState			= &dynamicStateInfo;
+	pipelineInfo.layout					= _CopyLayout;
+	pipelineInfo.renderPass				= _CopyRenderPass;
+	pipelineInfo.subpass				= 0;
+	pipelineInfo.basePipelineHandle		= VK_NULL_HANDLE;
+	pipelineInfo.basePipelineIndex		= -1;
+
+	VK_CALL_PRINT(vkCreateGraphicsPipelines(GAPI._VulkanDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_CopyPipeline));
+
+	vkDestroyShaderModule(GAPI._VulkanDevice, FragmentShader, nullptr);
+	vkDestroyShaderModule(GAPI._VulkanDevice, VertexShader, nullptr);
+}
+
+void RaytraceGPU::PrepareVulkanScripts(GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader)
+{
+	//define vertex shader
+	const char* vertex_shader =
+		R"(#version 450
+			layout(location = 0) out vec2 uv;
+
+			void main()
+			{
+				uv = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);				
+				gl_Position =  vec4(uv * 2.0f + -1.0f, 0.0f, 1.0f);
+
+			})";
+
+	const char* fragment_shader =
+		R"(#version 450
+		layout(location = 0) in vec2 uv;
+		layout(location = 0) out vec4 outColor;
+
+		layout(set = 0, binding = 0) uniform sampler2D fullscreenTex;
+
+
+		void main()
+		{
+			outColor = vec4(texture(fullscreenTex,uv).rgb,1.0);
+		}
+		)";
+
+
+	CreateVulkanShaders(GAPI._VulkanUploader, VertexShader, VK_SHADER_STAGE_VERTEX_BIT, vertex_shader, "Raytrace Fullscreen Vertex");
+	CreateVulkanShaders(GAPI._VulkanUploader, FragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_shader, "Raytrace Fullscreen Frag");
+}
+
 void RaytraceGPU::Prepare(class GraphicsAPIManager& GAPI)
 {
-	//the shaders needed
-	VkShaderModule RayGenShader, MissShader, HitShader;
+	//preparing hardware raytracing props
+	{
+		//the shaders needed
+		VkShaderModule RayGenShader, MissShader, HitShader;
 
-	//compile the shaders here...
-	PrepareVulkanScripts(GAPI, RayGenShader, MissShader, HitShader);
-	//then create the pipeline
-	PrepareVulkanProps(GAPI, RayGenShader, MissShader, HitShader);
+		//compile the shaders here...
+		PrepareVulkanRaytracingScripts(GAPI, RayGenShader, MissShader, HitShader);
+		//then create the pipeline
+		PrepareVulkanRaytracingProps(GAPI, RayGenShader, MissShader, HitShader);
+	}
+
+	//preparing full screen copy pipeline
+	{
+		//the shaders needed
+		VkShaderModule VertexShader, FragmentShader;
+
+		//compile the shaders here...
+		PrepareVulkanScripts(GAPI, VertexShader, FragmentShader);
+		//then create the pipeline
+		PrepareVulkanProps(GAPI, VertexShader, FragmentShader);
+	}
 }
 
 /*===== Resize =====*/
 
-void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames)
+void RaytraceGPU::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames)
 {
 	VkResult result = VK_SUCCESS;
 
@@ -297,20 +547,6 @@ void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t w
 
 	//first, we clear previously used resources
 	vkDestroyDescriptorPool(GAPI._VulkanDevice, _RayDescriptorPool, nullptr);
-	_RayWriteImage.Clear();
-
-	/*===== VIEWPORT AND SCISSORS ======*/
-
-	//filling up the viewport...
-	_RayViewport.width = (float)GAPI._vk_width;
-	_RayViewport.height = (float)GAPI._vk_height;
-	_RayViewport.maxDepth = 1.0f;
-	_RayViewport.minDepth = 0.0f;
-	_RayViewport.x = 0.0f;
-	_RayViewport.y = 0.0f;
-
-	//... and the scissors
-	_RayScissors.extent = { (uint32_t)GAPI._vk_width, (uint32_t)GAPI._vk_height };
 
 	/*===== DESCRIPTORS ======*/
 
@@ -351,10 +587,6 @@ void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t w
 		VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI._VulkanDevice, &allocInfo, *_RayDescriptorSet));
 	}
 
-
-	_RayWriteImage.Alloc(GAPI._nb_vk_frames);
-	memcpy(*_RayWriteImage, *GAPI._VulkanBackBuffers, sizeof(VkImage) * _RayWriteImage.Nb());
-
 	/*===== LINKING RESOURCES ======*/
 
 	for (uint32_t i = 0; i < GAPI._nb_vk_frames; i++)
@@ -377,7 +609,7 @@ void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t w
 
 		//bind the back buffer to each descriptor
 		VkDescriptorImageInfo imageInfo{};
-		imageInfo.imageView = GAPI._VulkanBackColourBuffers[i];
+		imageInfo.imageView = _RayWriteImageView[i];
 		imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
 		VkWriteDescriptorSet imageDescriptorWrite{};
@@ -394,10 +626,205 @@ void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t w
 	}
 }
 
+void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames)
+{
+
+	VkResult result = VK_SUCCESS;
+
+	/*===== CLEAR RESOURCES ======*/
+
+	//clear the fullscreen images buffer
+	VK_CLEAR_ARRAY(_RayWriteImageView, old_nb_frames, vkDestroyImageView, GAPI._VulkanDevice);
+	VK_CLEAR_ARRAY(_RayWriteImage, old_nb_frames, vkDestroyImage, GAPI._VulkanDevice);
+	VK_CLEAR_ARRAY(_CopyOutput, GAPI._nb_vk_frames, vkDestroyFramebuffer, GAPI._VulkanDevice);
+
+	
+
+	//free the allocated memory for the fullscreen images
+	vkFreeMemory(GAPI._VulkanDevice, _RayImageMemory, nullptr);
+	vkDestroyDescriptorPool(GAPI._VulkanDevice, _CopyDescriptorPool, nullptr);
+
+
+	/*===== VIEWPORT AND SCISSORS ======*/
+
+	//filling up the viewport and scissors
+	_CopyViewport.width = (float)GAPI._vk_width;
+	_CopyViewport.height = (float)GAPI._vk_height;
+	_CopyViewport.maxDepth = 1.0f;
+	_CopyViewport.minDepth = 0.0f;
+	_CopyViewport.x = 0.0f;
+	_CopyViewport.y = 0.0f;
+	_CopyScissors.extent = { (uint32_t)GAPI._vk_width, (uint32_t)GAPI._vk_height };
+
+	/*===== CPU SIDE IMAGE BUFFERS ======*/
+
+	//reallocate the fullscreen image buffers with the new number of available images
+	_CopyOutput.Alloc(GAPI._nb_vk_frames);
+	_RayWriteImageView.Alloc(GAPI._nb_vk_frames);
+	_RayWriteImage.Alloc(GAPI._nb_vk_frames);
+
+
+	/*===== DESCRIPTORS ======*/
+
+	//recreate the descriptor pool
+	{
+		//there is only sampler and image in the descriptor pool
+		VkDescriptorPoolSize poolUniformSize{};
+		poolUniformSize.type			= VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		poolUniformSize.descriptorCount = GAPI._nb_vk_frames;
+
+		VkDescriptorPoolCreateInfo poolInfo{};
+		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.poolSizeCount = 1;
+		poolInfo.pPoolSizes = &poolUniformSize;
+		poolInfo.maxSets = GAPI._nb_vk_frames;
+
+		VK_CALL_PRINT(vkCreateDescriptorPool(GAPI._VulkanDevice, &poolInfo, nullptr, &_CopyDescriptorPool))
+	}
+
+	//allocate the memory for descriptor sets
+	{
+		//describe a descriptor set for each of our framebuffer (a uniform bufer per frame)
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool = _CopyDescriptorPool;
+		allocInfo.descriptorSetCount = GAPI._nb_vk_frames;
+
+		//make a copy of our loayout for the number of frames needed
+		VkDescriptorSetLayout* layouts = (VkDescriptorSetLayout*)alloca(GAPI._nb_vk_frames * sizeof(VkDescriptorSetLayout));
+		for (uint32_t i = 0; i < GAPI._nb_vk_frames; i++)
+			memcpy(&layouts[i], &_CopyDescriptorLayout, sizeof(VkDescriptorSetLayout));
+		allocInfo.pSetLayouts = layouts;
+
+		//Allocate descriptor sets on CPU and GPU side
+		_CopyDescriptorSet.Alloc(GAPI._nb_vk_frames);
+		VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI._VulkanDevice, &allocInfo, *_CopyDescriptorSet));
+	}
+
+	/*===== GPU SIDE IMAGE BUFFERS ======*/
+
+	// the size of the fullscreen image's buffer : a fullscreen rgba texture
+	VkDeviceSize imageOffset = 0;
+
+	//allocate the memory for buffer and image
+	{
+
+		// creating the image object with data given in parameters
+		VkImageCreateInfo imageInfo{};
+		imageInfo.sType			= VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageInfo.imageType		= VK_IMAGE_TYPE_2D;//we copy a fullscreen image
+		imageInfo.format		= VK_FORMAT_R32G32B32A32_SFLOAT;//easier to manipulate (may be unsuppoorted by some GPUs)
+		imageInfo.extent.width	= _CopyScissors.extent.width;
+		imageInfo.extent.height = _CopyScissors.extent.height;
+		imageInfo.extent.depth	= 1;
+		imageInfo.mipLevels		= 1u;
+		imageInfo.arrayLayers	= 1u;
+		imageInfo.tiling		= VK_IMAGE_TILING_OPTIMAL;//will only load images from buffers, so no need to change this
+		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;//same this can be changed later and each _Scene will do what they need on their own
+		imageInfo.usage			= VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;//this is slighlty more important as we may use image as deffered rendering buffers, so made it available
+		imageInfo.sharingMode	= VK_SHARING_MODE_EXCLUSIVE;//we have to command queues : one for the app, one for the UI. the UI shouldn't use iamge we create.
+		imageInfo.samples		= VK_SAMPLE_COUNT_1_BIT;//why would you want more than one sample in a simple app ?
+		imageInfo.flags			= 0; // Optional
+
+		VK_CALL_PRINT(vkCreateImage(GAPI._VulkanDevice, &imageInfo, nullptr, &_RayWriteImage[0]));
+
+		//getting the necessary requirements to create our image
+		VkMemoryRequirements memRequirements;
+		vkGetImageMemoryRequirements(GAPI._VulkanDevice, _RayWriteImage[0], &memRequirements);
+		imageOffset = memRequirements.size;
+
+		//trying to find a matching memory type between what the app wants and the device's limitation.
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType				= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize	= memRequirements.size * GAPI._nb_vk_frames;//we want multiple frames
+		allocInfo.memoryTypeIndex	= VulkanHelper::GetMemoryTypeFromRequirements(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memRequirements, GAPI._VulkanUploader._MemoryProperties);
+
+		//allocating and associate the memory to our image.
+		VK_CALL_PRINT(vkAllocateMemory(GAPI._VulkanDevice, &allocInfo, nullptr, &_RayImageMemory));
+
+		vkDestroyImage(GAPI._VulkanDevice, _RayWriteImage[0], nullptr);
+	}
+
+	/*===== FRAMEBUFFERS ======*/
+
+	//describing the framebuffer to the swapchain
+	VkFramebufferCreateInfo framebufferInfo{};
+	framebufferInfo.sType		= VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+	framebufferInfo.renderPass	= _CopyRenderPass;
+	framebufferInfo.width		= GAPI._vk_width;
+	framebufferInfo.height		= GAPI._vk_height;
+	framebufferInfo.layers		= 1;
+
+	/*===== CREATING & LINKING RESOURCES ======*/
+
+	for (uint32_t i = 0; i < GAPI._nb_vk_frames; i++)
+	{
+		//make our framebuffer linked to the swapchain back buffers
+		framebufferInfo.attachmentCount = 1;
+		framebufferInfo.pAttachments = &GAPI._VulkanBackColourBuffers[i];
+		VK_CALL_PRINT(vkCreateFramebuffer(GAPI._VulkanDevice, &framebufferInfo, nullptr, &_CopyOutput[i]))
+
+		//create the image that will be used to write from texture to screen frame buffer
+		VulkanHelper::CreateImage(GAPI._VulkanUploader, _RayWriteImage[i], _RayImageMemory, _CopyScissors.extent.width, _CopyScissors.extent.height, 1, 
+			VK_IMAGE_TYPE_2D, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, imageOffset * i, false);
+
+		// changing the image to allow read from shader
+		VkImageMemoryBarrier barrier{};
+		barrier.sType						= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		barrier.oldLayout					= VK_IMAGE_LAYOUT_UNDEFINED;//from nothing
+		barrier.newLayout					= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;//to shader read dest (will be change to storage afterwards)
+		barrier.srcQueueFamilyIndex			= VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
+		barrier.dstQueueFamilyIndex			= VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
+		barrier.image						= _RayWriteImage[i];
+		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		barrier.subresourceRange.baseMipLevel = 0;
+		barrier.subresourceRange.levelCount = 1;
+		barrier.subresourceRange.baseArrayLayer = 0;
+		barrier.subresourceRange.layerCount = 1;
+		barrier.srcAccessMask = 0;// making the image accessible for ...
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT; // shaders
+
+		//layout should change when we go from pipeline doing transfer to frament stage. here it does not really matter because there is pipeline attached.
+		vkCmdPipelineBarrier(GAPI._VulkanUploader._CopyBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+		//create an image view associated with the GPU local Image to make it available in shader
+		VkImageViewCreateInfo viewCreateInfo{};
+		viewCreateInfo.sType						= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewCreateInfo.subresourceRange.aspectMask	= VK_IMAGE_ASPECT_COLOR_BIT;
+		viewCreateInfo.format						= VK_FORMAT_R32G32B32A32_SFLOAT;
+		viewCreateInfo.image						= _RayWriteImage[i];
+		viewCreateInfo.subresourceRange.layerCount	= 1;
+		viewCreateInfo.subresourceRange.levelCount	= 1;
+		viewCreateInfo.viewType						= VK_IMAGE_VIEW_TYPE_2D;
+
+		VK_CALL_PRINT(vkCreateImageView(GAPI._VulkanDevice, &viewCreateInfo, nullptr, &_RayWriteImageView[i]));
+
+		//wrinting our newly created imatge view in descriptor.
+		//sampler is immutable so no need to send it.
+		VkDescriptorImageInfo imageViewInfo{};
+		imageViewInfo.imageLayout	= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		imageViewInfo.imageView		= _RayWriteImageView[i];
+
+		VkWriteDescriptorSet imageDescriptorWrite{};
+		imageDescriptorWrite.sType				= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		imageDescriptorWrite.dstSet				= _CopyDescriptorSet[i];
+		imageDescriptorWrite.dstBinding			= 0;
+		imageDescriptorWrite.dstArrayElement	= 0;
+		imageDescriptorWrite.descriptorType		= VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		imageDescriptorWrite.descriptorCount	= 1;
+		imageDescriptorWrite.pImageInfo			= &imageViewInfo;
+
+		vkUpdateDescriptorSets(GAPI._VulkanDevice, 1, &imageDescriptorWrite, 0, nullptr);
+	}
+}
+
+
 
 void RaytraceGPU::Resize(class GraphicsAPIManager& GAPI, int32_t old_width, int32_t old_height, uint32_t old_nb_frames)
 {
 	ResizeVulkanResource(GAPI, old_width, old_height, old_nb_frames);
+	ResizeVulkanRaytracingResource(GAPI, old_width, old_height, old_nb_frames);
+
 }
 
 /*===== Act =====*/
@@ -452,11 +879,11 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 	// changing the back buffer to be able to being written by pipeline
 	VkImageMemoryBarrier barrier{};
 	barrier.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	barrier.oldLayout			= VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;//from nothing
+	barrier.oldLayout			= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;//from nothing
 	barrier.newLayout			= VK_IMAGE_LAYOUT_GENERAL;//to transfer dest
 	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
 	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
-	barrier.image				= _RayWriteImage[GAPIHandle._vk_frame_index];
+	barrier.image				= _RayWriteImage[GAPIHandle._vk_current_frame];
 	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	barrier.subresourceRange.baseMipLevel = 0;
 	barrier.subresourceRange.levelCount = 1;
@@ -477,15 +904,13 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 	//vkCmdSetScissor(commandBuffer, 0, 1, &_RayScissors);
 
 	VkStridedDeviceAddressRegionKHR tmp{};
-	VK_CALL_KHR(GAPIHandle._VulkanDevice, vkCmdTraceRaysKHR, commandBuffer, &_RayShaderBindingAddress[0], &_RayShaderBindingAddress[1], &_RayShaderBindingAddress[2], &tmp, _RayScissors.extent.width, _RayScissors.extent.height, 1);
+	VK_CALL_KHR(GAPIHandle._VulkanDevice, vkCmdTraceRaysKHR, commandBuffer, &_RayShaderBindingAddress[0], &_RayShaderBindingAddress[1], &_RayShaderBindingAddress[2], &tmp, _CopyScissors.extent.width, _CopyScissors.extent.height, 1);
 
-	// changing the back buffer to be able to being written by pipeline
-	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 	barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;//from nothing
-	barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;//to transfer dest
+	barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;//to transfer dest
 	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
 	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
-	barrier.image = _RayWriteImage[GAPIHandle._vk_frame_index];
+	barrier.image = _RayWriteImage[GAPIHandle._vk_current_frame];
 	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	barrier.subresourceRange.baseMipLevel = 0;
 	barrier.subresourceRange.levelCount = 1;
@@ -494,9 +919,37 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 	barrier.srcAccessMask = VK_ACCESS_NONE;// making the image accessible for ...
 	barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT; // shaders
 
-	//layout should change when we go from pipeline doing transfer to frament stage. here it does not really matter because there is pipeline attached.
+	//allowing copy from write iamge to framebuffer
 	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
+	//begin render pass onto whole screen
+	{
+		//Set output and output settings for this render pass.
+		VkRenderPassBeginInfo info = {};
+		info.sType			= VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		info.renderPass		= _CopyRenderPass;
+		info.framebuffer	= _CopyOutput[GAPIHandle._vk_frame_index];
+		info.renderArea		= _CopyScissors;
+		info.clearValueCount = 1;
+
+		//clear our output (grey for backbuffer)
+		VkClearValue clearValue{};
+		clearValue.color = { 0.2f, 0.2f, 0.2f, 1.0f };
+		info.pClearValues = &clearValue;
+		vkCmdBeginRenderPass(commandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
+	}
+
+	//bind pipeline, descriptor, viewport and scissors ...
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _CopyPipeline);
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _CopyLayout, 0, 1, &_CopyDescriptorSet[GAPIHandle._vk_current_frame], 0, nullptr);
+	vkCmdSetViewport(commandBuffer, 0, 1, &_CopyViewport);
+	vkCmdSetScissor(commandBuffer, 0, 1, &_CopyScissors);
+
+	// ... then draw !
+	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+
+	//end writing in our backbuffer
+	vkCmdEndRenderPass(commandBuffer);
 	{
 		//the pipeline stage at which the GPU should waait for the semaphore to signal itself
 		VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;//VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR
