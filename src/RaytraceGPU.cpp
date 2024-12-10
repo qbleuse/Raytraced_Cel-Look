@@ -16,7 +16,7 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	/*===== MODEL LOADING & AS BUILDING ======*/
 
 	//load the model
-	VulkanHelper::LoadObjFile(GAPI._VulkanUploader, "../../../media/teapot/teapot.obj", _RayModel._Meshes);
+	VulkanHelper::LoadObjFile(GAPI._VulkanUploader, "../../../media/sphere.obj", _RayModel._Meshes);
 
 	//create bottom level AS from model
 	VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _RayModel._Meshes);
@@ -92,11 +92,17 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 		colourBackBufferBinding.descriptorCount	= 1;
 		colourBackBufferBinding.stageFlags			= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
+		//create a binding for our colour buffers
+		VkDescriptorSetLayoutBinding uniformBufferBinding{};
+		uniformBufferBinding.binding		= 2;
+		uniformBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		uniformBufferBinding.descriptorCount = 1;
+		uniformBufferBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
 		VkDescriptorSetLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType		= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.bindingCount = 2;
-		VkDescriptorSetLayoutBinding layoutsBinding[2] = {ASLayoutBinding , colourBackBufferBinding};
+		layoutInfo.bindingCount = 3;
+		VkDescriptorSetLayoutBinding layoutsBinding[3] = {ASLayoutBinding , colourBackBufferBinding, uniformBufferBinding};
 		layoutInfo.pBindings = layoutsBinding;
 
 		VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI._VulkanDevice, &layoutInfo, nullptr, &_RayDescriptorLayout));
@@ -206,20 +212,28 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 
 			layout(binding = 0) uniform accelerationStructureEXT topLevelAS;
 			layout(binding = 1, rgba32f) uniform image2D image;
+			layout(binding = 2) uniform Transform
+			{
+				mat4 model;
+				mat4 view;
+				mat4 proj;
+			};
 
 			void main()
 			{
+				const vec2 pixel = gl_LaunchIDEXT.xy;
+
 				//finding the pixel we are computing from the ray launch arguments
-				vec2 uv = (vec2(gl_LaunchIDEXT.xy) + vec2(0.5)) / vec2(gl_LaunchSizeEXT.xy);
+				const vec2 uv = (pixel / gl_LaunchSizeEXT.xy) * 2.0 - 1.0;
 
 				//for the moment, fixed
-				vec3 origin = vec3(0, 1.5, 14);
+				vec4 origin = view * vec4(0.0,0.0,0.0,1.0);
 
 				//the targets are on a viewport ahead of us by 3
-				vec3 target = vec3((uv * 2.0) - 1.0, -1.0);
+				vec4 target = proj * view * vec4(uv,1.0,1.0);
 
 				//creating a direction for our ray
-				vec3 direction = normalize(target - origin);
+				vec3 direction = normalize(target.xyz - origin.xyz);
 
 				payload = vec3(0.0);
 
@@ -229,7 +243,7 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 					gl_RayFlagsOpaqueEXT,//opaque flags (definelty don't want it forever)
 					0xFF,//cull mask
 					0,0,0,//shader binding table offset, stride, and miss index (as this function can be called from all hit shader)
-					origin,//our camera's origin
+					origin.xyz,//our camera's origin
 					0.001,//our collision epsilon
 					direction,//the direction of our ray
 					10000,//the max length of our ray (this could be changed if we added energy conservation rules, I think, but in our case , it is more or less infinity)
@@ -525,6 +539,8 @@ void RaytraceGPU::Prepare(class GraphicsAPIManager& GAPI)
 		PrepareVulkanRaytracingProps(GAPI, RayGenShader, MissShader, HitShader);
 	}
 
+	_RayBuffer.model = identity();
+
 	//preparing full screen copy pipeline
 	{
 		//the shaders needed
@@ -547,6 +563,7 @@ void RaytraceGPU::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI,
 
 	//first, we clear previously used resources
 	vkDestroyDescriptorPool(GAPI._VulkanDevice, _RayDescriptorPool, nullptr);
+	VulkanHelper::ClearUniformBufferHandle(GAPI._VulkanDevice, _RayUniformBuffer);
 
 	/*===== DESCRIPTORS ======*/
 
@@ -560,11 +577,15 @@ void RaytraceGPU::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI,
 		imagePoolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 		imagePoolSize.descriptorCount = 1;
 
+		VkDescriptorPoolSize bufferPoolSize{};
+		bufferPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		bufferPoolSize.descriptorCount = 1;
+
 		//creating our descriptor pool to allocate sets for each frame
 		VkDescriptorPoolCreateInfo poolInfo{};
 		poolInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		poolInfo.poolSizeCount	= 2;
-		VkDescriptorPoolSize poolSizes[2] = {ASPoolSize, imagePoolSize};
+		poolInfo.poolSizeCount	= 3;
+		VkDescriptorPoolSize poolSizes[3] = {ASPoolSize, imagePoolSize, bufferPoolSize};
 		poolInfo.pPoolSizes		= poolSizes;
 		poolInfo.maxSets		= GAPI._nb_vk_frames;
 
@@ -586,6 +607,11 @@ void RaytraceGPU::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI,
 		_RayDescriptorSet.Alloc(GAPI._nb_vk_frames);
 		VK_CALL_PRINT(vkAllocateDescriptorSets(GAPI._VulkanDevice, &allocInfo, *_RayDescriptorSet));
 	}
+
+	/*===== UNIFORM BUFFERS ======*/
+
+	//recreate the uniform buffer
+	CreateUniformBufferHandle(GAPI._VulkanUploader, _RayUniformBuffer, GAPI._nb_vk_frames, sizeof(mat4) * 3);
 
 	/*===== LINKING RESOURCES ======*/
 
@@ -621,8 +647,23 @@ void RaytraceGPU::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI,
 		imageDescriptorWrite.descriptorCount	= 1;
 		imageDescriptorWrite.pImageInfo			= &imageInfo;
 
-		VkWriteDescriptorSet descriptorWrites[2] = { ASDescriptorWrite,  imageDescriptorWrite };
-		vkUpdateDescriptorSets(GAPI._VulkanDevice, 2, descriptorWrites, 0, nullptr);
+		VkDescriptorBufferInfo bufferInfo{};
+		bufferInfo.buffer = _RayUniformBuffer._GPUBuffer[i];
+		bufferInfo.offset = 0;
+		bufferInfo.range = sizeof(mat4) * 3;
+
+		//then link it to the descriptor
+		VkWriteDescriptorSet descriptorWrite{};
+		descriptorWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrite.dstSet			= _RayDescriptorSet[i];
+		descriptorWrite.dstBinding		= 2;
+		descriptorWrite.dstArrayElement = 0;
+		descriptorWrite.descriptorType	= VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrite.descriptorCount = 1;
+		descriptorWrite.pBufferInfo		= &bufferInfo;
+
+		VkWriteDescriptorSet descriptorWrites[3] = { ASDescriptorWrite,  imageDescriptorWrite, descriptorWrite };
+		vkUpdateDescriptorSets(GAPI._VulkanDevice, 3, descriptorWrites, 0, nullptr);
 	}
 }
 
@@ -834,12 +875,12 @@ void RaytraceGPU::Act(struct AppWideContext& AppContext)
 
 	//_RayObjData.euler_angles.y += AppContext.delta_time;
 	//
-	////it will change every frame
-	//{
-	//	_RayMatBuffer.proj = AppContext.proj_mat;
-	//	_RayMatBuffer.view = AppContext.view_mat;
-	//	_RayMatBuffer.model = scale(_RayObjData.scale.x, _RayObjData.scale.y, _RayObjData.scale.z) * ro_intrinsic_rot(_RayObjData.euler_angles.x, _RayObjData.euler_angles.y, _RayObjData.euler_angles.z) * ro_translate(_RayObjData.pos);
-	//}
+	//it will change every frame
+	{
+		_RayBuffer.proj = transpose(AppContext.proj_mat);
+		_RayBuffer.view = transpose(AppContext.view_mat);
+		//_RayMatBuffer.model = scale(_RayObjData.scale.x, _RayObjData.scale.y, _RayObjData.scale.z) * ro_intrinsic_rot(_RayObjData.euler_angles.x, _RayObjData.euler_angles.y, _RayObjData.euler_angles.z) * ro_translate(_RayObjData.pos);
+	}
 	//
 	////UI update
 	//if (SceneCanShowUI(AppContext))
@@ -892,6 +933,9 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 	barrier.srcAccessMask = VK_ACCESS_NONE;// making the image accessible for ...
 	barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT; // shaders
 
+	//the buffer will change every frame as the object rotates every frame
+	memcpy(_RayUniformBuffer._CPUMemoryHandle[GAPIHandle._vk_current_frame], (void*)&_RayBuffer, sizeof(mat4) * 3);
+
 	//layout should change when we go from pipeline doing transfer to frament stage. here it does not really matter because there is pipeline attached.
 	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
@@ -899,9 +943,6 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 	//binding an available uniform buffer (current frame and frame index may be different, as we can ask for redraw multiple times while the frame is not presenting)
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _RayLayout, 0, 1, &_RayDescriptorSet[GAPIHandle._vk_current_frame], 0, nullptr);
 
-	//set viewport and scissors to draw on all screen
-	//vkCmdSetViewport(commandBuffer, 0, 1, &_RayViewport);
-	//vkCmdSetScissor(commandBuffer, 0, 1, &_RayScissors);
 
 	VkStridedDeviceAddressRegionKHR tmp{};
 	VK_CALL_KHR(GAPIHandle._VulkanDevice, vkCmdTraceRaysKHR, commandBuffer, &_RayShaderBindingAddress[0], &_RayShaderBindingAddress[1], &_RayShaderBindingAddress[2], &tmp, _CopyScissors.extent.width, _CopyScissors.extent.height, 1);

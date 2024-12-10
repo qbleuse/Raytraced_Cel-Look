@@ -541,8 +541,8 @@ bool LoadGLTFBuffersInGPU(Uploader& VulkanUploader, const tinygltf::Model& loade
 
 		//we're using a static because it is easier to upload with, but we actually only want to allocate and send data to device memory
 		StaticBufferHandle tmpBufferHandle;
-		noError &= CreateVulkanBuffer(VulkanUploader, buffer.data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tmpBufferHandle._StaticGPUBuffer, tmpBufferHandle._StaticGPUMemoryHandle, 0);
+		noError &= CreateVulkanBuffer(VulkanUploader, buffer.data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tmpBufferHandle._StaticGPUBuffer, tmpBufferHandle._StaticGPUMemoryHandle, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 		noError &= UploadStaticBufferHandle(VulkanUploader, tmpBufferHandle, buffer.data.data(), buffer.data.size());
 
 		model._BuffersHandle[i] = tmpBufferHandle._StaticGPUMemoryHandle;
@@ -770,7 +770,7 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 				tinygltf::Accessor&	accessor		= loadedModel.accessors[jPrimitive.indices];
 				tinygltf::BufferView& bufferView	= loadedModel.bufferViews[accessor.bufferView];
 
-				CreateVulkanBuffer(VulkanUploader, (bufferView.byteLength - accessor.byteOffset), VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				CreateVulkanBuffer(VulkanUploader, (bufferView.byteLength - accessor.byteOffset), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Indices, model._BuffersHandle[bufferView.buffer], (bufferView.byteOffset + accessor.byteOffset), false);
 
 				model._Meshes[meshIndex]._indices_nb = accessor.count;
@@ -796,7 +796,7 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 				tinygltf::Accessor& accessor		= loadedModel.accessors[jPrimitive.attributes["POSITION"]];
 				tinygltf::BufferView& bufferView	= loadedModel.bufferViews[accessor.bufferView];
 
-				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Positions, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._pos_offset = accessor.byteOffset + bufferView.byteOffset;
@@ -808,7 +808,7 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 				tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["TEXCOORD_0"]];
 				tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
 
-				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Uvs, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._uv_offset = bufferView.byteOffset + accessor.byteOffset;
@@ -820,7 +820,7 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 				tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["NORMAL"]];
 				tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
 
-				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Normals, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._normal_offset = bufferView.byteOffset + accessor.byteOffset;
@@ -832,7 +832,7 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 				tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["TANGENT"]];
 				tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
 
-				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Tangents, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._tangent_offset = bufferView.byteOffset + accessor.byteOffset;

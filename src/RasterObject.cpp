@@ -245,7 +245,7 @@ void RasterObject::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& 
 		//one to get the 3D matrices, and one to sample from a texture
 		VkDescriptorSetLayout layouts[2] = {_ObjBufferDescriptorLayout, _ObjSamplerDescriptorLayout};
 		pipelineLayoutInfo.pSetLayouts = layouts;
-		pipelineLayoutInfo.setLayoutCount = 1;
+		pipelineLayoutInfo.setLayoutCount = 2;
 
 		VK_CALL_PRINT(vkCreatePipelineLayout(GAPI._VulkanDevice, &pipelineLayoutInfo, nullptr, &_ObjLayout));
 	}
@@ -285,7 +285,7 @@ void RasterObject::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& 
 	/*===== MODEL LOADING =====*/
 
 	//load vertex buffer and textures
-	VulkanHelper::LoadObjFile(GAPI._VulkanUploader, "../../../media/teapot/teapot.obj",_ObjModel._Meshes);
+	VulkanHelper::LoadGLTFFile(GAPI._VulkanUploader, "../../../media/Duck/Duck.gltf",_ObjModel);
 
 	/*===== MODEL DESCRIPTORS ======*/
 

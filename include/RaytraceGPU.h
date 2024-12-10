@@ -53,7 +53,8 @@ private:
 	//the allocated memory on GPU in which the local image is
 	VkDeviceMemory					_RayImageMemory{ VK_NULL_HANDLE };
 
-
+	//a uniform buffer for matrices data
+	VulkanHelper::UniformBufferHandle	_RayUniformBuffer;
 	//a struct containing the preallocated Vulkan memory and buffer of a loaded model
 	VulkanHelper::Model					_RayModel;
 	//the 3D geometry of the model in the GPU raytracing pipeline format (BLAS)
@@ -184,6 +185,15 @@ public:
 	* Releases all the resources allocated in Prepare
 	*/
 	virtual void Close(class GraphicsAPIManager& GAPI)final;
+
+	struct UniformBuffer
+	{
+		mat4 model;
+		mat4 view;
+		mat4 proj;
+	};
+	//a buffer to allow sending the data changed by user at once
+	UniformBuffer _RayBuffer;
 
 
 	/*===== END Scene Interface =====*/
