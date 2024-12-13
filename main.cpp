@@ -172,7 +172,7 @@ void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppCo
 
 		//4. create corresponding view matrix
 
-		AppContext.view_mat = ro_translate(AppContext.camera_pos) * ro_extrinsic_rot(0.0f, AppContext.camera_rot.y, AppContext.camera_rot.x);
+		AppContext.view_mat = co_yaw(AppContext.camera_rot.x) * co_pitch(AppContext.camera_rot.y);
 
 		//it is faster to put it by hand
 		//AppContext.view_mat[12] = AppContext.camera_pos.x;
@@ -252,7 +252,7 @@ int main()
 			scenes[i]->Resize(GAPI,GAPI._vk_width,GAPI._vk_height,GAPI._nb_vk_frames);
 		}
 		GAPI.SubmitUpload();
-		AppContext.proj_mat = ro_perspective_proj(static_cast<float>(GAPI._vk_width), static_cast<float>(GAPI._vk_height), AppContext.fov, AppContext.near_plane, AppContext.far_plane);
+		AppContext.proj_mat = co_perspective_proj(static_cast<float>(GAPI._vk_width), static_cast<float>(GAPI._vk_height), AppContext.fov, AppContext.near_plane, AppContext.far_plane);
 
 		while (!glfwWindowShouldClose(GAPI._VulkanWindow))
 		{

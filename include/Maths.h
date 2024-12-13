@@ -387,8 +387,8 @@ __forceinline mat4 ro_translate(const vec3& pos)
 	} };
 }
 
-/* creates a 4 dimension matrix  with a roll rotation (on the x axis) of "angle". */
-__forceinline mat4 co_roll(float angle)
+/* creates a 4 dimension matrix  with a yaw rotation (on the x axis) of "angle". */
+__forceinline mat4 co_yaw(float angle)
 {
 	float cos_angle = cosf(angle * DEGREES_TO_RADIANS);
 	float sin_angle = sinf(angle * DEGREES_TO_RADIANS);
@@ -401,8 +401,8 @@ __forceinline mat4 co_roll(float angle)
 	} };
 }
 
-/* creates a 4 dimension matrix  with a roll rotation (on the x axis) of "angle". */
-__forceinline mat4 ro_roll(float angle)
+/* creates a 4 dimension matrix  with a yaw rotation (on the x axis) of "angle". */
+__forceinline mat4 ro_yaw(float angle)
 {
 	float cos_angle = cosf(-angle * DEGREES_TO_RADIANS);
 	float sin_angle = sinf(-angle * DEGREES_TO_RADIANS);
@@ -443,8 +443,8 @@ __forceinline mat4 ro_pitch(float angle)
 	} };
 }
 
-/* creates a 4 dimension matrix  with a yaw rotation (on the z axis) of "angle". */
-__forceinline mat4 co_yaw(float angle)
+/* creates a 4 dimension matrix  with a roll rotation (on the z axis) of "angle". */
+__forceinline mat4 co_roll(float angle)
 {
 	float cos_angle = cosf(angle * DEGREES_TO_RADIANS);
 	float sin_angle = sinf(angle * DEGREES_TO_RADIANS);
@@ -457,8 +457,8 @@ __forceinline mat4 co_yaw(float angle)
 	} };
 }
 
-/* creates a 4 dimension matrix  with a yaw rotation (on the z axis) of "angle". */
-__forceinline mat4 ro_yaw(float angle)
+/* creates a 4 dimension matrix  with a roll rotation (on the z axis) of "angle". */
+__forceinline mat4 ro_roll(float angle)
 {
 	float cos_angle = cosf(-angle * DEGREES_TO_RADIANS);
 	float sin_angle = sinf(-angle * DEGREES_TO_RADIANS);

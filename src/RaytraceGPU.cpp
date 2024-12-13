@@ -16,7 +16,7 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	/*===== MODEL LOADING & AS BUILDING ======*/
 
 	//load the model
-	VulkanHelper::LoadObjFile(GAPI._VulkanUploader, "../../../media/sphere.obj", _RayModel._Meshes);
+	VulkanHelper::LoadObjFile(GAPI._VulkanUploader, "../../../media/teapot/teapot.obj", _RayModel._Meshes);
 
 	//create bottom level AS from model
 	VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _RayModel._Meshes);
@@ -127,7 +127,7 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	pipelineInfo.pStages						= *shaderStages;
 	pipelineInfo.groupCount						= 3;
 	pipelineInfo.pGroups						= *shaderGroups;
-	pipelineInfo.maxPipelineRayRecursionDepth	= 10;//for the moment we'll hardcode the value, we'll see if we'll make it editable
+	pipelineInfo.maxPipelineRayRecursionDepth	= 1;//for the moment we'll hardcode the value, we'll see if we'll make it editable
 	pipelineInfo.layout							= _RayLayout;//describe the attachement
 
 	VK_CALL_KHR(GAPI._VulkanDevice, vkCreateRayTracingPipelinesKHR, GAPI._VulkanDevice, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_RayPipeline);
@@ -173,8 +173,8 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _RayShaderBindingBuffer, _RayShaderBindingMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 
 		//get back handle from shader group created in pipeline
-		MultipleVolatileMemory<uint8_t> shaderGroupHandle{ (uint8_t*)alloca(3 * startSizeAligned) };
-		VK_CALL_KHR( GAPI._VulkanDevice, vkGetRayTracingShaderGroupHandlesKHR, GAPI._VulkanDevice, _RayPipeline, 0, 3, 3 * startSizeAligned, *shaderGroupHandle);
+		MultipleVolatileMemory<uint8_t> shaderGroupHandle{ (uint8_t*)alloca(3 * handleSize) };
+		VK_CALL_KHR( GAPI._VulkanDevice, vkGetRayTracingShaderGroupHandlesKHR, GAPI._VulkanDevice, _RayPipeline, 0, 3, 3 * handleSize, *shaderGroupHandle);
 
 		//mapping memory to buffer
 		uint8_t* CPUSBTBufferMap;
@@ -221,19 +221,22 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 
 			void main()
 			{
-				const vec2 pixel = gl_LaunchIDEXT.xy;
+				const vec2 pixelCenter = gl_LaunchIDEXT.xy + vec2(0.5);
 
 				//finding the pixel we are computing from the ray launch arguments
-				const vec2 uv = (pixel / gl_LaunchSizeEXT.xy) * 2.0 - 1.0;
+				const vec2 inUV = (pixelCenter) / vec2(gl_LaunchSizeEXT.xy);
+
+				vec2 d = inUV * 2.0 - 1.0;
 
 				//for the moment, fixed
 				vec4 origin = view * vec4(0.0,0.0,0.0,1.0);
-
+				
 				//the targets are on a viewport ahead of us by 3
-				vec4 target = proj * view * vec4(uv,1.0,1.0);
+				vec4 target = proj * view * vec4(d,1.0,1.0);
+				target = target/target.w;
 
 				//creating a direction for our ray
-				vec3 direction = normalize(target.xyz - origin.xyz);
+				vec4 direction = view * vec4(normalize(target.xyz),0.0);
 
 				payload = vec3(0.0);
 
@@ -241,12 +244,12 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				traceRayEXT(
 					topLevelAS,//Acceleration structure
 					gl_RayFlagsOpaqueEXT,//opaque flags (definelty don't want it forever)
-					0xFF,//cull mask
+					0xff,//cull mask
 					0,0,0,//shader binding table offset, stride, and miss index (as this function can be called from all hit shader)
 					origin.xyz,//our camera's origin
 					0.001,//our collision epsilon
-					direction,//the direction of our ray
-					10000,//the max length of our ray (this could be changed if we added energy conservation rules, I think, but in our case , it is more or less infinity)
+					direction.xyz,//the direction of our ray
+					10000.0,//the max length of our ray (this could be changed if we added energy conservation rules, I think, but in our case , it is more or less infinity)
 					0
 				);
 				
@@ -269,7 +272,6 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 
 				float backgroundGradient = 0.5 * (gl_WorldRayDirectionEXT.y + 1.0);
 				payload = background_color_bottom * (1.0 - backgroundGradient) + background_color_top * backgroundGradient;
-
 			})";
 
 	//define closest hit shader
@@ -877,8 +879,8 @@ void RaytraceGPU::Act(struct AppWideContext& AppContext)
 	//
 	//it will change every frame
 	{
-		_RayBuffer.proj = transpose(AppContext.proj_mat);
-		_RayBuffer.view = transpose(AppContext.view_mat);
+		_RayBuffer.proj = AppContext.proj_mat;
+		_RayBuffer.view = AppContext.view_mat;
 		//_RayMatBuffer.model = scale(_RayObjData.scale.x, _RayObjData.scale.y, _RayObjData.scale.z) * ro_intrinsic_rot(_RayObjData.euler_angles.x, _RayObjData.euler_angles.y, _RayObjData.euler_angles.z) * ro_translate(_RayObjData.pos);
 	}
 	//

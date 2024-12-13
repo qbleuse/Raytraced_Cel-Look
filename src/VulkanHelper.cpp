@@ -1148,6 +1148,7 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 		bottomLevelMeshASData.vertexData	= VkDeviceOrHostAddressConstKHR{ GPUBufferAddress };// this is sure to be a static buffer as we will not change vertex data
 		bottomLevelMeshASData.vertexFormat	= VK_FORMAT_R32G32B32_SFLOAT;//pos is vec3
 		bottomLevelMeshASData.vertexStride	= sizeof(vec3);//pos is vec3
+		//bottomLevelMeshASData.maxVertex = 2;
 		//we do not have the data to know "bottomLevelMeshAS.maxVertex"
 
 		//getting back the indices' GPU address
@@ -1172,6 +1173,7 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 		meshASBuild.pGeometries		= &meshAS;
 		meshASBuild.geometryCount	= 1;
 		meshASBuild.mode			= VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;//we are creating it for the fist (and propably last) time
+		meshASBuild.flags			= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
 
 		//setting the bounds of our mesh (as when loading from models, the buffer for multiple geometry may have been the same)
 		VkAccelerationStructureBuildRangeInfoKHR& meshASRange = bottomLevelMeshASRangeInfo[i];
@@ -1218,6 +1220,15 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 
 	//finally, asking to build all of the acceleration structures at once (this is basically a copy command, so it is a defered call)
 	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCmdBuildAccelerationStructuresKHR, VulkanUploader._CopyBuffer, mesh.Nb(), *bottomLevelMeshASInfo, *bottomLevelMeshASRangeInfoPtr);
+
+
+	VkMemoryBarrier barrier{};
+	barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	barrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;// making the AS accessible for ...
+	barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR; // shaders
+
+	//layout should change when we go from pipeline doing transfer to frament stage. here it does not really matter because there is pipeline attached.
+	vkCmdPipelineBarrier(VulkanUploader._CopyBuffer, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 1, &barrier, 0, nullptr, 0, nullptr);
 
 	return result == VK_SUCCESS;
 }
@@ -1270,6 +1281,7 @@ bool VulkanHelper::UploadRaytracedModelFromGeometry(Uploader& VulkanUploader, Ra
 								transform[4], transform[5], transform[6], transform[7],
 								transform[8], transform[9], transform[10],  transform[11] };//changing transform
 		iASInstance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
+		iASInstance.instanceShaderBindingTableRecordOffset = 0;
 	
 
 		//getting back the indices' GPU address
@@ -1311,6 +1323,8 @@ bool VulkanHelper::UploadRaytracedModelFromGeometry(Uploader& VulkanUploader, Ra
 	instanceASBuild.pGeometries		= *instancesAS;
 	instanceASBuild.geometryCount	= 1;
 	instanceASBuild.mode			= isUpdate ? VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR : VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;//choose between creation and update
+	instanceASBuild.flags = VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+
 
 
 	VkAccelerationStructureBuildSizesInfoKHR buildSize{};
@@ -1356,6 +1370,15 @@ bool VulkanHelper::UploadRaytracedModelFromGeometry(Uploader& VulkanUploader, Ra
 
 
 	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCmdBuildAccelerationStructuresKHR, VulkanUploader._CopyBuffer, 1, &instanceASBuild, &buildRange);
+
+	// changing the back buffer to be able to being written by pipeline
+	VkMemoryBarrier barrier{};
+	barrier.sType	= VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	barrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;// making the AS accessible for ...
+	barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR; // shaders
+
+	//layout should change when we go from pipeline doing transfer to frament stage. here it does not really matter because there is pipeline attached.
+	vkCmdPipelineBarrier(VulkanUploader._CopyBuffer, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 1, &barrier, 0, nullptr, 0, nullptr);
 
 	//deffered clear of all temporary memory
 	VulkanUploader._ToFreeBuffers.Add(scratchBuffer);

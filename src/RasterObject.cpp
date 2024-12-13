@@ -556,7 +556,7 @@ void RasterObject::Act(struct AppWideContext& AppContext)
 	{
 		_ObjBuffer.proj = AppContext.proj_mat;
 		_ObjBuffer.view = AppContext.view_mat;
-		_ObjBuffer.model = scale(_ObjData.scale.x, _ObjData.scale.y, _ObjData.scale.z) * ro_intrinsic_rot(_ObjData.euler_angles.x, _ObjData.euler_angles.y, _ObjData.euler_angles.z) * ro_translate(_ObjData.pos);
+		_ObjBuffer.model = ro_translate(_ObjData.pos) * ro_intrinsic_rot(_ObjData.euler_angles.x, _ObjData.euler_angles.y, _ObjData.euler_angles.z) * scale(_ObjData.scale.x, _ObjData.scale.y, _ObjData.scale.z);
 	}
 
 	//UI update
