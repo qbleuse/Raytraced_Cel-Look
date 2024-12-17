@@ -132,9 +132,9 @@ void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppCo
 	{
 		//2. camera position
 		{
-			vec3 right = normalize(AppContext.view_mat.x.xyz);
-			vec3 up = normalize(AppContext.view_mat.y.xyz);
-			vec3 forward = normalize(AppContext.view_mat.z.xyz);
+			vec3 right = normalize(vec3(AppContext.view_mat.x.x, AppContext.view_mat.y.x, AppContext.view_mat.z.x));
+			vec3 up = normalize(vec3(AppContext.view_mat.x.y, AppContext.view_mat.y.y, AppContext.view_mat.z.y));
+			vec3 forward = normalize(vec3(AppContext.view_mat.x.z, AppContext.view_mat.y.z, AppContext.view_mat.z.z));
 
 			if (ImGui::IsKeyDown(ImGuiKey_W))
 			{
@@ -172,7 +172,7 @@ void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppCo
 
 		//4. create corresponding view matrix
 
-		AppContext.view_mat = co_yaw(AppContext.camera_rot.x) * co_pitch(AppContext.camera_rot.y);
+		AppContext.view_mat = ro_translate(AppContext.camera_pos) * co_yaw(AppContext.camera_rot.x) * co_pitch(AppContext.camera_rot.y);
 
 		//it is faster to put it by hand
 		//AppContext.view_mat[12] = AppContext.camera_pos.x;
@@ -252,7 +252,7 @@ int main()
 			scenes[i]->Resize(GAPI,GAPI._vk_width,GAPI._vk_height,GAPI._nb_vk_frames);
 		}
 		GAPI.SubmitUpload();
-		AppContext.proj_mat = co_perspective_proj(static_cast<float>(GAPI._vk_width), static_cast<float>(GAPI._vk_height), AppContext.fov, AppContext.near_plane, AppContext.far_plane);
+		AppContext.proj_mat = ro_perspective_proj(static_cast<float>(GAPI._vk_width), static_cast<float>(GAPI._vk_height), AppContext.fov, AppContext.near_plane, AppContext.far_plane);
 
 		while (!glfwWindowShouldClose(GAPI._VulkanWindow))
 		{

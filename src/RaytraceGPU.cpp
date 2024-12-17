@@ -232,8 +232,8 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				vec4 origin = view * vec4(0.0,0.0,0.0,1.0);
 				
 				//the targets are on a viewport ahead of us by 3
-				vec4 target = proj * view * vec4(d,1.0,1.0);
-				target = target/target.w;
+				vec4 target = vec4(d.x / proj[0][0], d.y / proj[1][1],1.0,1.0);
+				//target = target/target.w;
 
 				//creating a direction for our ray
 				vec4 direction = view * vec4(normalize(target.xyz),0.0);
