@@ -1178,7 +1178,7 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 		//setting the bounds of our mesh (as when loading from models, the buffer for multiple geometry may have been the same)
 		VkAccelerationStructureBuildRangeInfoKHR& meshASRange = bottomLevelMeshASRangeInfo[i];
 		meshASRange.firstVertex		= iMesh._pos_offset;
-		meshASRange.primitiveOffset = iMesh._indices_offset * 3;
+		meshASRange.primitiveOffset = iMesh._indices_type == VK_INDEX_TYPE_UINT16 ? iMesh._indices_offset * sizeof(uint16_t) : iMesh._indices_offset * sizeof(uint32_t);
 		meshASRange.primitiveCount	= iMesh._indices_nb / 3;
 		meshASRange.transformOffset = 0;
 		bottomLevelMeshASRangeInfoPtr[i] = &meshASRange;

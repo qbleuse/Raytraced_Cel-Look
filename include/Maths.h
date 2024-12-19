@@ -366,19 +366,8 @@ __forceinline mat4 scale(float extent_x, float extent_y, float extent_z)
 	} };
 }
 
-/* creates a 4 dimension translate matrix to given position in column format*/
-__forceinline mat4 co_translate(const vec3& pos)
-{
-	return mat4{{
-		1.0f, 0.0f, 0.0f, pos.x,
-		0.0f, 1.0f, 0.0f, pos.y,
-		0.0f, 0.0f, 1.0f, pos.z,
-		0.0f, 0.0f, 0.0f, 1.0f
-	}};
-}
-
 /* creates a 4 dimension translate matrix to given position in row format*/
-__forceinline mat4 ro_translate(const vec3& pos)
+__forceinline mat4 translate(const vec3& pos)
 {
 	return mat4{ {
 		1.0f, 0.0f, 0.0f, 0.0f,
@@ -389,7 +378,7 @@ __forceinline mat4 ro_translate(const vec3& pos)
 }
 
 /* creates a 4 dimension matrix  with a yaw rotation (on the x axis) of "angle". */
-__forceinline mat4 co_yaw(float angle)
+__forceinline mat4 yaw(float angle)
 {
 	float cos_angle = cosf(angle * DEGREES_TO_RADIANS);
 	float sin_angle = sinf(angle * DEGREES_TO_RADIANS);
@@ -402,22 +391,8 @@ __forceinline mat4 co_yaw(float angle)
 	} };
 }
 
-/* creates a 4 dimension matrix  with a yaw rotation (on the x axis) of "angle". */
-__forceinline mat4 ro_yaw(float angle)
-{
-	float cos_angle = cosf(-angle * DEGREES_TO_RADIANS);
-	float sin_angle = sinf(-angle * DEGREES_TO_RADIANS);
-
-	return mat4{ {
-		1.0f, 0.0f, 0.0f, 0.0f,
-		0.0f, cos_angle, -sin_angle, 0.0f,
-		0.0f, sin_angle, cos_angle, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f
-	} };
-}
-
 /* creates a 4 dimension matrix  with a pitch rotation (on the y axis) of "angle". */
-__forceinline mat4 co_pitch(float angle)
+__forceinline mat4 pitch(float angle)
 {
 	float cos_angle = cosf(angle * DEGREES_TO_RADIANS);
 	float sin_angle = sinf(angle * DEGREES_TO_RADIANS);
@@ -430,22 +405,9 @@ __forceinline mat4 co_pitch(float angle)
 	} };
 }
 
-/* creates a 4 dimension matrix  with a pitch rotation (on the y axis) of "angle". */
-__forceinline mat4 ro_pitch(float angle)
-{
-	float cos_angle = cosf(-angle * DEGREES_TO_RADIANS);
-	float sin_angle = sinf(-angle * DEGREES_TO_RADIANS);
-
-	return mat4{ {
-		cos_angle, 0.0f, sin_angle, 0.0f,
-		0.0f, 1.0f, 0.0f, 0.0f,
-		-sin_angle, 0.0f, cos_angle, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f
-	} };
-}
 
 /* creates a 4 dimension matrix  with a roll rotation (on the z axis) of "angle". */
-__forceinline mat4 co_roll(float angle)
+__forceinline mat4 roll(float angle)
 {
 	float cos_angle = cosf(angle * DEGREES_TO_RADIANS);
 	float sin_angle = sinf(angle * DEGREES_TO_RADIANS);
@@ -458,22 +420,8 @@ __forceinline mat4 co_roll(float angle)
 	} };
 }
 
-/* creates a 4 dimension matrix  with a roll rotation (on the z axis) of "angle". */
-__forceinline mat4 ro_roll(float angle)
-{
-	float cos_angle = cosf(-angle * DEGREES_TO_RADIANS);
-	float sin_angle = sinf(-angle * DEGREES_TO_RADIANS);
-
-	return mat4{ {
-		cos_angle, -sin_angle, 0.0f, 0.0f,
-		sin_angle, cos_angle, 0.0f, 0.0f,
-		0.0f, 0.0f,1.0f, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f
-	} };
-}
-
 /* creates a 4 dimension intrinsic rotation matrix from yaw, pitch and roll angle. */
-__forceinline mat4 co_intrinsic_rot(float yaw, float pitch, float roll)
+__forceinline mat4 intrinsic_rot(float yaw, float pitch, float roll)
 {
 	float cos_yaw	= cosf(yaw * DEGREES_TO_RADIANS);
 	float cos_pitch = cosf(pitch * DEGREES_TO_RADIANS);
@@ -485,35 +433,15 @@ __forceinline mat4 co_intrinsic_rot(float yaw, float pitch, float roll)
 	float sin_roll	= sinf(roll * DEGREES_TO_RADIANS);
 
 	return mat4{ {
-		cos_yaw * cos_pitch, cos_yaw * sin_pitch * sin_roll - sin_yaw * cos_roll, cos_yaw * sin_pitch * cos_roll + sin_yaw * sin_roll, 0.0f,
-		sin_yaw * cos_pitch, sin_yaw * sin_pitch * sin_roll + cos_yaw * cos_roll, sin_yaw * sin_pitch * cos_roll - cos_yaw * sin_roll, 0.0f,
-		-sin_pitch, cos_pitch * sin_roll, cos_pitch * cos_roll, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f
-	} };
-}
-
-/* creates a 4 dimension intrinsic rotation matrix from yaw, pitch and roll angle. */
-__forceinline mat4 ro_intrinsic_rot(float yaw, float pitch, float roll)
-{
-	float cos_yaw = cosf(-yaw * DEGREES_TO_RADIANS);
-	float cos_pitch = cosf(-pitch * DEGREES_TO_RADIANS);
-	float cos_roll = cosf(-roll * DEGREES_TO_RADIANS);
-
-
-	float sin_yaw = sinf(-yaw * DEGREES_TO_RADIANS);
-	float sin_pitch = sinf(-pitch * DEGREES_TO_RADIANS);
-	float sin_roll = sinf(-roll * DEGREES_TO_RADIANS);
-
-	return mat4{ {
-		cos_yaw * cos_pitch, cos_yaw * sin_pitch * sin_roll - sin_yaw * cos_roll, cos_yaw * sin_pitch * cos_roll + sin_yaw * sin_roll, 0.0f,
-		sin_yaw * cos_pitch, sin_yaw * sin_pitch * sin_roll + cos_yaw * cos_roll, sin_yaw * sin_pitch * cos_roll - cos_yaw * sin_roll, 0.0f,
-		-sin_pitch, cos_pitch * sin_roll, cos_pitch * cos_roll, 0.0f,
+		cos_roll * cos_pitch, cos_roll * sin_pitch * sin_yaw - sin_roll * cos_yaw, cos_roll * sin_pitch * cos_yaw + sin_roll * sin_yaw, 0.0f,
+		sin_roll * cos_pitch, sin_roll * sin_pitch * sin_yaw + cos_roll * cos_yaw, sin_roll * sin_pitch * cos_yaw - cos_roll * sin_yaw, 0.0f,
+		-sin_pitch, cos_pitch * sin_yaw, cos_pitch * cos_yaw, 0.0f,
 		0.0f, 0.0f, 0.0f, 1.0f
 	} };
 }
 
 /* creates a 4 dimension extrensic rotation matrix from yaw, pitch and roll angle. */
-__forceinline mat4 co_extrinsic_rot(float yaw, float pitch, float roll)
+__forceinline mat4 extrinsic_rot(float yaw, float pitch, float roll)
 {
 	float cos_yaw	= cosf(yaw * DEGREES_TO_RADIANS);
 	float cos_pitch = cosf(pitch * DEGREES_TO_RADIANS);
@@ -525,78 +453,49 @@ __forceinline mat4 co_extrinsic_rot(float yaw, float pitch, float roll)
 	float sin_roll	= sinf(roll * DEGREES_TO_RADIANS);
 
 	return mat4{ {
-		cos_pitch * cos_yaw, sin_roll * sin_pitch * cos_yaw - cos_roll * sin_yaw, cos_roll * sin_pitch * cos_yaw + sin_roll * sin_yaw, 0.0f,
-		cos_pitch * sin_yaw, sin_roll * sin_pitch * sin_yaw + cos_roll * cos_yaw, cos_roll * sin_pitch * sin_yaw - sin_roll * cos_yaw, 0.0f,
-		-sin_pitch, sin_roll * cos_pitch, cos_roll * cos_pitch, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f
-	} };
-}
-
-/* creates a 4 dimension extrensic rotation matrix from yaw, pitch and roll angle. */
-__forceinline mat4 ro_extrinsic_rot(float yaw, float pitch, float roll)
-{
-	float cos_yaw = cosf(-yaw * DEGREES_TO_RADIANS);
-	float cos_pitch = cosf(-pitch * DEGREES_TO_RADIANS);
-	float cos_roll = cosf(-roll * DEGREES_TO_RADIANS);
-
-
-	float sin_yaw = sinf(-yaw * DEGREES_TO_RADIANS);
-	float sin_pitch = sinf(-pitch * DEGREES_TO_RADIANS);
-	float sin_roll = sinf(-roll * DEGREES_TO_RADIANS);
-
-	return mat4{ {
-		cos_pitch * cos_yaw, sin_roll * sin_pitch * cos_yaw - cos_roll * sin_yaw, cos_roll * sin_pitch * cos_yaw + sin_roll * sin_yaw, 0.0f,
-		cos_pitch * sin_yaw, sin_roll * sin_pitch * sin_yaw + cos_roll * cos_yaw, cos_roll * sin_pitch * sin_yaw - sin_roll * cos_yaw, 0.0f,
-		-sin_pitch, sin_roll * cos_pitch, cos_roll * cos_pitch, 0.0f,
+		cos_pitch * cos_roll, sin_yaw * sin_pitch * cos_roll - cos_yaw * sin_roll, cos_yaw * sin_pitch * cos_roll + sin_yaw * sin_roll, 0.0f,
+		cos_pitch * sin_roll, sin_yaw * sin_pitch * sin_roll + cos_yaw * cos_roll, cos_yaw * sin_pitch * sin_roll - sin_yaw * cos_roll, 0.0f,
+		-sin_pitch, sin_yaw * cos_pitch, cos_yaw * cos_pitch, 0.0f,
 		0.0f, 0.0f, 0.0f, 1.0f
 	} };
 }
 
 /* creates a 4 dimension matrix for perspective projection onto a 2D plane. */
-__forceinline mat4 co_perspective_proj(float width, float height, float fov, float near_plane, float far_plane)
+__forceinline mat4 perspective_proj(float width, float height, float fov, float near_plane, float far_plane)
 {
 	float aspect_ratio = width > height ? width / height : height / width;
+	float tan_half_fov = tanf(fov * 0.5f);
 
 	return mat4{ {
-		1.0f / (aspect_ratio * tanf(fov * DEGREES_TO_RADIANS * 0.5f)), 0.0f, 0.0f, 0.0f,
-		0.0f, 1.0f / (tanf(fov * DEGREES_TO_RADIANS * 0.5f)), 0.0f, 0.0f,
-		0.0f, 0.0f, -(far_plane+ near_plane) / (far_plane - near_plane), (- 2.0f * near_plane * far_plane )/ (far_plane - near_plane),
-		0.0f, 0.0f, -1.0f, 0.0f
-	} };
-}
-
-/* creates a 4 dimension matrix for perspective projection onto a 2D plane. */
-__forceinline mat4 ro_perspective_proj(float width, float height, float fov, float near_plane, float far_plane)
-{
-	float aspect_ratio = width > height ? width / height : height / width;
-
-	return mat4{ {
-		1.0f / (aspect_ratio * tanf(fov * DEGREES_TO_RADIANS * 0.5f)), 0.0f, 0.0f, 0.0f,
-		0.0f, 1.0f / (tanf(fov * DEGREES_TO_RADIANS * 0.5f)), 0.0f, 0.0f,
+		1.0f / (aspect_ratio * tan_half_fov), 0.0f, 0.0f, 0.0f,
+		0.0f, 1.0f / tan_half_fov, 0.0f, 0.0f,
 		0.0f, 0.0f, -(far_plane + near_plane) / (far_plane - near_plane), -1.0f,
 		0.0f, 0.0f, -(near_plane * far_plane) / (far_plane - near_plane), 0.0f
 	} };
 }
 
 /* creates a 4 dimension matrix for orthographic projection onto a 2D plane. */
-__forceinline mat4 co_orthographic_proj(float right, float left, float top, float bottom, float near, float far)
-{
-	return mat4{ {
-		2.0f / (right - left), 0.0f, 0.0f, - (right + left) / (right-left),
-		0.0f, 2.0f/(top - bottom), 0.0f, - (top + bottom) / (top - bottom),
-		0.0f, 0.0f, - 2.0f / (far - near), - (far + near) / (far -  near),
-		0.0f, 0.0f, 0.f, 1.0f
-	} };
-}
-
-/* creates a 4 dimension matrix for orthographic projection onto a 2D plane. */
-__forceinline mat4 ro_orthographic_proj(float right, float left, float top, float bottom, float near, float far)
+__forceinline mat4 orthographic_proj(float right, float left, float top, float bottom, float near, float far)
 {
 	return mat4{ {
 		2.0f / (right - left), 0.0f, 0.0f, 0.0f,
 		0.0f, 2.0f / (top - bottom), 0.0f, 0.0f,
 		0.0f, 0.0f, -2.0f / (far - near), 0.0f,
 		 -(right + left) / (right - left), -(top + bottom) / (top - bottom), -(far + near) / (far - near), 1.0f
+	} };
+}
+
+/* creates a 4 dimension matrix for perspective projection onto a 2D plane. */
+__forceinline mat4 inv_perspective_proj(float width, float height, float fov, float near_plane, float far_plane)
+{
+	float aspect_ratio = width > height ? width / height : height / width;
+	float tan_half_fov = tanf(fov * 0.5f);
+
+	return mat4{ {
+		-(aspect_ratio * tan_half_fov), 0.0f, 0.0f, 0.0f,
+		0.0f, -tan_half_fov, 0.0f, 0.0f,
+		0.0f, 0.0f, (far_plane + near_plane) / (far_plane - near_plane), -1.0f,
+		0.0f, 0.0f, -(near_plane * far_plane) / (far_plane - near_plane), 0.0f
 	} };
 }
 

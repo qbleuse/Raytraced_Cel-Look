@@ -229,11 +229,11 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				vec2 d = inUV * 2.0 - 1.0;
 
 				//for the moment, fixed
-				vec4 origin = view * vec4(0.0,0.0,0.0,1.0);
+				vec4 origin = -view[3];
 				
 				//the targets are on a viewport ahead of us by 3
-				vec4 target = vec4(d.x / proj[0][0], d.y / proj[1][1],1.0,1.0);
-				//target = target/target.w;
+				vec4 target = proj * vec4(d,1.0,1.0);
+				target = target/target.w;
 
 				//creating a direction for our ray
 				vec4 direction = view * vec4(normalize(target.xyz),0.0);
@@ -879,8 +879,12 @@ void RaytraceGPU::Act(struct AppWideContext& AppContext)
 	//
 	//it will change every frame
 	{
-		_RayBuffer.proj = AppContext.proj_mat;
-		_RayBuffer.view = AppContext.view_mat;
+		_RayBuffer.proj = inv_perspective_proj(_CopyScissors.extent.width, _CopyScissors.extent.height, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
+		_RayBuffer.view = transpose(AppContext.view_mat);
+		_RayBuffer.view .x.w = 0.0f;
+		_RayBuffer.view .y.w = 0.0f;
+		_RayBuffer.view .z.w = 0.0f;
+		_RayBuffer.view .w.xyz = AppContext.camera_pos;
 		//_RayMatBuffer.model = scale(_RayObjData.scale.x, _RayObjData.scale.y, _RayObjData.scale.z) * ro_intrinsic_rot(_RayObjData.euler_angles.x, _RayObjData.euler_angles.y, _RayObjData.euler_angles.z) * ro_translate(_RayObjData.pos);
 	}
 	//

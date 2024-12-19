@@ -200,7 +200,7 @@ void BeginDrawUIWindow(const GraphicsAPIManager& GAPI, ScopedLoopArray<class Sce
 
 		if (camera_changed)
 		{
-			AppContext.proj_mat = ro_perspective_proj(GAPI._vk_width, GAPI._vk_height, AppContext.fov * RADIANS_TO_DEGREES, AppContext.near_plane, AppContext.far_plane);
+			AppContext.proj_mat = perspective_proj(GAPI._vk_width, GAPI._vk_height, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
 		}
 		return;
 	}

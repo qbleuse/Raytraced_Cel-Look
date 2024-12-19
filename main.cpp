@@ -69,6 +69,12 @@ void FramePresent(GraphicsAPIManager& GAPI, ImGuiResource& imgui, AppWideContext
 	GAPI._RuntimeHandle._vk_current_frame = (GAPI._RuntimeHandle._vk_current_frame + 1) % (GAPI._nb_vk_frames); // Now we can use the next set of semaphores
 }
 
+void InitAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppContext)
+{
+	AppContext.proj_mat = perspective_proj(static_cast<float>(GAPI._vk_width), static_cast<float>(GAPI._vk_height), AppContext.fov, AppContext.near_plane, AppContext.far_plane);
+	AppContext.view_mat = translate(AppContext.camera_pos) * extrinsic_rot(AppContext.camera_rot.x, -AppContext.camera_rot.y, 0.0f);
+}
+
 void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppContext)
 {
 	//1. Is UI Opened
@@ -172,12 +178,7 @@ void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppCo
 
 		//4. create corresponding view matrix
 
-		AppContext.view_mat = ro_translate(AppContext.camera_pos) * co_yaw(AppContext.camera_rot.x) * co_pitch(AppContext.camera_rot.y);
-
-		//it is faster to put it by hand
-		//AppContext.view_mat[12] = AppContext.camera_pos.x;
-		//AppContext.view_mat[13] = AppContext.camera_pos.y;
-		//AppContext.view_mat[14] = AppContext.camera_pos.z;
+		AppContext.view_mat = translate(AppContext.camera_pos) * extrinsic_rot(AppContext.camera_rot.x, -AppContext.camera_rot.y, 0.0f);
 	}
 
 }
@@ -252,7 +253,8 @@ int main()
 			scenes[i]->Resize(GAPI,GAPI._vk_width,GAPI._vk_height,GAPI._nb_vk_frames);
 		}
 		GAPI.SubmitUpload();
-		AppContext.proj_mat = ro_perspective_proj(static_cast<float>(GAPI._vk_width), static_cast<float>(GAPI._vk_height), AppContext.fov, AppContext.near_plane, AppContext.far_plane);
+
+		InitAppWideContext(GAPI, AppContext);
 
 		while (!glfwWindowShouldClose(GAPI._VulkanWindow))
 		{
@@ -263,7 +265,7 @@ int main()
 			{
 				GAPI.ResizeSwapChain(scenes);
 				ResetImGuiResource(GAPI, imguiResource);
-				AppContext.proj_mat = ro_perspective_proj(GAPI._vk_width, GAPI._vk_height, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
+				InitAppWideContext(GAPI, AppContext);
 				continue;
 			}
 
