@@ -157,6 +157,11 @@ public:
 	virtual void Prepare(class GraphicsAPIManager& GAPI)final;
 
 	/*
+	* Generates spheres in the GPU raytraced sphere as procedural objects.
+	*/
+	void GenerateSpheres(class GraphicsAPIManager& GAPI);
+
+	/*
 	* Allocates the resources associated with window (which can change size during runtime), and deallocate previously allocated resources if needed.
 	* This is expected to be called multiple time, do not put resources that are supposed to be created once in this method.
 	*/

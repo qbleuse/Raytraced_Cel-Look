@@ -528,8 +528,77 @@ void RaytraceGPU::PrepareVulkanScripts(GraphicsAPIManager& GAPI, VkShaderModule&
 	CreateVulkanShaders(GAPI._VulkanUploader, FragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_shader, "Raytrace Fullscreen Frag");
 }
 
+void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
+{
+	// basically copy-paste of the CPU raytracing way of creating spheres
+
+
+	MultipleScopedMemory<vec4> spheres{ 29 };
+	MultipleScopedMemory<VkAabbPositionsKHR> AABBs{ 29 };
+
+	//MultipleScopedMemory<VkAccelerationStructureGeometryKHR> geometries{ 29 };
+
+	spheres[0] = vec4( 0.0f, -1000.0f, 0.0f, 1000.0f);//the ground
+	spheres[1] = vec4( 0.0f, 5.0f, 0.0f, 5.0f);//a lambertian diffuse example
+	spheres[2] = vec4( -10.0f, 5.0f, 0.0f, 5.0f);//a dieletric example (this is a glass sphere)
+	spheres[3] = vec4( 10.0f, 5.0f, 0.0f, 5.0f);//a metal example
+
+	//we already have the example material, so further material will start after
+	uint32_t matNb = 4;
+	//we already have example sphere, so further objects will be created after
+	uint32_t sphereNb = 4;
+	//we create sphere at random place with random materials for the demo
+	for (int32_t x = -2; x <= 2; x++)
+	{
+		for (int32_t z = -2; z <= 2; z++)
+		{
+			float radius = 1.0f + randf() * 4.0f;
+			vec3 sphereCenter = vec3{ (static_cast<float>(x) + randf(-1.0f,1.0f)) * 10.0f, 1.5f, (static_cast<float>(z) + randf(-1.0f,1.0f)) * 10.0f };
+
+			spheres[sphereNb] = vec4(sphereCenter.x, sphereCenter.y, sphereCenter.z, radius);
+
+			VkAabbPositionsKHR& aabb = AABBs[sphereNb];
+			aabb.maxX += sphereCenter.x + radius;
+			aabb.maxY += sphereCenter.y + radius;
+			aabb.maxZ += sphereCenter.z + radius;
+			aabb.minX += sphereCenter.x - radius;
+			aabb.minY += sphereCenter.y - radius;
+			aabb.minZ += sphereCenter.z - radius;
+		}
+	}
+
+	VulkanHelper::StaticBufferHandle AABBStaticBuffer;
+	VulkanHelper::CreateStaticBufferHandle(GAPI._VulkanUploader, AABBStaticBuffer, sizeof(VkAabbPositionsKHR) * 29, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+	VulkanHelper::UploadStaticBufferHandle(GAPI._VulkanUploader, AABBStaticBuffer, *AABBs, sizeof(VkAabbPositionsKHR) * 29);
+
+	//they will all use the same buffer so pre create the struct
+	VkAccelerationStructureGeometryKHR aabb{};
+	aabb.sType					= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+	aabb.geometryType			= VK_GEOMETRY_TYPE_AABBS_KHR;
+	aabb.flags					= VK_GEOMETRY_OPAQUE_BIT_KHR;
+	aabb.geometry.aabbs.sType	= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
+	aabb.geometry.aabbs.pNext	= nullptr;
+	aabb.geometry.aabbs.stride	= sizeof(VkAabbPositionsKHR);
+	
+	{
+		//used to get back the GPU adress of buffers
+		VkBufferDeviceAddressInfo addressInfo{};
+		addressInfo.sType	= VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+		addressInfo.buffer	= AABBStaticBuffer._StaticGPUBuffer;
+
+		aabb.geometry.aabbs.data = VkDeviceOrHostAddressConstKHR{ vkGetBufferDeviceAddress(GAPI._VulkanDevice, &addressInfo) };
+	}
+	
+	//to do : create BLAS then TLAS
+
+}
+
+
 void RaytraceGPU::Prepare(class GraphicsAPIManager& GAPI)
 {
+	GenerateSpheres();
+
+
 	//preparing hardware raytracing props
 	{
 		//the shaders needed
