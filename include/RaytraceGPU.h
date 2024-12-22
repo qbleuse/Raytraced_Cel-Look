@@ -61,6 +61,10 @@ private:
 	VulkanHelper::RaytracedGeometry		_RayBottomAS;
 	//the Instance encapsulating the raytraced gemometry (TLAS)
 	VulkanHelper::RaytracedModel		_RayTopAS;
+	//the procedural spheres in the GPU raytracing pipeline format (BLAS)
+	VulkanHelper::RaytracedGeometry		_RaySphereBottomAS;
+	//the Instance encapsulating the raytraced gemometry (TLAS)
+	VulkanHelper::RaytracedModel		_RaySphereTopAS;
 
 	/*
 	* Creates the necessary resources for raytracing with vulkan.
@@ -72,12 +76,12 @@ private:
 	* - the Model
 	* - DescriptorSets Objects for the model's samplers (using Descriptor Pool)
 	*/
-	void PrepareVulkanRaytracingProps(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader);
+	void PrepareVulkanRaytracingProps(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader);
 
 	/*
 	* Compiles the shaders to use in the Raytracing Pipeline Object creation
 	*/
-	void PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader);
+	void PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader);
 
 	//This scene's renderpass, defining what is attached to the pipeline, and what is outputed
 	VkRenderPass				_CopyRenderPass{ VK_NULL_HANDLE };

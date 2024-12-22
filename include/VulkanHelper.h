@@ -77,6 +77,14 @@
 		}\
 	}\
 
+#define VK_GET_BUFFER_ADDRESS(device, type, var_buffer, var) \
+	{\
+		VkBufferDeviceAddressInfo addressInfo{};\
+		addressInfo.sType	= VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;\
+		addressInfo.buffer	= var_buffer;\
+		var = type{ vkGetBufferDeviceAddress(device, &addressInfo) };\
+	}\
+
 
 /* forward def */
 class GraphicsAPIManager;
@@ -307,7 +315,18 @@ namespace VulkanHelper
 		VolatileLoopArray<VkDeviceMemory>				_AccelerationStructureMemory;
 	};
 
+	/* Creates the Accelerations Structure Buffers and objects, and fills the build info, but does not call build.
+	 * /!\ RaytracedGeometry needs to be pre allocated /!\ */
+	bool CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index = 0);
+	/*
+	* Creates and Build Acceleration Structure of all mesh in array, with one Acceleration Structure per mesh.
+	*/
 	bool CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh);
+	/*
+	* Creates and builds Accelerations Structure at index of raytracedGeometry from and array of AABBs. 
+	* /!\ raytraced geometry must be pre allocated /!\
+	*/
+	bool CreateRaytracedProceduralFromAABB(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const MultipleVolatileMemory<VkAabbPositionsKHR>& AABBs, uint32_t nb, uint32_t index = 0);
 	void ClearRaytracedGeometry(const VkDevice& VulkanDevice, RaytracedGeometry& raytracedGeometry);
 
 	/*

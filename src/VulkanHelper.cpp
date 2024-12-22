@@ -1094,6 +1094,55 @@ void VulkanHelper::ClearTexture(const VkDevice& VulkanDevice, Texture& texture)
 
 /* Acceleration Structures */
 
+bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index)
+{
+	//filling the build struct if not already done
+	vkBuildInfo.sType			= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
+	vkBuildInfo.type			= VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;//we are specifying a geometry, this makes it a bottom level
+	vkBuildInfo.pGeometries		= &vkGeometry;
+	vkBuildInfo.geometryCount	= 1;
+	vkBuildInfo.mode			= VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;//we are creating it for the fist (and propably last) time
+	vkBuildInfo.flags			= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+
+	//the size the AS buffer will need to be considering the geometry we've referenced above
+	VkAccelerationStructureBuildSizesInfoKHR buildSize{};
+	buildSize.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkGetAccelerationStructureBuildSizesKHR, VulkanUploader._VulkanDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &vkBuildInfo, &vkBuildRangeInfo.primitiveCount, &buildSize);
+
+	//creating the buffer and memory that will contain our acceleration structure
+	VulkanHelper::CreateVulkanBuffer(VulkanUploader, buildSize.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		raytracedGeometry._AccelerationStructureBuffer[index], raytracedGeometry._AccelerationStructureMemory[index], 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+
+	//setting our newly created buffer to create our acceleration structure object
+	VkAccelerationStructureCreateInfoKHR ASCreateInfo{};
+	ASCreateInfo.sType	= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
+	ASCreateInfo.type	= VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
+	ASCreateInfo.buffer = raytracedGeometry._AccelerationStructureBuffer[index];
+	ASCreateInfo.size	= buildSize.accelerationStructureSize;
+	//creating a new acceleration structure
+	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCreateAccelerationStructureKHR, VulkanUploader._VulkanDevice, &ASCreateInfo, nullptr, &raytracedGeometry._AccelerationStructure[index]);
+
+	//set our new Acceleration Structure Object to be the one receiving the geometry we've specified
+	vkBuildInfo.dstAccelerationStructure = raytracedGeometry._AccelerationStructure[index];
+
+	//to create the acceleration structure, vulkan needs a temporary copy buffer.
+	//fortunately we just have to give it a buffer and it handles everything else
+	VkBuffer scratchBuffer;
+	VkDeviceMemory scratchMemory;
+	VulkanHelper::CreateVulkanBuffer(VulkanUploader, buildSize.buildScratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		scratchBuffer, scratchMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+
+	//get the address of our newly created buffer and give it to our build data
+	VK_GET_BUFFER_ADDRESS(VulkanUploader._VulkanDevice, VkDeviceOrHostAddressKHR, scratchBuffer, vkBuildInfo.scratchData)
+
+	//do not forget to free teh temporary buffer
+	VulkanUploader._ToFreeBuffers.Add(scratchBuffer);
+	VulkanUploader._ToFreeMemory.Add(scratchMemory);
+
+	return true;
+}
+
+
 //creating a bottom level AS for each mesh of model
 bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh)
 {
@@ -1109,11 +1158,6 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 	//used to build the Acceleration structure
 	VkAccelerationStructureGeometryTrianglesDataKHR bottomLevelMeshASData{};
 	bottomLevelMeshASData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-
-	//will be used to create the acceleration structure
-	VkAccelerationStructureCreateInfoKHR ASCreateInfo{};
-	ASCreateInfo.sType	= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
-	ASCreateInfo.type	= VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;
 
 	//Note QB : this makes quite a lot of stack memory allocated, but it would be quite slow to allocate heap memory for this
 
@@ -1166,15 +1210,6 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 		meshAS.flags		= VK_GEOMETRY_OPAQUE_BIT_KHR;
 		meshAS.geometry.triangles = bottomLevelMeshASData;
 
-		//for each triangle geometry description, we want to build
-		VkAccelerationStructureBuildGeometryInfoKHR& meshASBuild = bottomLevelMeshASInfo[i];
-		meshASBuild.sType			= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
-		meshASBuild.type			= VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR;//we are specifying a geometry, this makes it a bottom level
-		meshASBuild.pGeometries		= &meshAS;
-		meshASBuild.geometryCount	= 1;
-		meshASBuild.mode			= VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;//we are creating it for the fist (and propably last) time
-		meshASBuild.flags			= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
-
 		//setting the bounds of our mesh (as when loading from models, the buffer for multiple geometry may have been the same)
 		VkAccelerationStructureBuildRangeInfoKHR& meshASRange = bottomLevelMeshASRangeInfo[i];
 		meshASRange.firstVertex		= iMesh._pos_offset;
@@ -1183,39 +1218,7 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 		meshASRange.transformOffset = 0;
 		bottomLevelMeshASRangeInfoPtr[i] = &meshASRange;
 
-		//the size the AS buffer will need to be considering the geometry we've referenced above
-		VkAccelerationStructureBuildSizesInfoKHR buildSize{};
-		buildSize.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
-		VK_CALL_KHR(VulkanUploader._VulkanDevice, vkGetAccelerationStructureBuildSizesKHR, VulkanUploader._VulkanDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &meshASBuild, &meshASRange.primitiveCount, &buildSize);
-
-		//unfortunately, we cannot use the same memory for all the acceleration structure buffer, as size may defer between acceleration structure
-		VulkanHelper::CreateVulkanBuffer(VulkanUploader, buildSize.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			raytracedGeometry._AccelerationStructureBuffer[i], raytracedGeometry._AccelerationStructureMemory[i], 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
-
-		//setting our newly created buffer to create our acceleration structure object
-		ASCreateInfo.buffer = raytracedGeometry._AccelerationStructureBuffer[i];
-		ASCreateInfo.size	= buildSize.accelerationStructureSize;
-		//creating a new acceleration structure
-		VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCreateAccelerationStructureKHR, VulkanUploader._VulkanDevice, &ASCreateInfo, nullptr, &raytracedGeometry._AccelerationStructure[i]);
-
-		//set our new Acceleration Structure Object to be the one receiving the geometry we've specified
-		meshASBuild.dstAccelerationStructure = raytracedGeometry._AccelerationStructure[i];
-
-		//to create the acceleration structure, vulkan needs a temporary copy buffer.
-		//fortunately we just have to give it a buffer and it handles everything else
-		VkBuffer scratchBuffer;
-		VkDeviceMemory scratchMemory;
-		VulkanHelper::CreateVulkanBuffer(VulkanUploader, buildSize.buildScratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scratchBuffer, scratchMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
-
-		//get the address of our newly created buffer and give it to our build data
-		addressInfo.buffer = scratchBuffer;
-		GPUBufferAddress = vkGetBufferDeviceAddress(VulkanUploader._VulkanDevice, &addressInfo);
-		meshASBuild.scratchData = VkDeviceOrHostAddressKHR{ GPUBufferAddress };
-
-		//do not forget to free teh temporary buffer
-		VulkanUploader._ToFreeBuffers.Add(scratchBuffer);
-		VulkanUploader._ToFreeMemory.Add(scratchMemory);
+		CreateRaytracedGeometry(VulkanUploader, meshAS, meshASRange, raytracedGeometry, bottomLevelMeshASInfo[i], i);
 	}
 
 	//finally, asking to build all of the acceleration structures at once (this is basically a copy command, so it is a defered call)
@@ -1232,6 +1235,53 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 
 	return result == VK_SUCCESS;
 }
+
+bool VulkanHelper::CreateRaytracedProceduralFromAABB(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const MultipleVolatileMemory<VkAabbPositionsKHR>& AABBs, uint32_t nb, uint32_t index)
+{
+	//firstly, creating the AABB GPU Buffer
+	VulkanHelper::StaticBufferHandle AABBStaticBuffer;
+	VulkanHelper::CreateStaticBufferHandle(VulkanUploader, AABBStaticBuffer, sizeof(VkAabbPositionsKHR) * nb, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+	VulkanHelper::UploadStaticBufferHandle(VulkanUploader, AABBStaticBuffer, *AABBs, sizeof(VkAabbPositionsKHR) * nb);
+
+	//they will all use the same buffer so pre create the struct
+	VkAccelerationStructureGeometryKHR aabb{};
+	aabb.sType					= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
+	aabb.geometryType			= VK_GEOMETRY_TYPE_AABBS_KHR;
+	aabb.flags					= VK_GEOMETRY_OPAQUE_BIT_KHR;
+	aabb.geometry.aabbs.sType	= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_AABBS_DATA_KHR;
+	aabb.geometry.aabbs.pNext	= nullptr;
+	aabb.geometry.aabbs.stride	= sizeof(VkAabbPositionsKHR);
+
+	//setting our newly created AABB buffer as data
+	VK_GET_BUFFER_ADDRESS(VulkanUploader._VulkanDevice, VkDeviceOrHostAddressConstKHR, AABBStaticBuffer._StaticGPUBuffer, aabb.geometry.aabbs.data);
+
+	//technically, we're building one at a time, so we only need one
+	VkAccelerationStructureBuildRangeInfoKHR ASRange{};
+	ASRange.firstVertex		= 0;
+	ASRange.primitiveOffset = 0;
+	ASRange.primitiveCount	= nb;
+	ASRange.transformOffset = 0;
+	
+	//we'll let the function fill up our build struct
+	VkAccelerationStructureBuildGeometryInfoKHR AABBBuildInfo{};
+	CreateRaytracedGeometry(VulkanUploader, aabb, ASRange, raytracedGeometry, AABBBuildInfo, index);
+
+	VkAccelerationStructureBuildRangeInfoKHR* rangePtr = &ASRange;
+	//finally, asking to build the acceleration structures (this is basically a copy command, so it is a defered call)
+	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCmdBuildAccelerationStructuresKHR, VulkanUploader._CopyBuffer, 1, &AABBBuildInfo, &rangePtr);
+
+
+	VkMemoryBarrier barrier{};
+	barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	barrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;// making the AS accessible for ...
+	barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR; // shaders
+
+	//layout should change when we go from pipeline doing transfer to frament stage. here it does not really matter because there is pipeline attached.
+	vkCmdPipelineBarrier(VulkanUploader._CopyBuffer, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+
+	return true;
+}
+
 
 void VulkanHelper::ClearRaytracedGeometry(const VkDevice& VulkanDevice, RaytracedGeometry& raytracedGeometry)
 {
