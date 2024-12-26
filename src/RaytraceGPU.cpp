@@ -95,9 +95,9 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 		//create a binding for our colour buffers
 		VkDescriptorSetLayoutBinding colourBackBufferBinding{};
 		colourBackBufferBinding.binding			= 1;
-		colourBackBufferBinding.descriptorType		= VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+		colourBackBufferBinding.descriptorType	= VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 		colourBackBufferBinding.descriptorCount	= 1;
-		colourBackBufferBinding.stageFlags			= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+		colourBackBufferBinding.stageFlags		= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
 		//create a binding for our uniform buffers
 		VkDescriptorSetLayoutBinding uniformBufferBinding{};
@@ -106,10 +106,17 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 		uniformBufferBinding.descriptorCount = 1;
 		uniformBufferBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
 
+		//create a binding for our uniform buffers
+		VkDescriptorSetLayoutBinding sphereBufferBinding{};
+		sphereBufferBinding.binding				= 3;
+		sphereBufferBinding.descriptorType		= VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		sphereBufferBinding.descriptorCount		= 1;
+		sphereBufferBinding.stageFlags			= VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+
 		VkDescriptorSetLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType		= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.bindingCount = 3;
-		VkDescriptorSetLayoutBinding layoutsBinding[3] = {ASLayoutBinding , colourBackBufferBinding, uniformBufferBinding};
+		layoutInfo.bindingCount = 4;
+		VkDescriptorSetLayoutBinding layoutsBinding[4] = {ASLayoutBinding , colourBackBufferBinding, uniformBufferBinding, sphereBufferBinding};
 		layoutInfo.pBindings = layoutsBinding;
 
 		VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI._VulkanDevice, &layoutInfo, nullptr, &_RayDescriptorLayout));
@@ -225,6 +232,7 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				mat4 view;
 				mat4 proj;
 			};
+			layout(binding = 3) uniform spheres { vec4[] sphere; };
 
 			void main()
 			{
@@ -291,7 +299,10 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 
 			void main()
 			{
-				payload = vec3(1.0,0.0,0.0);//vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
+				const vec3 hitPoint = gl_WorldRayOriginEXT + gl_HitTEXT * gl_WorldRayDirectionEXT;
+				vec3 normal = (hitPoint - attribs.xyz) / attribs.w;
+
+				payload = vec3(1.0,1.0,1.0);//vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
 
 			})";
 
@@ -300,12 +311,55 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 		R"(#version 460
 			#extension GL_EXT_ray_tracing : enable
 
+			#define HIT_EPSILON 0.01f
+
 			hitAttributeEXT vec4 attribs;
+			layout(binding = 3) readonly buffer SphereArray { vec4[] Spheres; };
 
 			void main()
 			{
-				reportIntersectionEXT(2.0,0);
-				//payload = vec3(0.1,0.0,0.0);//vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
+				const vec4 sphere = Spheres[gl_PrimitiveID];
+
+				const vec3 ray_to_center	= sphere.xyz - gl_WorldRayOriginEXT;
+				const vec3 direction		= gl_WorldRayDirectionEXT;
+				const float radius			= sphere.w;
+		
+				//information on how the formula works can be found here : https://en.wikipedia.org/wiki/Line%E2%80%93sphere_intersection
+				//this is a basic quadratic equation.
+				//for the used formula here, it is the simplified one from here : https://raytracing.github.io/books/RayTracingInOneWeekend.html#surfacenormalsandmultipleobjects/simplifyingtheray-sphereintersectioncode
+		
+				//in my case, because ray direction are normalized, a == 1, so I'll move it out
+				float a = dot(direction, direction);
+		
+				//h in geometrical terms is the distance from the ray's origin to the sphere's center
+				//projected onto the ray's direction.
+				float h = dot(direction, ray_to_center);
+		
+				//this is basically the squared distance between the ray's origin and the sphere's center
+				//substracted to the sphere's squared radius.
+				float c = dot(ray_to_center, ray_to_center) - (radius * radius);
+		
+				//a == 1 so it is not h^2 - ac but h^2 - c
+				float discriminant = (h * h) - (a * c);
+		
+				//we're not in a complex plane, so sqrt(-1) is impossible
+				if (discriminant <= 0.0f)
+					return;
+		
+				//finding the roots
+				float sqrt_discriminant = sqrt(discriminant);
+		
+				float root_1 = (h + sqrt_discriminant) / (a);
+				float root_2 = (h - sqrt_discriminant) / (a);
+		
+				if (root_1 < HIT_EPSILON && root_2 < HIT_EPSILON)
+					return;
+		
+				//choosing our closest root
+				float distance		= min(root_1,root_2);
+				distance			= distance < HIT_EPSILON ? max(root_1, root_2) : distance;//avoid considering a collision behind the camera
+				attribs = sphere;
+				reportIntersectionEXT(distance,0);
 
 			})";
 
@@ -561,7 +615,7 @@ void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
 
 	//MultipleScopedMemory<VkAccelerationStructureGeometryKHR> geometries{ 29 };
 
-	spheres[0] = vec4( 0.0f, -1000.0f, 0.0f, 1000.0f);//the ground
+	spheres[0] = vec4( 0.0f, 1000.0f, 0.0f, 1000.0f);//the ground
 	spheres[1] = vec4( 0.0f, 5.0f, 0.0f, 5.0f);//a lambertian diffuse example
 	spheres[2] = vec4( -10.0f, 5.0f, 0.0f, 5.0f);//a dieletric example (this is a glass sphere)
 	spheres[3] = vec4( 10.0f, 5.0f, 0.0f, 5.0f);//a metal example
@@ -603,12 +657,15 @@ void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
 		}
 	}
 
+	//creating the sphere's acceleration structure from the aabb
 	_RaySphereBottomAS._AccelerationStructure.Alloc(1);
 	_RaySphereBottomAS._AccelerationStructureBuffer.Alloc(1);
 	_RaySphereBottomAS._AccelerationStructureMemory.Alloc(1);
-	VulkanHelper::CreateRaytracedProceduralFromAABB(GAPI._VulkanUploader, _RaySphereBottomAS, AABBs, 29);
+	VulkanHelper::CreateRaytracedProceduralFromAABB(GAPI._VulkanUploader, _RaySphereAABBBuffer, _RaySphereBottomAS, AABBs, 29);
 	VulkanHelper::UploadRaytracedModelFromGeometry(GAPI._VulkanUploader, _RaySphereTopAS, identity(), _RaySphereBottomAS);
 
+	VulkanHelper::CreateStaticBufferHandle(GAPI._VulkanUploader, _RaySphereBuffer, sizeof(vec4) * 29, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+	VulkanHelper::UploadStaticBufferHandle(GAPI._VulkanUploader, _RaySphereBuffer, *spheres, sizeof(vec4) * 29);
 
 	AABBs.Clear();
 }
@@ -672,11 +729,15 @@ void RaytraceGPU::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI,
 		bufferPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		bufferPoolSize.descriptorCount = 1;
 
+		VkDescriptorPoolSize spherePoolSize{};
+		spherePoolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		spherePoolSize.descriptorCount = 1;
+
 		//creating our descriptor pool to allocate sets for each frame
 		VkDescriptorPoolCreateInfo poolInfo{};
 		poolInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		poolInfo.poolSizeCount	= 3;
-		VkDescriptorPoolSize poolSizes[3] = {ASPoolSize, imagePoolSize, bufferPoolSize};
+		poolInfo.poolSizeCount	= 4;
+		VkDescriptorPoolSize poolSizes[4] = {ASPoolSize, imagePoolSize, bufferPoolSize, spherePoolSize};
 		poolInfo.pPoolSizes		= poolSizes;
 		poolInfo.maxSets		= GAPI._nb_vk_frames;
 
@@ -753,8 +814,23 @@ void RaytraceGPU::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI,
 		descriptorWrite.descriptorCount = 1;
 		descriptorWrite.pBufferInfo		= &bufferInfo;
 
-		VkWriteDescriptorSet descriptorWrites[3] = { ASDescriptorWrite,  imageDescriptorWrite, descriptorWrite };
-		vkUpdateDescriptorSets(GAPI._VulkanDevice, 3, descriptorWrites, 0, nullptr);
+		VkDescriptorBufferInfo sphereInfo{};
+		sphereInfo.buffer	= _RaySphereBuffer._StaticGPUBuffer;
+		sphereInfo.offset	= 0;
+		sphereInfo.range	= sizeof(vec4) * 29;
+
+		//then link it to the descriptor
+		VkWriteDescriptorSet sphereWrite{};
+		sphereWrite.sType				= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		sphereWrite.dstSet				= _RayDescriptorSet[i];
+		sphereWrite.dstBinding			= 3;
+		sphereWrite.dstArrayElement		= 0;
+		sphereWrite.descriptorType		= VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		sphereWrite.descriptorCount		= 1;
+		sphereWrite.pBufferInfo			= &sphereInfo;
+
+		VkWriteDescriptorSet descriptorWrites[4] = { ASDescriptorWrite,  imageDescriptorWrite, descriptorWrite, sphereWrite };
+		vkUpdateDescriptorSets(GAPI._VulkanDevice, 4, descriptorWrites, 0, nullptr);
 	}
 }
 

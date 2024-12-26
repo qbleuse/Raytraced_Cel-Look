@@ -326,7 +326,7 @@ namespace VulkanHelper
 	* Creates and builds Accelerations Structure at index of raytracedGeometry from and array of AABBs. 
 	* /!\ raytraced geometry must be pre allocated /!\
 	*/
-	bool CreateRaytracedProceduralFromAABB(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const MultipleVolatileMemory<VkAabbPositionsKHR>& AABBs, uint32_t nb, uint32_t index = 0);
+	bool CreateRaytracedProceduralFromAABB(Uploader& VulkanUploader, StaticBufferHandle& AABBBuffer, RaytracedGeometry& raytracedGeometry, const MultipleVolatileMemory<VkAabbPositionsKHR>& AABBs, uint32_t nb, uint32_t index = 0);
 	void ClearRaytracedGeometry(const VkDevice& VulkanDevice, RaytracedGeometry& raytracedGeometry);
 
 	/*

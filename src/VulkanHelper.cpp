@@ -1236,10 +1236,9 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 	return result == VK_SUCCESS;
 }
 
-bool VulkanHelper::CreateRaytracedProceduralFromAABB(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const MultipleVolatileMemory<VkAabbPositionsKHR>& AABBs, uint32_t nb, uint32_t index)
+bool VulkanHelper::CreateRaytracedProceduralFromAABB(Uploader& VulkanUploader, StaticBufferHandle& AABBStaticBuffer,  RaytracedGeometry& raytracedGeometry, const MultipleVolatileMemory<VkAabbPositionsKHR>& AABBs, uint32_t nb, uint32_t index)
 {
 	//firstly, creating the AABB GPU Buffer
-	VulkanHelper::StaticBufferHandle AABBStaticBuffer;
 	VulkanHelper::CreateStaticBufferHandle(VulkanUploader, AABBStaticBuffer, sizeof(VkAabbPositionsKHR) * nb, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 	VulkanHelper::UploadStaticBufferHandle(VulkanUploader, AABBStaticBuffer, *AABBs, sizeof(VkAabbPositionsKHR) * nb);
 

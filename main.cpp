@@ -183,8 +183,7 @@ void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppCo
 
 }
 
-int main()
-{
+int main(){
 	//set error callback and init window manager lib
 	glfwSetErrorCallback(glfw_error_callback);
 	if (!glfwInit())
