@@ -113,10 +113,17 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 		sphereBufferBinding.descriptorCount		= 1;
 		sphereBufferBinding.stageFlags			= VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
 
+		//create a binding for our uniform buffers
+		VkDescriptorSetLayoutBinding sphereColourBinding{};
+		sphereColourBinding.binding			= 4;
+		sphereColourBinding.descriptorType	= VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		sphereColourBinding.descriptorCount = 1;
+		sphereColourBinding.stageFlags		= VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+
 		VkDescriptorSetLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType		= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.bindingCount = 4;
-		VkDescriptorSetLayoutBinding layoutsBinding[4] = {ASLayoutBinding , colourBackBufferBinding, uniformBufferBinding, sphereBufferBinding};
+		layoutInfo.bindingCount = 5;
+		VkDescriptorSetLayoutBinding layoutsBinding[5] = {ASLayoutBinding , colourBackBufferBinding, uniformBufferBinding, sphereBufferBinding, sphereColourBinding};
 		layoutInfo.pBindings = layoutsBinding;
 
 		VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI._VulkanDevice, &layoutInfo, nullptr, &_RayDescriptorLayout));
@@ -222,7 +229,15 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 		R"(#version 460
 			#extension GL_EXT_ray_tracing : enable
 
-			layout(location = 0) rayPayloadEXT vec3 payload;
+			struct HitRecord 
+			{
+				float	bHit;//a float that acts as a boolean to know if it hit or missed, also used for padding
+				vec3	hitColor;// the color of the hit object
+				float	hitDistance;// the distance from the ray's origin the hit was recorded
+				vec3	hitNormal;// the normal got from contact with the object
+				
+			};
+			layout(location = 0) rayPayloadEXT HitRecord payload;
 
 			layout(binding = 0) uniform accelerationStructureEXT topLevelAS;
 			layout(binding = 1, rgba32f) uniform image2D image;
@@ -243,33 +258,58 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 
 				vec2 d = inUV * 2.0 - 1.0;
 
-				//for the moment, fixed
-				vec4 origin = -view[3];
-				
-				//the targets are on a viewport ahead of us by 3
-				vec4 target = proj * vec4(d,1.0,1.0);
-				target = target/target.w;
+				vec3 finalColor = vec3(0.0);
 
-				//creating a direction for our ray
-				vec4 direction = view * vec4(normalize(target.xyz),0.0);
+				//for (int j = 0; j < 10; j++)
+				{
 
-				payload = vec3(0.0);
+					//for the moment, fixed
+					vec4 origin = -view[3];
+					
+					//the targets are on a viewport ahead of us by 3
+					vec4 target = proj * vec4(d,1.0,1.0);
+					target = target/target.w;
 
-				//tracing rays
-				traceRayEXT(
-					topLevelAS,//Acceleration structure
-					gl_RayFlagsOpaqueEXT,//opaque flags (definelty don't want it forever)
-					0xff,//cull mask
-					0,0,0,//shader binding table offset, stride, and miss index (as this function can be called from all hit shader)
-					origin.xyz,//our camera's origin
-					0.001,//our collision epsilon
-					direction.xyz,//the direction of our ray
-					10000.0,//the max length of our ray (this could be changed if we added energy conservation rules, I think, but in our case , it is more or less infinity)
-					0
-				);
+					//creating a direction for our ray
+					vec4 direction = view * vec4(normalize(target.xyz),0.0);
+
+					//zero init
+					payload.bHit		= 0;
+					payload.hitColor	= vec3(0.5);
+					payload.hitDistance = 0.0;
+					payload.hitNormal	= vec3(0.0);
+
+					vec3 fragColor = vec3(1.0);
+
+					for (int i = 0; i < 10; i++)
+					{
+						//tracing rays
+						traceRayEXT(
+							topLevelAS,//Acceleration structure
+							gl_RayFlagsOpaqueEXT,//opaque flags (definelty don't want it forever)
+							0xff,//cull mask
+							0,0,0,//shader binding table offset, stride, and miss index (as this function can be called from all hit shader)
+							origin.xyz,//our camera's origin
+							0.001,//our collision epsilon
+							direction.xyz,//the direction of our ray
+							10000.0,//the max length of our ray (this could be changed if we added energy conservation rules, I think, but in our case , it is more or less infinity)
+							0
+						);
+
+						fragColor *= vec3(payload.hitColor);
+
+						if (payload.hitDistance < 0.0 || payload.bHit == 0.0)
+							break;
+
+						origin		+= direction * payload.hitDistance;
+						direction	= vec4(payload.hitNormal,0.0);
+					}
+
+					finalColor = fragColor;
+				}
 				
 				//our recursive call finished, let's write into the image
-				imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(payload,0.0));
+				imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor,0.0));
 
 			})";
 
@@ -278,7 +318,15 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 		R"(#version 460
 			#extension GL_EXT_ray_tracing : enable
 
-			layout(location = 0) rayPayloadInEXT vec3 payload;
+			struct HitRecord 
+			{
+				float	bHit;//a float that acts as a boolean to know if it hit or missed, also used for padding
+				vec3	hitColor;// the color of the hit object
+				float	hitDistance;// the distance from the ray's origin the hit was recorded
+				vec3	hitNormal;// the normal got from contact with the object
+				
+			};
+			layout(location = 0) rayPayloadInEXT HitRecord payload;
 
 			void main()
 			{
@@ -286,7 +334,11 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				vec3 background_color_top = vec3(0.3, 0.7, 1.0);
 
 				float backgroundGradient = 0.5 * (gl_WorldRayDirectionEXT.y + 1.0);
-				payload = background_color_bottom * (1.0 - backgroundGradient) + background_color_top * backgroundGradient;
+
+				payload.bHit = 0.0;
+				payload.hitColor = background_color_bottom * (1.0 - backgroundGradient) + background_color_top * backgroundGradient;
+				payload.hitDistance = 0.0;
+				payload.hitNormal = vec3(0.0);
 			})";
 
 	//define closest hit shader
@@ -294,7 +346,65 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 		R"(#version 460
 			#extension GL_EXT_ray_tracing : enable
 
-			layout(location = 0) rayPayloadInEXT vec3 payload;
+
+			struct HitRecord 
+			{
+				float	bHit;//a float that acts as a boolean to know if it hit or missed, also used for padding
+				vec3	hitColor;// the color of the hit object
+				float	hitDistance;// the distance from the ray's origin the hit was recorded
+				vec3	hitNormal;// the normal got from contact with the object
+				
+			};
+			layout(location = 0) rayPayloadInEXT HitRecord payload;
+
+			uint InitRandomSeed(uint val0, uint val1)
+			{
+				uint v0 = val0, v1 = val1, s0 = 0;
+			
+				for (uint n = 0; n < 16; n++)
+				{
+					s0 += 0x9e3779b9;
+					v0 += ((v1 << 4) + 0xa341316c) ^ (v1 + s0) ^ ((v1 >> 5) + 0xc8013ea4);
+					v1 += ((v0 << 4) + 0xad90777d) ^ (v0 + s0) ^ ((v0 >> 5) + 0x7e95761e);
+				}
+			
+				return v0;
+			}
+
+
+			uint RandomInt(inout uint seed)
+			{
+				// LCG values from Numerical Recipes
+			    return (seed = 1664525 * seed + 1013904223);
+			}
+
+			float RandomFloat(inout uint seed)
+			{
+				//// Float version using bitmask from Numerical Recipes
+				//const uint one = 0x3f800000;
+				//const uint msk = 0x007fffff;
+				//return uintBitsToFloat(one | (msk & (RandomInt(seed) >> 9))) - 1;
+			
+				// Faster version from NVIDIA examples; quality good enough for our use case.
+				return (float(RandomInt(seed) & 0x00FFFFFF) / float(0x01000000));
+			}
+			
+			
+			
+			vec3 RandomInUnitSphere(inout uint seed)
+			{
+				for (;;)
+				{
+					const vec3 p = 2 * vec3(RandomFloat(seed), RandomFloat(seed), RandomFloat(seed)) - 1;
+					if (dot(p, p) < 1)
+					{
+						return p;
+					}
+				}
+			}
+
+
+			layout(binding = 4) readonly buffer SphereArray { vec4[] SphereColour; };
 			hitAttributeEXT vec4 attribs;
 
 			void main()
@@ -302,8 +412,15 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				const vec3 hitPoint = gl_WorldRayOriginEXT + gl_HitTEXT * gl_WorldRayDirectionEXT;
 				vec3 normal = (hitPoint - attribs.xyz) / attribs.w;
 
-				payload = vec3(1.0,1.0,1.0);//vec3(1.0 - attribs.x - attribs.y, attribs.x, attribs.y);
+				uint seed = InitRandomSeed(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y);
 
+				const vec3 rand = RandomInUnitSphere(seed);
+				normal = normalize(normal + rand);
+
+				payload.bHit		= 1.0;
+				payload.hitColor	= SphereColour[gl_PrimitiveID].rgb;
+				payload.hitDistance = gl_HitTEXT;
+				payload.hitNormal	= normal;
 			})";
 
 	//define closest hit shader
@@ -611,14 +728,18 @@ void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
 
 
 	MultipleScopedMemory<vec4> spheres{ 29 };
+	MultipleScopedMemory<vec4> sphereColour{ 29 };
 	MultipleVolatileMemory<VkAabbPositionsKHR> AABBs{ 29 };
 
-	//MultipleScopedMemory<VkAccelerationStructureGeometryKHR> geometries{ 29 };
-
-	spheres[0] = vec4( 0.0f, 1000.0f, 0.0f, 1000.0f);//the ground
+	spheres[0] = vec4( 0.0f, 1010.0f, 0.0f, 1000.0f);//the ground
 	spheres[1] = vec4( 0.0f, 5.0f, 0.0f, 5.0f);//a lambertian diffuse example
 	spheres[2] = vec4( -10.0f, 5.0f, 0.0f, 5.0f);//a dieletric example (this is a glass sphere)
 	spheres[3] = vec4( 10.0f, 5.0f, 0.0f, 5.0f);//a metal example
+
+	sphereColour[0] = vec4{ 0.5f,0.5f,0.5f, 1.0f };//the ground material
+	sphereColour[1] = vec4{ 0.4f, 0.2f, 0.1f, 1.0f };//a lambertian diffuse example
+	sphereColour[2] = vec4{ 1.0f,1.0f,1.0f, 1.50f };//a dieletric example (this is a glass sphere)
+	sphereColour[3] = vec4{ 0.7f, 0.6f, 0.5f, 1.0f };//a metal example
 
 	//we already have the example material, so further material will start after
 	uint32_t matNb = 4;
@@ -647,6 +768,8 @@ void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
 
 			spheres[sphereNb] = vec4(sphereCenter.x, sphereCenter.y, sphereCenter.z, radius);
 
+			sphereColour[sphereNb] = vec4{ randf(), randf() , randf(), 0.0f };
+
 			VkAabbPositionsKHR& aabb = AABBs[sphereNb];
 			aabb.maxX = sphereCenter.x + radius;
 			aabb.maxY = sphereCenter.y + radius;
@@ -666,6 +789,10 @@ void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
 
 	VulkanHelper::CreateStaticBufferHandle(GAPI._VulkanUploader, _RaySphereBuffer, sizeof(vec4) * 29, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 	VulkanHelper::UploadStaticBufferHandle(GAPI._VulkanUploader, _RaySphereBuffer, *spheres, sizeof(vec4) * 29);
+
+
+	VulkanHelper::CreateStaticBufferHandle(GAPI._VulkanUploader, _RaySphereColour, sizeof(vec4) * 29, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+	VulkanHelper::UploadStaticBufferHandle(GAPI._VulkanUploader, _RaySphereColour, *sphereColour, sizeof(vec4) * 29);
 
 	AABBs.Clear();
 }
@@ -736,8 +863,8 @@ void RaytraceGPU::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI,
 		//creating our descriptor pool to allocate sets for each frame
 		VkDescriptorPoolCreateInfo poolInfo{};
 		poolInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		poolInfo.poolSizeCount	= 4;
-		VkDescriptorPoolSize poolSizes[4] = {ASPoolSize, imagePoolSize, bufferPoolSize, spherePoolSize};
+		poolInfo.poolSizeCount	= 5;
+		VkDescriptorPoolSize poolSizes[5] = {ASPoolSize, imagePoolSize, bufferPoolSize, spherePoolSize, spherePoolSize};
 		poolInfo.pPoolSizes		= poolSizes;
 		poolInfo.maxSets		= GAPI._nb_vk_frames;
 
@@ -829,8 +956,23 @@ void RaytraceGPU::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI,
 		sphereWrite.descriptorCount		= 1;
 		sphereWrite.pBufferInfo			= &sphereInfo;
 
-		VkWriteDescriptorSet descriptorWrites[4] = { ASDescriptorWrite,  imageDescriptorWrite, descriptorWrite, sphereWrite };
-		vkUpdateDescriptorSets(GAPI._VulkanDevice, 4, descriptorWrites, 0, nullptr);
+		VkDescriptorBufferInfo sphereColourInfo{};
+		sphereColourInfo.buffer = _RaySphereColour._StaticGPUBuffer;
+		sphereColourInfo.offset = 0;
+		sphereColourInfo.range = sizeof(vec4) * 29;
+
+		//then link it to the descriptor
+		VkWriteDescriptorSet sphereColourWrite{};
+		sphereColourWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		sphereColourWrite.dstSet = _RayDescriptorSet[i];
+		sphereColourWrite.dstBinding = 4;
+		sphereColourWrite.dstArrayElement = 0;
+		sphereColourWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		sphereColourWrite.descriptorCount = 1;
+		sphereColourWrite.pBufferInfo = &sphereColourInfo;
+
+		VkWriteDescriptorSet descriptorWrites[5] = { ASDescriptorWrite,  imageDescriptorWrite, descriptorWrite, sphereWrite, sphereColourWrite };
+		vkUpdateDescriptorSets(GAPI._VulkanDevice, 5, descriptorWrites, 0, nullptr);
 	}
 }
 

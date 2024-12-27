@@ -66,6 +66,8 @@ private:
 	VulkanHelper::StaticBufferHandle	_RaySphereAABBBuffer;
 	//the buffer containing the sphere's instances
 	VulkanHelper::StaticBufferHandle	_RaySphereBuffer;
+	//the buffer containing the sphere's material
+	VulkanHelper::StaticBufferHandle	_RaySphereColour;
 	//the procedural spheres in the GPU raytracing pipeline format (BLAS)
 	VulkanHelper::RaytracedGeometry		_RaySphereBottomAS;
 	//the Instance encapsulating the raytraced gemometry (TLAS)

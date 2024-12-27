@@ -237,11 +237,11 @@ int main(){
 		//resources for main loop
 		AppWideContext AppContext;
 		AppContext.threadPool.MakeThreads(std::thread::hardware_concurrency() - 1);
-		ScopedLoopArray<Scene*> scenes(3);
+		ScopedLoopArray<Scene*> scenes(4);
 		scenes[0] = new RasterTriangle();
 		scenes[1] = new RasterObject();
-		//scenes[2] = new RaytraceCPU();
-		scenes[2] = new RaytraceGPU();
+		scenes[2] = new RaytraceCPU();
+		scenes[3] = new RaytraceGPU();
 
 
 		//init our scenes

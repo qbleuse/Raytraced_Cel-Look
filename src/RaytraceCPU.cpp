@@ -541,10 +541,12 @@ void RaytraceCPU::DispatchSceneRay(AppWideContext& AppContext)
 	float viewportWidth			= viewportHeight * (windowWidth / windowHeight);
 	const vec3& cameraCenter	= AppContext.view_mat.vector[3].xyz;
 
+	mat4 viewMat = transpose(AppContext.view_mat);
+
 	//The ray generation sample vectors
-	vec3 viewportU = AppContext.view_mat.vector[0].xyz * viewportWidth;
-	vec3 viewportV = AppContext.view_mat.vector[1].xyz * -viewportHeight;
-	vec3 viewportW = AppContext.view_mat.vector[2].xyz;
+	vec3 viewportU = viewMat.vector[0].xyz * viewportWidth;
+	vec3 viewportV = viewMat.vector[1].xyz * -viewportHeight;
+	vec3 viewportW = viewMat.vector[2].xyz;
 	vec3 pixelDeltaU = viewportU / windowWidth;
 	vec3 pixelDeltaV = viewportV / windowHeight;
 
