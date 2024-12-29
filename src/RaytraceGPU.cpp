@@ -22,7 +22,7 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _RayModel._Meshes);
 
 	//create Top level AS from geometry with identity matrix
-	VulkanHelper::UploadRaytracedModelFromGeometry(GAPI._VulkanUploader, _RayTopAS, identity(), _RayBottomAS);
+	VulkanHelper::UploadRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RayTopAS, identity(), _RayBottomAS);
 
 	/*===== DESCRIBE SHADER STAGE AND GROUPS =====*/
 
@@ -190,7 +190,7 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 		_RayShaderBindingAddress[2].size	= startSizeAligned;
 
 		//creating a GPU buffer for the Shader Binding Table
-		VulkanHelper::CreateVulkanBuffer(GAPI._VulkanUploader, 3 * startSizeAligned, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+		VulkanHelper::CreateVulkanBufferAndMemory(GAPI._VulkanUploader, 3 * startSizeAligned, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _RayShaderBindingBuffer, _RayShaderBindingMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 
 		//get back handle from shader group created in pipeline
@@ -731,10 +731,10 @@ void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
 	MultipleScopedMemory<vec4> sphereColour{ 29 };
 	MultipleVolatileMemory<VkAabbPositionsKHR> AABBs{ 29 };
 
-	spheres[0] = vec4( 0.0f, 1010.0f, 0.0f, 1000.0f);//the ground
-	spheres[1] = vec4( 0.0f, 5.0f, 0.0f, 5.0f);//a lambertian diffuse example
-	spheres[2] = vec4( -10.0f, 5.0f, 0.0f, 5.0f);//a dieletric example (this is a glass sphere)
-	spheres[3] = vec4( 10.0f, 5.0f, 0.0f, 5.0f);//a metal example
+	spheres[0] = vec4( 0.0f, 1000.0f, 0.0f, 1000.0f);//the ground
+	spheres[1] = vec4( 0.0f, -5.0f, 0.0f, 5.0f);//a lambertian diffuse example
+	spheres[2] = vec4( -10.0f, -5.0f, 0.0f, 5.0f);//a dieletric example (this is a glass sphere)
+	spheres[3] = vec4( 10.0f, -5.0f, 0.0f, 5.0f);//a metal example
 
 	sphereColour[0] = vec4{ 0.5f,0.5f,0.5f, 1.0f };//the ground material
 	sphereColour[1] = vec4{ 0.4f, 0.2f, 0.1f, 1.0f };//a lambertian diffuse example
@@ -763,8 +763,8 @@ void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
 	{
 		for (int32_t z = -2; z <= 2; z++, sphereNb++)
 		{
-			float radius = 1.0f + randf() * 4.0f;
-			vec3 sphereCenter = vec3{ (static_cast<float>(x) + randf(-1.0f,1.0f)) * 10.0f, 1.5f, (static_cast<float>(z) + randf(-1.0f,1.0f)) * 10.0f };
+			float radius = 1.0f + randf() * 1.0f;
+			vec3 sphereCenter = vec3{ (static_cast<float>(x) + randf(-1.0f,1.0f)) * 10.0f, -radius, (static_cast<float>(z) + randf(-1.0f,1.0f)) * 10.0f };
 
 			spheres[sphereNb] = vec4(sphereCenter.x, sphereCenter.y, sphereCenter.z, radius);
 
@@ -785,7 +785,7 @@ void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
 	_RaySphereBottomAS._AccelerationStructureBuffer.Alloc(1);
 	_RaySphereBottomAS._AccelerationStructureMemory.Alloc(1);
 	VulkanHelper::CreateRaytracedProceduralFromAABB(GAPI._VulkanUploader, _RaySphereAABBBuffer, _RaySphereBottomAS, AABBs, 29);
-	VulkanHelper::UploadRaytracedModelFromGeometry(GAPI._VulkanUploader, _RaySphereTopAS, identity(), _RaySphereBottomAS);
+	VulkanHelper::UploadRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RaySphereTopAS, identity(), _RaySphereBottomAS);
 
 	VulkanHelper::CreateStaticBufferHandle(GAPI._VulkanUploader, _RaySphereBuffer, sizeof(vec4) * 29, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 	VulkanHelper::UploadStaticBufferHandle(GAPI._VulkanUploader, _RaySphereBuffer, *spheres, sizeof(vec4) * 29);
@@ -1229,52 +1229,24 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 		VK_CALL_PRINT(vkBeginCommandBuffer(commandBuffer, &info));
 
 	}
-	
-	// changing the back buffer to be able to being written by pipeline
-	VkImageMemoryBarrier barrier{};
-	barrier.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	barrier.oldLayout			= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;//from nothing
-	barrier.newLayout			= VK_IMAGE_LAYOUT_GENERAL;//to transfer dest
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
-	barrier.image				= _RayWriteImage[GAPIHandle._vk_current_frame];
-	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	barrier.subresourceRange.baseMipLevel = 0;
-	barrier.subresourceRange.levelCount = 1;
-	barrier.subresourceRange.baseArrayLayer = 0;
-	barrier.subresourceRange.layerCount = 1;
-	barrier.srcAccessMask = VK_ACCESS_NONE;// making the image accessible for ...
-	barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT; // shaders
 
 	//the buffer will change every frame as the object rotates every frame
 	memcpy(_RayUniformBuffer._CPUMemoryHandle[GAPIHandle._vk_current_frame], (void*)&_RayBuffer, sizeof(mat4) * 3);
 
-	//layout should change when we go from pipeline doing transfer to frament stage. here it does not really matter because there is pipeline attached.
-	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+	// changing the back buffer to be able to being written by pipeline
+	VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayWriteImage[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT,
+		VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _RayPipeline);
 	//binding an available uniform buffer (current frame and frame index may be different, as we can ask for redraw multiple times while the frame is not presenting)
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _RayLayout, 0, 1, &_RayDescriptorSet[GAPIHandle._vk_current_frame], 0, nullptr);
 
-
 	VkStridedDeviceAddressRegionKHR tmp{};
 	VK_CALL_KHR(GAPIHandle._VulkanDevice, vkCmdTraceRaysKHR, commandBuffer, &_RayShaderBindingAddress[0], &_RayShaderBindingAddress[1], &_RayShaderBindingAddress[2], &tmp, _CopyScissors.extent.width, _CopyScissors.extent.height, 1);
 
-	barrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;//from nothing
-	barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;//to transfer dest
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
-	barrier.image = _RayWriteImage[GAPIHandle._vk_current_frame];
-	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	barrier.subresourceRange.baseMipLevel = 0;
-	barrier.subresourceRange.levelCount = 1;
-	barrier.subresourceRange.baseArrayLayer = 0;
-	barrier.subresourceRange.layerCount = 1;
-	barrier.srcAccessMask = VK_ACCESS_NONE;// making the image accessible for ...
-	barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT; // shaders
-
 	//allowing copy from write iamge to framebuffer
-	vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+	VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayWriteImage[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
+		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL);
 
 	//begin render pass onto whole screen
 	{

@@ -398,7 +398,7 @@ void RaytraceCPU::ResizeVulkanResource(GraphicsAPIManager& GAPI, int32_t width, 
 	{
 		//allocate memory for buffer
 		{
-			VulkanHelper::CreateVulkanBuffer(GAPI._VulkanUploader, bufferSize * static_cast<VkDeviceSize>(GAPI._nb_vk_frames), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _ImageCopyBuffer[0], _ImageCopyMemory, 0, true);
+			VulkanHelper::CreateVulkanBufferAndMemory(GAPI._VulkanUploader, bufferSize * static_cast<VkDeviceSize>(GAPI._nb_vk_frames), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _ImageCopyBuffer[0], _ImageCopyMemory, 0, true);
 			
 			VkMemoryRequirements memRequirements;
 			vkGetBufferMemoryRequirements(GAPI._VulkanDevice, _ImageCopyBuffer[0], &memRequirements);
@@ -463,7 +463,7 @@ void RaytraceCPU::ResizeVulkanResource(GraphicsAPIManager& GAPI, int32_t width, 
 		VK_CALL_PRINT(vkCreateFramebuffer(GAPI._VulkanDevice, &framebufferInfo, nullptr, &_FullScreenOutput[i]))
 
 		//create the buffer object that will be used to copy from CPU to GPU
-		VulkanHelper::CreateVulkanBuffer(GAPI._VulkanUploader, _ImageCopyBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _ImageCopyBuffer[i], _ImageCopyMemory, _ImageCopyBufferSize * i, false);
+		VulkanHelper::CreateVulkanBufferAndMemory(GAPI._VulkanUploader, _ImageCopyBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _ImageCopyBuffer[i], _ImageCopyMemory, _ImageCopyBufferSize * i, false);
 
 		//create the image that will be used to write from texture to screen frame buffer
 		VulkanHelper::CreateImage(GAPI._VulkanUploader, _GPULocalImageBuffers[i], _GPULocalImageMemory, _FullScreenScissors.extent.width, _FullScreenScissors.extent.height, 1, VK_IMAGE_TYPE_2D, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, _GPULocalImageBufferSize * i, false);

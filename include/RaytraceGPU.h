@@ -60,7 +60,7 @@ private:
 	//the 3D geometry of the model in the GPU raytracing pipeline format (BLAS)
 	VulkanHelper::RaytracedGeometry		_RayBottomAS;
 	//the Instance encapsulating the raytraced gemometry (TLAS)
-	VulkanHelper::RaytracedModel		_RayTopAS;
+	VulkanHelper::RaytracedGroup		_RayTopAS;
 
 	//the Buffer describing the AABB needed for sphere's procedural geometry
 	VulkanHelper::StaticBufferHandle	_RaySphereAABBBuffer;
@@ -71,7 +71,7 @@ private:
 	//the procedural spheres in the GPU raytracing pipeline format (BLAS)
 	VulkanHelper::RaytracedGeometry		_RaySphereBottomAS;
 	//the Instance encapsulating the raytraced gemometry (TLAS)
-	VulkanHelper::RaytracedModel		_RaySphereTopAS;
+	VulkanHelper::RaytracedGroup		_RaySphereTopAS;
 
 	/*
 	* Creates the necessary resources for raytracing with vulkan.

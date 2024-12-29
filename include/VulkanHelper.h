@@ -142,9 +142,30 @@ namespace VulkanHelper
 
 	bool CreateVulkanShaders(Uploader& VulkanUploader, VkShaderModule& shader, VkShaderStageFlagBits shaderStage, const char* shader_source, const char* shader_name, const char* entry_point = "main");
 
-	/* Buffers */
+	/* Memory */
+
+	/*
+	* Impose a memory barrier onto the commands in the pipeline for this buffer.
+	*
+	* Vulkan being a recent API, it is based ongivving developer the most control of the execution of the commands, and with multithreading in mind.
+	* It is possible to create and submit GPU command multithreadingly and for the GPU to reschedule the commands to get maximum usage.
+	* But it is necessary to synchronise some steps, in a graphics pipeline, this is why mutex exists for CPU threads, Fence for synchronisation of CPU and GPU, and semaphores for GPU commands.
+	* Memory Barrier are used to synchronise use of a resource on the GPU, to help the scheduler know when to use or write a resource.
+	* CQFD ; this is a way to avoid memory concurrency, and to help schedule work.
+	*
+	* - dstAccessMask	: how should the resources should be accessed (read/write/etc), and its visibility
+	* - syncScopeStart	: define the start in the pipeline of our sync scope. sync scope are the scope in which this resource may be accessed a certain way.
+	* - syncScopeEnd	: define the end in the pipeline of our sync scope. sync scope are the scope in which this resource may be accessed a certain way.
+	* - srcAccessMask	: what the previous access mask of the resource must be. useful in the instance of overlapping syncScope.
+	*/
+	void MemorySyncScope(VkCommandBuffer cmdBuffer, VkAccessFlagBits srcAccessMask, VkAccessFlagBits dstAccessMask, VkPipelineStageFlagBits syncScopeStart, VkPipelineStageFlagBits syncScopeEnd);
 
 	uint32_t GetMemoryTypeFromRequirements(const VkMemoryPropertyFlags& wantedMemoryProperties, const VkMemoryRequirements& memoryRequirements, const VkPhysicalDeviceMemoryProperties& memoryProperties);
+
+	/* Allocates GPU memory based on requirements */
+	bool AllocateVulkanMemory(Uploader& VulkanUploader, VkMemoryPropertyFlags properties, const VkMemoryRequirements& requirements, VkDeviceMemory& bufferMemory, VkMemoryAllocateFlags flags = 0);
+
+	/* Buffers */
 
 	/**
 	* A struct in struct of array format used to create the necessary handles and pointers for a glsl shader's "uniform buffer", for each frame in flight.
@@ -159,7 +180,15 @@ namespace VulkanHelper
 	};
 
 	/* Creates a one dimensionnal buffer of any usage and the association between CPU and GPU. if AllocateMemory is set to false, bufferMemory MUST BE VALID ! */
-	bool CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset = 0, bool allocate_memory = true, VkMemoryAllocateFlags flags = 0);
+	bool CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buffer);
+
+
+	/* Allocates memory on GPU dempending on what needsthe buffer given in parameter */
+	bool CreateVulkanBufferMemory(Uploader& VulkanUploader, VkMemoryPropertyFlags properties, const VkBuffer& buffer, VkDeviceMemory& bufferMemory, VkMemoryAllocateFlags flags = 0);
+
+
+	/* Creates a one dimensionnal buffer of any usage and the association between CPU and GPU. if AllocateMemory is set to false, bufferMemory MUST BE VALID ! */
+	bool CreateVulkanBufferAndMemory(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset = 0, bool allocate_memory = true, VkMemoryAllocateFlags flags = 0);
 
 
 	/* Creates all the pointers and handle vulkan needs to create a buffer on the GPU and creates a UniformBufferHandle on the CPU to manage it*/
@@ -181,7 +210,7 @@ namespace VulkanHelper
 
 	/* Creates all the pointers and handle vulkan needs to create a buffer on the GPU and creates a staging buffer to send the data */
 	bool CreateStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, VkDeviceSize size,
-		VkBufferUsageFlags staticBufferUsage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VkMemoryPropertyFlags staticBufferProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		VkBufferUsageFlags staticBufferUsage, VkMemoryPropertyFlags staticBufferProperties = 0, VkMemoryAllocateFlags flags = 0);
 
 	/* sends the data through the staging buffer to the static buffer */
 	bool UploadStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, const void* data, VkDeviceSize size, bool release_staging_buffer = true);
@@ -264,7 +293,31 @@ namespace VulkanHelper
 
 	/* Images */
 
+	/*
+	* Impose a memory barrier onto the commands in the pipeline for this image.
+	* 
+	* Vulkan being a recent API, it is based ongivving developer the most control of the execution of the commands, and with multithreading in mind.
+	* It is possible to create and submit GPU command multithreadingly and for the GPU to reschedule the commands to get maximum usage.
+	* But it is necessary to synchronise some steps, in a graphics pipeline, this is why mutex exists for CPU threads, Fence for synchronisation of CPU and GPU, and semaphores for GPU commands.
+	* Memory Barrier are used to synchronise use of a resource on the GPU, to help the scheduler know when to use or write a resource.
+	* CQFD ; this is a way to avoid memory concurrency, and to help schedule work.
+	* 
+	* - dstImageLayout	: how should the image be used in this scope
+	* - dstAccessMask	: how should the image should be accessed (read/write/etc), and its visibility
+	* - syncScopeStart	: define the start in the pipeline of our sync scope. sync scope are the scope in which this resource may be accessed a certain way.
+	* - syncScopeEnd	: define the end in the pipeline of our sync scope. sync scope are the scope in which this resource may be accessed a certain way.
+	* - srcAccessMask	: what the previous access mask of the resource must be. useful in the instance of overlapping syncScope.
+	* - srcImageLayout	: what the precious image layout must be. must be informed to preverve the content of the image. otherwise leaving as "undefined" will consider content irrelevant (may be used for framebuffers).
+	* - imageRange		: define the range of the content of the image that should be concerned with this barrier. (you may want to put a barrier on a single image of an array)
+	*/
+	void ImageMemoryBarrier(VkCommandBuffer cmdBuffer, const VkImage& image, VkImageLayout dstImageLayout, VkAccessFlagBits dstAccessMask, VkPipelineStageFlagBits syncScopeStart, VkPipelineStageFlagBits syncScopeEnd, 
+		VkAccessFlagBits srcAccessMask = VK_ACCESS_NONE, VkImageLayout srcImageLayout = VK_IMAGE_LAYOUT_UNDEFINED, VkImageSubresourceRange imageRange = { VK_IMAGE_ASPECT_COLOR_BIT , 0, 1, 0, 1});
+
+	/* Allocates memory on GPU dempending on what needs the image given in parameter */
+	bool CreateVulkanImageMemory(Uploader& VulkanUploader, VkMemoryPropertyFlags properties, const VkImage& image, VkDeviceMemory& bufferMemory, VkMemoryAllocateFlags flags = 0);
+	/* creates an image buffer depending on what's given in parameter (no content is being set) */
 	bool CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, VkDeviceMemory& imageMemory, uint32_t width, uint32_t height, uint32_t depth, VkImageType imagetype, VkFormat format, VkImageUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, uint32_t offset = 0u, bool allocate_memory = true);
+	/* uploads the content given in parameter to the device local image buffer's memory*/
 	bool UploadImage(Uploader& VulkanUploader, VkImage& imageToUploadTo, void* image_content, uint32_t width, uint32_t height, uint32_t channels, uint32_t depth = 1);
 
 	/*
@@ -330,19 +383,24 @@ namespace VulkanHelper
 	void ClearRaytracedGeometry(const VkDevice& VulkanDevice, RaytracedGeometry& raytracedGeometry);
 
 	/*
-	* a struct representing a raytraced model.
-	* it exists to be a representation of a model in the GPU Raytraced Pipeline.
-	* In practice, it is a list of Top Level Acceleration Structures, containing reference to multiple Bottom Level AS.
+	* a struct representing a raytraced group.
+	* this the representation of a group of raytraced geometry in the GPU Raytraced Pipeline.
+	* In practice, it is a Top Level Acceleration Structure, containing reference to multiple Bottom Level AS or Top Level AS.
 	*/
-	struct RaytracedModel
+	struct RaytracedGroup
 	{
 		VkAccelerationStructureKHR	_AccelerationStructure;
 		VkBuffer					_AccelerationStructureBuffer;
 		VkDeviceMemory				_AccelerationStructureMemory;
 	};
 
-	bool UploadRaytracedModelFromGeometry(Uploader& VulkanUploader, RaytracedModel& raytracedObject, const mat4& transform, const RaytracedGeometry& geometry, bool isUpdate = false);
-	void ClearRaytracedModel(const VkDevice& VulkanDevice, RaytracedModel& raytracedGeometry);
+	/*
+	* Creates a Raytraced Group from an array of Raytraced Geometry.
+	* Effectively, this creates an instance for each BLAS in each Raytraced Geometry, and groups it in a single TLAS.
+	*/
+	bool UploadRaytracedGroupFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedObject, const mat4& transform, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb, bool isUpdate = false);
+	bool UploadRaytracedGroupFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedObject, const mat4& transform, const RaytracedGeometry& geometry, bool isUpdate = false);
+	void ClearRaytracedGroup(const VkDevice& VulkanDevice, RaytracedGroup& raytracedGeometry);
 
 
 

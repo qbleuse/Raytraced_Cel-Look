@@ -194,33 +194,18 @@ uint32_t VulkanHelper::GetMemoryTypeFromRequirements(const VkMemoryPropertyFlags
 	return 0;
 }
 
-bool VulkanHelper::CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset, bool allocate_memory, VkMemoryAllocateFlags flags)
+bool VulkanHelper::AllocateVulkanMemory(Uploader& VulkanUploader, VkMemoryPropertyFlags properties, const const VkMemoryRequirements& memRequirements, VkDeviceMemory& bufferMemory, VkMemoryAllocateFlags flags)
 {
-	//to know if we succeeded
 	VkResult result = VK_SUCCESS;
 
-	//creating a buffer with info given in parameters
-	VkBufferCreateInfo bufferInfo{};
-	bufferInfo.sType		= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferInfo.size			= size;
-	bufferInfo.usage		= usage;
-	bufferInfo.sharingMode	= VK_SHARING_MODE_EXCLUSIVE;
-
-	VK_CALL_PRINT(vkCreateBuffer(VulkanUploader._VulkanDevice, &bufferInfo, nullptr, &buffer))
-	
-	//now that we have created our buffer object, we need to allocate GPU memory associated with it
-	//first let's get the requirements that the memory should follow (like it needs to be 4 bytes and such)
-	VkMemoryRequirements memRequirements;
-	vkGetBufferMemoryRequirements(VulkanUploader._VulkanDevice, buffer, &memRequirements);
-	if (allocate_memory)
 	{
-		//now that we have reauirements like size we also should choose the type.
+		//we have requirements like size we also should choose the type.
 		//we choose the first type that will go with the properties user asked for 
 		//(using the flags to get the better performing memory type)
 		VkMemoryAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = GetMemoryTypeFromRequirements(properties, memRequirements, VulkanUploader._MemoryProperties);
+		allocInfo.sType				= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize	= AlignUp(memRequirements.size, memRequirements.alignment);//allocate the required size (add a few bytes if a particular alignement is needed)
+		allocInfo.memoryTypeIndex	= GetMemoryTypeFromRequirements(properties, memRequirements, VulkanUploader._MemoryProperties);
 
 		VkMemoryAllocateFlagsInfo flagsInfo{};
 		if (flags != 0)
@@ -233,6 +218,62 @@ bool VulkanHelper::CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize siz
 		VK_CALL_PRINT(vkAllocateMemory(VulkanUploader._VulkanDevice, &allocInfo, nullptr, &bufferMemory))
 	}
 
+	return result == VK_SUCCESS;
+}
+
+
+void VulkanHelper::MemorySyncScope(VkCommandBuffer cmdBuffer, VkAccessFlagBits srcAccessMask, VkAccessFlagBits dstAccessMask, VkPipelineStageFlagBits syncScopeStart, VkPipelineStageFlagBits syncScopeEnd)
+{
+	VkMemoryBarrier barrier{};
+	barrier.sType			= VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	barrier.srcAccessMask	= srcAccessMask;// previous accessibility and visibility
+	barrier.dstAccessMask	= dstAccessMask; // wanted accessibility and visibility
+
+	//put a synchronisation scope where all memory of a certain access mask must change to a different access mask between start and end of scope
+	vkCmdPipelineBarrier(cmdBuffer, syncScopeStart, syncScopeEnd, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+
+}
+
+bool VulkanHelper::CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buffer)
+{
+	//to know if we succeeded
+	VkResult result = VK_SUCCESS;
+
+	//creating a buffer with info given in parameters
+	VkBufferCreateInfo bufferInfo{};
+	bufferInfo.sType		= VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	bufferInfo.size			= size;
+	bufferInfo.usage		= usage;
+	bufferInfo.sharingMode	= VK_SHARING_MODE_EXCLUSIVE;
+
+	VK_CALL_PRINT(vkCreateBuffer(VulkanUploader._VulkanDevice, &bufferInfo, nullptr, &buffer));
+
+	return result == VK_SUCCESS;
+}
+
+bool VulkanHelper::CreateVulkanBufferMemory(Uploader& VulkanUploader, VkMemoryPropertyFlags properties, const VkBuffer& buffer, VkDeviceMemory& bufferMemory, VkMemoryAllocateFlags flags)
+{
+	//first let's get the requirements that the memory should follow (like it needs to be 4 bytes and such)
+	VkMemoryRequirements memRequirements;
+	vkGetBufferMemoryRequirements(VulkanUploader._VulkanDevice, buffer, &memRequirements);
+	//then allocate
+	return AllocateVulkanMemory(VulkanUploader, properties, memRequirements, bufferMemory, flags);
+}
+
+
+bool VulkanHelper::CreateVulkanBufferAndMemory(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset, bool allocate_memory, VkMemoryAllocateFlags flags)
+{
+	//to know if we succeeded
+	VkResult result = VK_SUCCESS;
+	
+	//Creates the Vulkan Buffer
+	CreateVulkanBuffer(VulkanUploader, size, usage, buffer);
+	
+	//now that we have created our buffer object, we need to allocate GPU memory associated with it
+	if (allocate_memory)
+		CreateVulkanBufferMemory(VulkanUploader, properties, buffer, bufferMemory, flags);
+
+	//then link together the buffer "interface" object, and the allcated memory
 	VK_CALL_PRINT(vkBindBufferMemory(VulkanUploader._VulkanDevice, buffer, bufferMemory, offset));
 
 	return result == VK_SUCCESS;
@@ -256,7 +297,7 @@ bool VulkanHelper::CreateUniformBufferHandle(Uploader& VulkanUploader, UniformBu
 	for (uint32_t i = 0; i < bufferNb; i++)
 	{
 		//create the new buffer and associated gpu memory with parameter
-		result = CreateVulkanBuffer(VulkanUploader, size, usage, properties, bufferHandle._GPUBuffer[i], bufferHandle._GPUMemoryHandle[i]) ? VK_SUCCESS : VK_ERROR_UNKNOWN;
+		result = CreateVulkanBufferAndMemory(VulkanUploader, size, usage, properties, bufferHandle._GPUBuffer[i], bufferHandle._GPUMemoryHandle[i]) ? VK_SUCCESS : VK_ERROR_UNKNOWN;
 
 		//link the GPU handlke with the cpu handle if necessary
 		if (map_cpu_memory_handle && result == VK_SUCCESS)
@@ -274,10 +315,10 @@ void VulkanHelper::ClearUniformBufferHandle(const VkDevice& VulkanDevice, Unifor
 }
 
 
-bool VulkanHelper::CreateStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, VkDeviceSize size, VkBufferUsageFlags staticBufferUsage, VkMemoryPropertyFlags staticBufferProperties)
+bool VulkanHelper::CreateStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, VkDeviceSize size, VkBufferUsageFlags staticBufferUsage, VkMemoryPropertyFlags staticBufferProperties, VkMemoryAllocateFlags flags)
 {
-	//creating the static buffer
-	return CreateVulkanBuffer(VulkanUploader, size, staticBufferUsage | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, staticBufferProperties, bufferHandle._StaticGPUBuffer, bufferHandle._StaticGPUMemoryHandle, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+	//creating the static buffer the definition of this implementation of a static buffer, is a device local buffer. tehrefore, it needs at least transfer dst and device local)
+	return CreateVulkanBufferAndMemory(VulkanUploader, size, staticBufferUsage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, staticBufferProperties | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, bufferHandle._StaticGPUBuffer, bufferHandle._StaticGPUMemoryHandle, 0, true, flags);
 }
 
 /* sends the data through the staging buffer to the static buffer */
@@ -291,7 +332,7 @@ bool VulkanHelper::UploadStaticBufferHandle(Uploader& VulkanUploader, StaticBuff
 	//create staging buffer
 	VkBuffer stagingBuffer;
 	VkDeviceMemory stagingGPUMemoryHandle;
-	CreateVulkanBuffer(VulkanUploader, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingGPUMemoryHandle);
+	CreateVulkanBufferAndMemory(VulkanUploader, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingGPUMemoryHandle);
 
 	// first copy the data in the CPU memory allocated by Vulkan for transfer
 	VK_CALL_PRINT(vkMapMemory(VulkanUploader._VulkanDevice, stagingGPUMemoryHandle, 0, size, 0, &CPUHandle));
@@ -477,19 +518,28 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* file_name, 
 
 	// 1. creating and uploading the position buffer
 	StaticBufferHandle posBuffer;
-	CreateStaticBufferHandle(VulkanUploader, posBuffer, sizeof(vec3) * nbVertices);
+	CreateStaticBufferHandle(VulkanUploader, posBuffer, sizeof(vec3) * nbVertices, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT 
+																				| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT 
+																				| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, 
+																				0, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 	UploadStaticBufferHandle(VulkanUploader, posBuffer, (void*)objAttrib.vertices.data(), sizeof(vec3) * nbVertices);
 
 	// 2. creating and uploading the _Indices buffer (same index buffer is used for all of the meshes, but with different offset)
 	StaticBufferHandle indexBuffer;
-	CreateStaticBufferHandle(VulkanUploader, indexBuffer, sizeof(uint32_t)* totalIndexNb, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+	CreateStaticBufferHandle(VulkanUploader, indexBuffer, sizeof(uint32_t)* totalIndexNb, VK_BUFFER_USAGE_INDEX_BUFFER_BIT 
+																						| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT 
+																						| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+																						0, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 	UploadStaticBufferHandle(VulkanUploader, indexBuffer, (void*)*indices, sizeof(uint32_t) * totalIndexNb);
 
 	// 3. creating and uploading the _Uvs buffer
 	StaticBufferHandle uvBuffer;
 	if (hasTexCoords)
 	{
-		CreateStaticBufferHandle(VulkanUploader, uvBuffer, sizeof(vec2) * nbVertices);
+		CreateStaticBufferHandle(VulkanUploader, uvBuffer, sizeof(vec2) * nbVertices, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT 
+																					| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT 
+																					| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+																					0, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 		UploadStaticBufferHandle(VulkanUploader, uvBuffer, (void*)*tex_coords, sizeof(vec2) * nbVertices);
 	}
 
@@ -497,7 +547,10 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* file_name, 
 	StaticBufferHandle normalBuffer;
 	if (hasNormals)
 	{
-		CreateStaticBufferHandle(VulkanUploader, normalBuffer, sizeof(vec3) * nbVertices);
+		CreateStaticBufferHandle(VulkanUploader, normalBuffer, sizeof(vec3) * nbVertices, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT 
+																						| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT 
+																						| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+																						0, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 		UploadStaticBufferHandle(VulkanUploader, normalBuffer, (void*)*_Normals, sizeof(vec3) * nbVertices);
 	}
 
@@ -541,7 +594,7 @@ bool LoadGLTFBuffersInGPU(Uploader& VulkanUploader, const tinygltf::Model& loade
 
 		//we're using a static because it is easier to upload with, but we actually only want to allocate and send data to device memory
 		StaticBufferHandle tmpBufferHandle;
-		noError &= CreateVulkanBuffer(VulkanUploader, buffer.data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+		noError &= CreateVulkanBufferAndMemory(VulkanUploader, buffer.data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tmpBufferHandle._StaticGPUBuffer, tmpBufferHandle._StaticGPUMemoryHandle, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 		noError &= UploadStaticBufferHandle(VulkanUploader, tmpBufferHandle, buffer.data.data(), buffer.data.size());
 
@@ -770,7 +823,7 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 				tinygltf::Accessor&	accessor		= loadedModel.accessors[jPrimitive.indices];
 				tinygltf::BufferView& bufferView	= loadedModel.bufferViews[accessor.bufferView];
 
-				CreateVulkanBuffer(VulkanUploader, (bufferView.byteLength - accessor.byteOffset), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				CreateVulkanBufferAndMemory(VulkanUploader, (bufferView.byteLength - accessor.byteOffset), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Indices, model._BuffersHandle[bufferView.buffer], (bufferView.byteOffset + accessor.byteOffset), false);
 
 				model._Meshes[meshIndex]._indices_nb = accessor.count;
@@ -796,7 +849,7 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 				tinygltf::Accessor& accessor		= loadedModel.accessors[jPrimitive.attributes["POSITION"]];
 				tinygltf::BufferView& bufferView	= loadedModel.bufferViews[accessor.bufferView];
 
-				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Positions, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._pos_offset = accessor.byteOffset + bufferView.byteOffset;
@@ -808,7 +861,7 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 				tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["TEXCOORD_0"]];
 				tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
 
-				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Uvs, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._uv_offset = bufferView.byteOffset + accessor.byteOffset;
@@ -820,7 +873,7 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 				tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["NORMAL"]];
 				tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
 
-				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Normals, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._normal_offset = bufferView.byteOffset + accessor.byteOffset;
@@ -832,7 +885,7 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 				tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["TANGENT"]];
 				tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
 
-				CreateVulkanBuffer(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Tangents, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._tangent_offset = bufferView.byteOffset + accessor.byteOffset;
@@ -869,6 +922,33 @@ void VulkanHelper::ClearModel(const VkDevice& VulkanDevice, Model& model)
 
 /* Images/Textures */
 
+void VulkanHelper::ImageMemoryBarrier(VkCommandBuffer cmdBuffer, const VkImage& image, VkImageLayout dstImageLayout, VkAccessFlagBits dstAccessMask, VkPipelineStageFlagBits syncScopeStart, VkPipelineStageFlagBits syncScopeEnd,
+	VkAccessFlagBits srcAccessMask, VkImageLayout srcImageLayout, VkImageSubresourceRange imageRange)
+{
+	// putting a barrier on this image
+	VkImageMemoryBarrier barrier{};
+	barrier.sType				= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	barrier.oldLayout			= srcImageLayout;//from nothing
+	barrier.newLayout			= dstImageLayout;//to transfer dest
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
+	barrier.image				= image;//the image to put a barrier on
+	barrier.subresourceRange	= imageRange;//what part of the image
+	barrier.srcAccessMask		= srcAccessMask;// the previous access to the memory
+	barrier.dstAccessMask		= dstAccessMask;// the wanted access to the memory
+
+	//put the barrier on the scope wanted
+	vkCmdPipelineBarrier(cmdBuffer, syncScopeStart, syncScopeEnd, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+}
+
+bool VulkanHelper::CreateVulkanImageMemory(Uploader& VulkanUploader, VkMemoryPropertyFlags properties, const VkImage& image, VkDeviceMemory& bufferMemory, VkMemoryAllocateFlags flags)
+{
+	//getting the necessary requirements to create our image
+	VkMemoryRequirements memRequirements;
+	vkGetImageMemoryRequirements(VulkanUploader._VulkanDevice, image, &memRequirements);
+	//then allocating the necessarry space
+	return AllocateVulkanMemory(VulkanUploader, properties, memRequirements, bufferMemory, flags);
+}
 
 bool VulkanHelper::CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, VkDeviceMemory& imageMemory, uint32_t width, uint32_t height, uint32_t depth, VkImageType imagetype, VkFormat format, VkImageUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryProperties, uint32_t offset, bool allocate_memory)
 {
@@ -894,21 +974,9 @@ bool VulkanHelper::CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, V
 
 	VK_CALL_PRINT(vkCreateImage(VulkanUploader._VulkanDevice, &imageInfo, nullptr, &imageToMake));
 
+	//allocates space if necessarry
 	if (allocate_memory)
-	{
-		//getting the necessary requirements to create our image
-		VkMemoryRequirements memRequirements;
-		vkGetImageMemoryRequirements(VulkanUploader._VulkanDevice, imageToMake, &memRequirements);
-
-		//trying to find a matching memory type between what the app wants and the device's limitation.
-		VkMemoryAllocateInfo allocInfo{};
-		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		allocInfo.allocationSize = memRequirements.size;
-		allocInfo.memoryTypeIndex = GetMemoryTypeFromRequirements(memoryProperties, memRequirements, VulkanUploader._MemoryProperties);
-
-		//allocating and associate the memory to our image.
-		VK_CALL_PRINT(vkAllocateMemory(VulkanUploader._VulkanDevice, &allocInfo, nullptr, &imageMemory));
-	}
+		CreateVulkanImageMemory(VulkanUploader, memoryProperties, imageToMake, imageMemory);
 
 	VK_CALL_PRINT(vkBindImageMemory(VulkanUploader._VulkanDevice, imageToMake, imageMemory, offset))
 
@@ -924,31 +992,16 @@ bool VulkanHelper::UploadImage(Uploader& VulkanUploader, VkImage& imageToUploadT
 	// create a staging buffer that can hold the images data
 	VkBuffer tempBuffer;
 	VkDeviceMemory tempMemory;
-	CreateVulkanBuffer(VulkanUploader, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, tempBuffer, tempMemory);
+	CreateVulkanBufferAndMemory(VulkanUploader, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, tempBuffer, tempMemory);
 
 	// first copy the data in the CPU memory allocated by Vulkan for transfer
 	VK_CALL_PRINT(vkMapMemory(VulkanUploader._VulkanDevice, tempMemory, 0, size, 0, &CPUHandle));
 	memcpy(CPUHandle, image_content, size);
 	vkUnmapMemory(VulkanUploader._VulkanDevice, tempMemory);
 
-	// changing the image to allow transfer from buffer
-	VkImageMemoryBarrier barrier{};
-	barrier.sType							= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	barrier.oldLayout						= VK_IMAGE_LAYOUT_UNDEFINED;//from nothing
-	barrier.newLayout						= VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;//to transfer dest
-	barrier.srcQueueFamilyIndex				= VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
-	barrier.dstQueueFamilyIndex				= VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
-	barrier.image							= imageToUploadTo;
-	barrier.subresourceRange.aspectMask		= VK_IMAGE_ASPECT_COLOR_BIT;
-	barrier.subresourceRange.baseMipLevel	= 0;
-	barrier.subresourceRange.levelCount		= 1;
-	barrier.subresourceRange.baseArrayLayer = 0;
-	barrier.subresourceRange.layerCount		= 1;
-	barrier.srcAccessMask					= 0;// making the image accessible to
-	barrier.dstAccessMask					= VK_ACCESS_TRANSFER_WRITE_BIT;// ... resources during TRANSFER WRITE
-
-	//layout should change when we go from pipeline doing nothing to transfer stage
-	vkCmdPipelineBarrier(VulkanUploader._CopyBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+	//make the image transferable to, for the transfer stage 
+	ImageMemoryBarrier(VulkanUploader._CopyBuffer, imageToUploadTo, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT, 
+		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
 
 	// copying from staging buffer to image
 	VkBufferImageCopy copyRegion{};
@@ -1015,12 +1068,6 @@ bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const void* pixels, uin
 	if (pixels == nullptr)
 		return false;
 
-	// create a staging buffer taht can hold the images data
-	VkBuffer tempBuffer;
-	VkDeviceMemory tempMemory;
-
-	CreateVulkanBuffer(VulkanUploader, width * height * vkuFormatElementSize(imageFormat), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, tempBuffer, tempMemory);
-
 	//creating image from stbi info
 	if (!CreateImage(VulkanUploader, texture._Image, texture._ImageMemory, width, height, 1u, VK_IMAGE_TYPE_2D, imageFormat, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT))
 	{
@@ -1033,44 +1080,21 @@ bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const void* pixels, uin
 		return false;
 	}
 
-	// changing the image to allow read from shader
-	VkImageMemoryBarrier barrier{};
-	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;//from nothing
-	barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;//to transfer dest
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
-	barrier.image = texture._Image;
-	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	barrier.subresourceRange.baseMipLevel = 0;
-	barrier.subresourceRange.levelCount = 1;
-	barrier.subresourceRange.baseArrayLayer = 0;
-	barrier.subresourceRange.layerCount = 1;
-	barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;// making the image accessible for ...
-	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT; // shaders
-
-	//layout should change when we go from pipeline doing transfer to frament stage. here it does not really matter because there is pipeline attached.
-	vkCmdPipelineBarrier(VulkanUploader._CopyBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+	//add a memory barrier, that allows for the texture to be read from a shader in the fragment shader
+	ImageMemoryBarrier(VulkanUploader._CopyBuffer, texture._Image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 	//create an image view associated with the created image to make it available in shader
 	VkImageViewCreateInfo viewCreateInfo{};
-	viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	viewCreateInfo.format = imageFormat;
-	viewCreateInfo.image = texture._Image;
-	viewCreateInfo.subresourceRange.layerCount = 1;
-	viewCreateInfo.subresourceRange.levelCount = 1;
-	viewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+	viewCreateInfo.sType						= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	viewCreateInfo.subresourceRange.aspectMask	= VK_IMAGE_ASPECT_COLOR_BIT;
+	viewCreateInfo.format						= imageFormat;
+	viewCreateInfo.image						= texture._Image;
+	viewCreateInfo.subresourceRange.layerCount	= 1;
+	viewCreateInfo.subresourceRange.levelCount	= 1;
+	viewCreateInfo.viewType						= VK_IMAGE_VIEW_TYPE_2D;
 
 	VK_CALL_PRINT(vkCreateImageView(VulkanUploader._VulkanDevice, &viewCreateInfo, nullptr, &texture._ImageView));
-
-	////create a sampler that can be used to sample this texture inside the shader
-	//VkSamplerCreateInfo samplerCreateInfo{};
-	//samplerCreateInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-	//samplerCreateInfo.magFilter = VK_FILTER_LINEAR;
-	//samplerCreateInfo.minFilter = VK_FILTER_LINEAR;
-	//
-	//VK_CALL_PRINT(vkCreateSampler(VulkanUploader._VulkanDevice, &samplerCreateInfo, nullptr, &texture.sampler))
 
 	return result == VK_SUCCESS;
 }
@@ -1110,7 +1134,7 @@ bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAcc
 	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkGetAccelerationStructureBuildSizesKHR, VulkanUploader._VulkanDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &vkBuildInfo, &vkBuildRangeInfo.primitiveCount, &buildSize);
 
 	//creating the buffer and memory that will contain our acceleration structure
-	VulkanHelper::CreateVulkanBuffer(VulkanUploader, buildSize.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+	VulkanHelper::CreateVulkanBufferAndMemory(VulkanUploader, buildSize.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 		raytracedGeometry._AccelerationStructureBuffer[index], raytracedGeometry._AccelerationStructureMemory[index], 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 
 	//setting our newly created buffer to create our acceleration structure object
@@ -1129,7 +1153,7 @@ bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAcc
 	//fortunately we just have to give it a buffer and it handles everything else
 	VkBuffer scratchBuffer;
 	VkDeviceMemory scratchMemory;
-	VulkanHelper::CreateVulkanBuffer(VulkanUploader, buildSize.buildScratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+	VulkanHelper::CreateVulkanBufferAndMemory(VulkanUploader, buildSize.buildScratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 		scratchBuffer, scratchMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 
 	//get the address of our newly created buffer and give it to our build data
@@ -1149,8 +1173,6 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 	//if an error happens...
 	VkResult result = VK_SUCCESS;
 
-	//preparing the struct we'll use in the loop
-
 	//used to get back the GPU adress of buffers
 	VkBufferDeviceAddressInfo addressInfo{};
 	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
@@ -1162,15 +1184,15 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 	//Note QB : this makes quite a lot of stack memory allocated, but it would be quite slow to allocate heap memory for this
 
 	//array for the actual geometry description (in our case triangles)
-	MultipleVolatileMemory<VkAccelerationStructureGeometryKHR>			bottomLevelMeshAS{ (VkAccelerationStructureGeometryKHR*)alloca(sizeof(VkAccelerationStructureGeometryKHR) * mesh.Nb()) };
+	MultipleScopedMemory<VkAccelerationStructureGeometryKHR>			bottomLevelMeshAS{ mesh.Nb() };
 	memset(*bottomLevelMeshAS, 0, sizeof(VkAccelerationStructureGeometryKHR) * mesh.Nb());
 	//array for the build requests (one for each mesh)
-	MultipleVolatileMemory<VkAccelerationStructureBuildGeometryInfoKHR> bottomLevelMeshASInfo{ (VkAccelerationStructureBuildGeometryInfoKHR*)alloca(sizeof(VkAccelerationStructureBuildGeometryInfoKHR) * mesh.Nb()) };
+	MultipleScopedMemory<VkAccelerationStructureBuildGeometryInfoKHR> bottomLevelMeshASInfo{mesh.Nb() };
 	memset(*bottomLevelMeshASInfo, 0, sizeof(VkAccelerationStructureBuildGeometryInfoKHR) * mesh.Nb());
 	//the extent of the buffer of each meshes' geometry
-	MultipleVolatileMemory<VkAccelerationStructureBuildRangeInfoKHR>	bottomLevelMeshASRangeInfo{ (VkAccelerationStructureBuildRangeInfoKHR*)alloca(sizeof(VkAccelerationStructureBuildRangeInfoKHR) * mesh.Nb()) };
+	MultipleScopedMemory<VkAccelerationStructureBuildRangeInfoKHR>	bottomLevelMeshASRangeInfo{mesh.Nb() };
 	memset(*bottomLevelMeshASRangeInfo, 0, sizeof(VkAccelerationStructureBuildRangeInfoKHR) * mesh.Nb());
-	MultipleVolatileMemory<VkAccelerationStructureBuildRangeInfoKHR*>	bottomLevelMeshASRangeInfoPtr{ (VkAccelerationStructureBuildRangeInfoKHR**)alloca(sizeof(VkAccelerationStructureBuildRangeInfoKHR*) * mesh.Nb()) };
+	MultipleScopedMemory<VkAccelerationStructureBuildRangeInfoKHR*>	bottomLevelMeshASRangeInfoPtr{ mesh.Nb() };
 	memset(*bottomLevelMeshASRangeInfo, 0, sizeof(VkAccelerationStructureBuildRangeInfoKHR) * mesh.Nb());
 
 	//allocating buffer and memory beforehand, as there will be one acceleration structure for each mesh
@@ -1224,14 +1246,9 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 	//finally, asking to build all of the acceleration structures at once (this is basically a copy command, so it is a defered call)
 	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCmdBuildAccelerationStructuresKHR, VulkanUploader._CopyBuffer, mesh.Nb(), *bottomLevelMeshASInfo, *bottomLevelMeshASRangeInfoPtr);
 
-
-	VkMemoryBarrier barrier{};
-	barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-	barrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;// making the AS accessible for ...
-	barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR; // shaders
-
-	//layout should change when we go from pipeline doing transfer to frament stage. here it does not really matter because there is pipeline attached.
-	vkCmdPipelineBarrier(VulkanUploader._CopyBuffer, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+	//making the AS accessible
+	MemorySyncScope(VulkanUploader._CopyBuffer, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR, 
+		VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);//basically just changing this memory to be visible, so the scope can be "immediate"
 
 	return result == VK_SUCCESS;
 }
@@ -1239,7 +1256,7 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 bool VulkanHelper::CreateRaytracedProceduralFromAABB(Uploader& VulkanUploader, StaticBufferHandle& AABBStaticBuffer,  RaytracedGeometry& raytracedGeometry, const MultipleVolatileMemory<VkAabbPositionsKHR>& AABBs, uint32_t nb, uint32_t index)
 {
 	//firstly, creating the AABB GPU Buffer
-	VulkanHelper::CreateStaticBufferHandle(VulkanUploader, AABBStaticBuffer, sizeof(VkAabbPositionsKHR) * nb, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
+	VulkanHelper::CreateStaticBufferHandle(VulkanUploader, AABBStaticBuffer, sizeof(VkAabbPositionsKHR) * nb, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 0, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 	VulkanHelper::UploadStaticBufferHandle(VulkanUploader, AABBStaticBuffer, *AABBs, sizeof(VkAabbPositionsKHR) * nb);
 
 	//they will all use the same buffer so pre create the struct
@@ -1269,14 +1286,9 @@ bool VulkanHelper::CreateRaytracedProceduralFromAABB(Uploader& VulkanUploader, S
 	//finally, asking to build the acceleration structures (this is basically a copy command, so it is a defered call)
 	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCmdBuildAccelerationStructuresKHR, VulkanUploader._CopyBuffer, 1, &AABBBuildInfo, &rangePtr);
 
-
-	VkMemoryBarrier barrier{};
-	barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-	barrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR;// making the AS accessible for ...
-	barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR | VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR; // shaders
-
-	//layout should change when we go from pipeline doing transfer to frament stage. here it does not really matter because there is pipeline attached.
-	vkCmdPipelineBarrier(VulkanUploader._CopyBuffer, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+	//making the AS accessible
+	MemorySyncScope(VulkanUploader._CopyBuffer, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+		VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);//basically just changing this memory to be visible, so the scope can be "immediate"
 
 	return true;
 }
@@ -1288,7 +1300,7 @@ void VulkanHelper::ClearRaytracedGeometry(const VkDevice& VulkanDevice, Raytrace
 	VK_CLEAR_ARRAY(raytracedGeometry._AccelerationStructureMemory, raytracedGeometry._AccelerationStructureMemory.Nb(), vkFreeMemory, VulkanDevice);
 }
 
-bool VulkanHelper::UploadRaytracedModelFromGeometry(Uploader& VulkanUploader, RaytracedModel& raytracedModel, const mat4& transform, const RaytracedGeometry& geometry, bool isUpdate)
+bool VulkanHelper::UploadRaytracedGroupFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedModel, const mat4& transform, const RaytracedGeometry& geometry, bool isUpdate)
 {
 	//to record if an error happened
 	VkResult result = VK_SUCCESS;
@@ -1309,7 +1321,7 @@ bool VulkanHelper::UploadRaytracedModelFromGeometry(Uploader& VulkanUploader, Ra
 	VkDeviceMemory	tmpMemory;
 	VkDeviceSize	tmpSize = sizeof(VkAccelerationStructureInstanceKHR) * geometry._AccelerationStructure.Nb();
 	//creating temp buffer
-	VulkanHelper::CreateVulkanBuffer(VulkanUploader, tmpSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+	VulkanHelper::CreateVulkanBufferAndMemory(VulkanUploader, tmpSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
 		tmpBuffer, tmpMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 
 	//the description of the Top level Acceleration Structure
@@ -1385,7 +1397,7 @@ bool VulkanHelper::UploadRaytracedModelFromGeometry(Uploader& VulkanUploader, Ra
 	{
 	
 		//creating our acceleration structure buffer
-		VulkanHelper::CreateVulkanBuffer(VulkanUploader, buildSize.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+		VulkanHelper::CreateVulkanBufferAndMemory(VulkanUploader, buildSize.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
 			raytracedModel._AccelerationStructureBuffer, raytracedModel._AccelerationStructureMemory);
 
 		VkAccelerationStructureCreateInfoKHR instanceASCreateInfo{};
@@ -1407,7 +1419,7 @@ bool VulkanHelper::UploadRaytracedModelFromGeometry(Uploader& VulkanUploader, Ra
 	VkBuffer		scratchBuffer;
 	VkDeviceMemory	scratchMemory;
 	VkDeviceSize	scratchSize = isUpdate ? buildSize.updateScratchSize : buildSize.buildScratchSize;
-	VulkanHelper::CreateVulkanBuffer(VulkanUploader, scratchSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+	VulkanHelper::CreateVulkanBufferAndMemory(VulkanUploader, scratchSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
 		scratchBuffer, scratchMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 
 
@@ -1420,25 +1432,20 @@ bool VulkanHelper::UploadRaytracedModelFromGeometry(Uploader& VulkanUploader, Ra
 
 	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCmdBuildAccelerationStructuresKHR, VulkanUploader._CopyBuffer, 1, &instanceASBuild, &buildRange);
 
-	// changing the back buffer to be able to being written by pipeline
-	VkMemoryBarrier barrier{};
-	barrier.sType	= VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-	barrier.srcAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;// making the AS accessible for ...
-	barrier.dstAccessMask = VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR; // shaders
-
-	//layout should change when we go from pipeline doing transfer to frament stage. here it does not really matter because there is pipeline attached.
-	vkCmdPipelineBarrier(VulkanUploader._CopyBuffer, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+	//making the AS accessible
+	MemorySyncScope(VulkanUploader._CopyBuffer, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+		VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);//basically just changing this memory to be visible, so the scope can be "immediate"
 
 	//deffered clear of all temporary memory
 	VulkanUploader._ToFreeBuffers.Add(scratchBuffer);
 	VulkanUploader._ToFreeMemory.Add(scratchMemory);
-	//VulkanUploader._ToFreeBuffers.Add(tmpBuffer);
-	//VulkanUploader._ToFreeMemory.Add(tmpMemory);
+	VulkanUploader._ToFreeBuffers.Add(tmpBuffer);
+	VulkanUploader._ToFreeMemory.Add(tmpMemory);
 
 	return result == VK_SUCCESS;
 }
 
-void VulkanHelper::ClearRaytracedModel(const VkDevice& VulkanDevice, RaytracedModel& raytracedModel)
+void VulkanHelper::ClearRaytracedGroup(const VkDevice& VulkanDevice, RaytracedGroup& raytracedModel)
 {
 	VK_CALL_KHR(VulkanDevice, vkDestroyAccelerationStructureKHR, VulkanDevice, raytracedModel._AccelerationStructure, nullptr);
 	vkDestroyBuffer(VulkanDevice, raytracedModel._AccelerationStructureBuffer, nullptr);
