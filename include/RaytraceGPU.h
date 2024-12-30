@@ -83,12 +83,12 @@ private:
 	* - the Model
 	* - DescriptorSets Objects for the model's samplers (using Descriptor Pool)
 	*/
-	void PrepareVulkanRaytracingProps(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader);
+	void PrepareVulkanRaytracingProps(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& TriangleHitShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader);
 
 	/*
 	* Compiles the shaders to use in the Raytracing Pipeline Object creation
 	*/
-	void PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader);
+	void PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& TriangleHitShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader);
 
 	//This scene's renderpass, defining what is attached to the pipeline, and what is outputed
 	VkRenderPass				_CopyRenderPass{ VK_NULL_HANDLE };

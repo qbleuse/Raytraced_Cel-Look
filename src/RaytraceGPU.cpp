@@ -9,7 +9,7 @@
 
 /*==== Prepare =====*/
 
-void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader)
+void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& TriangleHitShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader)
 {
 	VkResult result = VK_SUCCESS;
 
@@ -22,16 +22,21 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _RayModel._Meshes);
 
 	//create Top level AS from geometry with identity matrix
-	VulkanHelper::UploadRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RayTopAS, identity(), _RayBottomAS);
-
+	MultipleVolatileMemory<VulkanHelper::RaytracedGeometry*> geometries;
+	geometries.Alloc(2);
+	geometries[0] = &_RayBottomAS;
+	geometries[1] = &_RaySphereBottomAS;
+	uint32_t shaderGroupOffset[2] = { 1, 0 };
+	VulkanHelper::UploadRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RaySphereTopAS, identity(), shaderGroupOffset, nullptr, geometries, 2);
+	geometries.Clear();
 	/*===== DESCRIBE SHADER STAGE AND GROUPS =====*/
 
 	//the shader stages we'll give to the pipeline
-	MultipleVolatileMemory<VkPipelineShaderStageCreateInfo> shaderStages{ static_cast<VkPipelineShaderStageCreateInfo*>(alloca(sizeof(VkPipelineShaderStageCreateInfo) * 4)) };
-	memset(*shaderStages, 0, sizeof(VkPipelineShaderStageCreateInfo) * 4);
+	MultipleVolatileMemory<VkPipelineShaderStageCreateInfo> shaderStages{ static_cast<VkPipelineShaderStageCreateInfo*>(alloca(sizeof(VkPipelineShaderStageCreateInfo) * 5)) };
+	memset(*shaderStages, 0, sizeof(VkPipelineShaderStageCreateInfo) * 5);
 	//the shader groups, to allow the pipeline to create the shader table
-	MultipleVolatileMemory<VkRayTracingShaderGroupCreateInfoKHR> shaderGroups{ static_cast<VkRayTracingShaderGroupCreateInfoKHR*>(alloca(sizeof(VkRayTracingShaderGroupCreateInfoKHR) * 3)) };
-	memset(*shaderGroups, 0, sizeof(VkRayTracingShaderGroupCreateInfoKHR) * 3);
+	MultipleVolatileMemory<VkRayTracingShaderGroupCreateInfoKHR> shaderGroups{ static_cast<VkRayTracingShaderGroupCreateInfoKHR*>(alloca(sizeof(VkRayTracingShaderGroupCreateInfoKHR) * 4)) };
+	memset(*shaderGroups, 0, sizeof(VkRayTracingShaderGroupCreateInfoKHR) * 4);
 
 	//first, we'll describe ray gen
 	shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -52,10 +57,16 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	shaderStages[2].pName = "main";
 
 	//intersect shader for procedural
-	shaderStages[3].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	shaderStages[3].stage = VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
-	shaderStages[3].module = IntersectShader;
-	shaderStages[3].pName = "main";
+	shaderStages[3].sType	= VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shaderStages[3].stage	= VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
+	shaderStages[3].module	= IntersectShader;
+	shaderStages[3].pName	= "main";
+
+	//intersect shader for procedural
+	shaderStages[4].sType	= VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shaderStages[4].stage	= VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+	shaderStages[4].module	= TriangleHitShader;
+	shaderStages[4].pName	= "main";
 
 	//describing our raygen group, it only includes the first shader of our pipeline
 	shaderGroups[0].sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
@@ -81,6 +92,14 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	shaderGroups[2].closestHitShader	= 2;
 	shaderGroups[2].anyHitShader		= VK_SHADER_UNUSED_KHR;
 	shaderGroups[2].intersectionShader	= 3;
+
+	//describing our hit group, it only includes the third shader of our pipeline, as we have not described multiple hits
+	shaderGroups[3].sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+	shaderGroups[3].type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+	shaderGroups[3].generalShader		= VK_SHADER_UNUSED_KHR;
+	shaderGroups[3].closestHitShader	= 4;
+	shaderGroups[3].anyHitShader		= VK_SHADER_UNUSED_KHR;
+	shaderGroups[3].intersectionShader	= VK_SHADER_UNUSED_KHR;
 
 	/*===== PIPELINE ATTACHEMENT =====*/
 
@@ -144,9 +163,9 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	//our raytracing pipeline
 	VkRayTracingPipelineCreateInfoKHR pipelineInfo{};
 	pipelineInfo.sType							= VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
-	pipelineInfo.stageCount						= 4;
+	pipelineInfo.stageCount						= 5;
 	pipelineInfo.pStages						= *shaderStages;
-	pipelineInfo.groupCount						= 3;
+	pipelineInfo.groupCount						= 4;
 	pipelineInfo.pGroups						= *shaderGroups;
 	pipelineInfo.maxPipelineRayRecursionDepth	= 1;//for the moment we'll hardcode the value, we'll see if we'll make it editable
 	pipelineInfo.layout							= _RayLayout;//describe the attachement
@@ -187,15 +206,15 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 
 		//hit shader's aligned stride and size
 		_RayShaderBindingAddress[2].stride	= handleSizeAligned;
-		_RayShaderBindingAddress[2].size	= startSizeAligned;
+		_RayShaderBindingAddress[2].size	= startSizeAligned * 2;
 
 		//creating a GPU buffer for the Shader Binding Table
-		VulkanHelper::CreateVulkanBufferAndMemory(GAPI._VulkanUploader, 3 * startSizeAligned, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+		VulkanHelper::CreateVulkanBufferAndMemory(GAPI._VulkanUploader, 4 * startSizeAligned, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _RayShaderBindingBuffer, _RayShaderBindingMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 
 		//get back handle from shader group created in pipeline
-		MultipleVolatileMemory<uint8_t> shaderGroupHandle{ (uint8_t*)alloca(3 * handleSize) };
-		VK_CALL_KHR( GAPI._VulkanDevice, vkGetRayTracingShaderGroupHandlesKHR, GAPI._VulkanDevice, _RayPipeline, 0, 3, 3 * handleSize, *shaderGroupHandle);
+		MultipleVolatileMemory<uint8_t> shaderGroupHandle{ (uint8_t*)alloca(4 * handleSize) };
+		VK_CALL_KHR( GAPI._VulkanDevice, vkGetRayTracingShaderGroupHandlesKHR, GAPI._VulkanDevice, _RayPipeline, 0, 4, 4 * handleSize, *shaderGroupHandle);
 
 		//mapping memory to buffer
 		uint8_t* CPUSBTBufferMap;
@@ -206,6 +225,7 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 		memcpy(CPUSBTBufferMap, *shaderGroupHandle, handleSize);
 		memcpy(CPUSBTBufferMap + startSizeAligned, *shaderGroupHandle + handleSize, handleSize);
 		memcpy(CPUSBTBufferMap + 2 * startSizeAligned, *shaderGroupHandle + 2 * handleSize, handleSize);
+		memcpy(CPUSBTBufferMap + 3 * startSizeAligned, *shaderGroupHandle + 3 * handleSize, handleSize);
 
 		//unmap and copy
 		vkUnmapMemory(GAPI._VulkanDevice, _RayShaderBindingMemory);
@@ -222,7 +242,7 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	}
 }
 
-void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader)
+void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& TriangleHitShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader)
 {
 	//define ray gen shader
 	const char* ray_gen_shader =
@@ -423,7 +443,87 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				payload.hitNormal	= normal;
 			})";
 
-	//define closest hit shader
+	//define traingle closest hit shader
+	const char* trinagle_closest_hit_shader =
+		R"(#version 460
+			#extension GL_EXT_ray_tracing : enable
+
+
+			struct HitRecord 
+			{
+				float	bHit;//a float that acts as a boolean to know if it hit or missed, also used for padding
+				vec3	hitColor;// the color of the hit object
+				float	hitDistance;// the distance from the ray's origin the hit was recorded
+				vec3	hitNormal;// the normal got from contact with the object
+				
+			};
+			layout(location = 0) rayPayloadInEXT HitRecord payload;
+
+			uint InitRandomSeed(uint val0, uint val1)
+			{
+				uint v0 = val0, v1 = val1, s0 = 0;
+			
+				for (uint n = 0; n < 16; n++)
+				{
+					s0 += 0x9e3779b9;
+					v0 += ((v1 << 4) + 0xa341316c) ^ (v1 + s0) ^ ((v1 >> 5) + 0xc8013ea4);
+					v1 += ((v0 << 4) + 0xad90777d) ^ (v0 + s0) ^ ((v0 >> 5) + 0x7e95761e);
+				}
+			
+				return v0;
+			}
+
+
+			uint RandomInt(inout uint seed)
+			{
+				// LCG values from Numerical Recipes
+			    return (seed = 1664525 * seed + 1013904223);
+			}
+
+			float RandomFloat(inout uint seed)
+			{
+				//// Float version using bitmask from Numerical Recipes
+				//const uint one = 0x3f800000;
+				//const uint msk = 0x007fffff;
+				//return uintBitsToFloat(one | (msk & (RandomInt(seed) >> 9))) - 1;
+			
+				// Faster version from NVIDIA examples; quality good enough for our use case.
+				return (float(RandomInt(seed) & 0x00FFFFFF) / float(0x01000000));
+			}
+			
+			
+			
+			vec3 RandomInUnitSphere(inout uint seed)
+			{
+				for (;;)
+				{
+					const vec3 p = 2 * vec3(RandomFloat(seed), RandomFloat(seed), RandomFloat(seed)) - 1;
+					if (dot(p, p) < 1)
+					{
+						return p;
+					}
+				}
+			}
+
+			hitAttributeEXT vec2 barycentric;
+
+			void main()
+			{
+				const vec3 hitPoint = gl_WorldRayOriginEXT + gl_HitTEXT * gl_WorldRayDirectionEXT;
+				//vec3 normal = (hitPoint - attribs.xyz) / attribs.w;
+
+				uint seed = InitRandomSeed(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y);
+
+				const vec3 rand = RandomInUnitSphere(seed);
+				vec3 normal = normalize(rand);
+
+				payload.bHit		= 1.0;
+				payload.hitColor	= vec3(1.0,1.0,1.0);
+				payload.hitDistance = gl_HitTEXT;
+				payload.hitNormal	= normal;
+			})";
+
+	//define intersect shader
 	const char* intersect_shader =
 		R"(#version 460
 			#extension GL_EXT_ray_tracing : enable
@@ -482,7 +582,8 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 
 	CreateVulkanShaders(GAPI._VulkanUploader, RayGenShader, VK_SHADER_STAGE_RAYGEN_BIT_KHR, ray_gen_shader, "Raytrace GPU RayGen");
 	CreateVulkanShaders(GAPI._VulkanUploader, MissShader, VK_SHADER_STAGE_MISS_BIT_KHR, miss_shader, "Raytrace GPU Miss");
-	CreateVulkanShaders(GAPI._VulkanUploader, HitShader, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, closest_hit_shader, "Raytrace GPU Closest");
+	CreateVulkanShaders(GAPI._VulkanUploader, TriangleHitShader, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, trinagle_closest_hit_shader, "Raytrace GPU Triangle Closest");
+	CreateVulkanShaders(GAPI._VulkanUploader, HitShader, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, closest_hit_shader, "Raytrace GPU Sphere Closest");
 	CreateVulkanShaders(GAPI._VulkanUploader, IntersectShader, VK_SHADER_STAGE_INTERSECTION_BIT_KHR, intersect_shader, "Raytrace GPU Intersect");
 
 }
@@ -785,7 +886,11 @@ void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
 	_RaySphereBottomAS._AccelerationStructureBuffer.Alloc(1);
 	_RaySphereBottomAS._AccelerationStructureMemory.Alloc(1);
 	VulkanHelper::CreateRaytracedProceduralFromAABB(GAPI._VulkanUploader, _RaySphereAABBBuffer, _RaySphereBottomAS, AABBs, 29);
-	VulkanHelper::UploadRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RaySphereTopAS, identity(), _RaySphereBottomAS);
+
+	//MultipleVolatileMemory<VulkanHelper::RaytracedGeometry*> geometries;
+	//geometries.Alloc(1);
+	//geometries[0] = &_RaySphereBottomAS;
+	//VulkanHelper::UploadRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RaySphereTopAS, identity(), nullptr, nullptr, geometries, 1);
 
 	VulkanHelper::CreateStaticBufferHandle(GAPI._VulkanUploader, _RaySphereBuffer, sizeof(vec4) * 29, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
 	VulkanHelper::UploadStaticBufferHandle(GAPI._VulkanUploader, _RaySphereBuffer, *spheres, sizeof(vec4) * 29);
@@ -806,12 +911,12 @@ void RaytraceGPU::Prepare(class GraphicsAPIManager& GAPI)
 	//preparing hardware raytracing props
 	{
 		//the shaders needed
-		VkShaderModule RayGenShader, MissShader, HitShader, IntersectShader;
+		VkShaderModule RayGenShader, MissShader, TriangleHitShader, HitShader, IntersectShader;
 
 		//compile the shaders here...
-		PrepareVulkanRaytracingScripts(GAPI, RayGenShader, MissShader, HitShader, IntersectShader);
+		PrepareVulkanRaytracingScripts(GAPI, RayGenShader, MissShader, TriangleHitShader, HitShader, IntersectShader);
 		//then create the pipeline
-		PrepareVulkanRaytracingProps(GAPI, RayGenShader, MissShader, HitShader, IntersectShader);
+		PrepareVulkanRaytracingProps(GAPI, RayGenShader, MissShader, TriangleHitShader, HitShader, IntersectShader);
 	}
 
 	_RayBuffer.model = identity();

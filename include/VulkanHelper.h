@@ -186,10 +186,11 @@ namespace VulkanHelper
 	/* Allocates memory on GPU dempending on what needsthe buffer given in parameter */
 	bool CreateVulkanBufferMemory(Uploader& VulkanUploader, VkMemoryPropertyFlags properties, const VkBuffer& buffer, VkDeviceMemory& bufferMemory, VkMemoryAllocateFlags flags = 0);
 
-
 	/* Creates a one dimensionnal buffer of any usage and the association between CPU and GPU. if AllocateMemory is set to false, bufferMemory MUST BE VALID ! */
 	bool CreateVulkanBufferAndMemory(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset = 0, bool allocate_memory = true, VkMemoryAllocateFlags flags = 0);
 
+	/* Creates a one dimensional temporary buffer (allocated memory and buffer placed in the ToFree stack of the uploader), and gets the memory address of the buffer */
+	bool CreateTmpBufferAndAddress(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, VkDeviceAddress& tmpBufferAddress, VkMemoryAllocateFlags flags = 0);
 
 	/* Creates all the pointers and handle vulkan needs to create a buffer on the GPU and creates a UniformBufferHandle on the CPU to manage it*/
 	bool CreateUniformBufferHandle(Uploader& VulkanUploader, UniformBufferHandle& bufferHandle, uint32_t bufferNb, VkDeviceSize size,
@@ -397,9 +398,19 @@ namespace VulkanHelper
 	/*
 	* Creates a Raytraced Group from an array of Raytraced Geometry.
 	* Effectively, this creates an instance for each BLAS in each Raytraced Geometry, and groups it in a single TLAS.
+	* 
+	* Each BLAS in a raytraced geometry will be created with the same instance parameters.
+	* Each RaytracedGeometry may have different shaderGroupIndex and customInstanceIndex.
+	* However, they will all share the same transform.
+	* 
+	* - transform				: the mat4 transformation matrix of all the instances in this group
+	* - shaderGroupIndices		: the shader group the associated raytraced geometry should use. should be either nullptr or the same size as nb. defaults to zero if nullptr.
+	* - customInstanceIndices	: the custom Instance Index for each Raytraced Geometry. should be either nullptr or the same size as nb. defaults to zero if nullptr
+	* - geometry				: the array of raytraced geometry to make into instances and group into a single TLAS. should be the size of nb.
+	* - nb						: the nb of raytraced geometry in the geometry array. NOT THE TOTAL NB OF BLAS, JUST THE NUMBER OF RAYTRACED GEOMETRY.
 	*/
-	bool UploadRaytracedGroupFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedObject, const mat4& transform, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb, bool isUpdate = false);
-	bool UploadRaytracedGroupFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedObject, const mat4& transform, const RaytracedGeometry& geometry, bool isUpdate = false);
+	bool UploadRaytracedGroupFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedObject, const mat4& transform, const MultipleVolatileMemory<uint32_t>& shaderGroupIndices, const MultipleVolatileMemory<uint32_t>& customInstanceIndices, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb, bool isUpdate = false);
+	bool CreateInstanceFromGeometry(Uploader& VulkanUploader, VkAccelerationStructureBuildGeometryInfoKHR& instancesInfo, VkAccelerationStructureBuildRangeInfoKHR& instancesRange, const mat4& transform, const MultipleVolatileMemory<uint32_t>& shaderGroupIndices, const MultipleVolatileMemory<uint32_t>& customInstanceIndices, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb);
 	void ClearRaytracedGroup(const VkDevice& VulkanDevice, RaytracedGroup& raytracedGeometry);
 
 
