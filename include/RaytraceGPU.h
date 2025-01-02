@@ -63,11 +63,13 @@ private:
 	VulkanHelper::RaytracedGroup		_RayTopAS;
 
 	//the Buffer describing the AABB needed for sphere's procedural geometry
-	VulkanHelper::StaticBufferHandle	_RaySphereAABBBuffer;
+	MultipleScopedMemory<VulkanHelper::StaticBufferHandle>	_RaySphereAABBBuffer;
 	//the buffer containing the sphere's instances
 	VulkanHelper::StaticBufferHandle	_RaySphereBuffer;
 	//the buffer containing the sphere's material
 	VulkanHelper::StaticBufferHandle	_RaySphereColour;
+	//the buffer containing the sphere's offset to read the buffer's above
+	VulkanHelper::StaticBufferHandle	_RaySphereOffsets;
 	//the procedural spheres in the GPU raytracing pipeline format (BLAS)
 	VulkanHelper::RaytracedGeometry		_RaySphereBottomAS;
 	//the Instance encapsulating the raytraced gemometry (TLAS)
@@ -83,12 +85,12 @@ private:
 	* - the Model
 	* - DescriptorSets Objects for the model's samplers (using Descriptor Pool)
 	*/
-	void PrepareVulkanRaytracingProps(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& TriangleHitShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader);
+	void PrepareVulkanRaytracingProps(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& TriangleHitShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader, VkShaderModule& DiffuseShader, VkShaderModule& MetalShader, VkShaderModule& Dieletrics);
 
 	/*
 	* Compiles the shaders to use in the Raytracing Pipeline Object creation
 	*/
-	void PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& TriangleHitShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader);
+	void PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& TriangleHitShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader, VkShaderModule& DiffuseShader, VkShaderModule& MetalShader, VkShaderModule& Dieletrics);
 
 	//This scene's renderpass, defining what is attached to the pipeline, and what is outputed
 	VkRenderPass				_CopyRenderPass{ VK_NULL_HANDLE };

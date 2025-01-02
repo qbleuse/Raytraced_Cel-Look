@@ -1136,7 +1136,7 @@ void VulkanHelper::ClearTexture(const VkDevice& VulkanDevice, Texture& texture)
 
 /* Acceleration Structures */
 
-bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index)
+bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index, uint32_t customInstanceIndex, uint32_t shaderOffset)
 {
 	//filling the build struct if not already done
 	vkBuildInfo.sType			= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
@@ -1173,6 +1173,12 @@ bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAcc
 																		| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 																		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
 																		tmpBuffer, tmpMemory, vkBuildInfo.scratchData.deviceAddress, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+
+	if (raytracedGeometry._CustomInstanceIndex != nullptr)
+		raytracedGeometry._CustomInstanceIndex[index] = customInstanceIndex;
+
+	if (raytracedGeometry._ShaderOffset != nullptr)
+		raytracedGeometry._ShaderOffset[index] = shaderOffset;
 
 	return true;
 }
@@ -1264,7 +1270,7 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 	return result == VK_SUCCESS;
 }
 
-bool VulkanHelper::CreateRaytracedProceduralFromAABB(Uploader& VulkanUploader, StaticBufferHandle& AABBStaticBuffer,  RaytracedGeometry& raytracedGeometry, const MultipleVolatileMemory<VkAabbPositionsKHR>& AABBs, uint32_t nb, uint32_t index)
+bool VulkanHelper::CreateRaytracedProceduralFromAABB(Uploader& VulkanUploader, StaticBufferHandle& AABBStaticBuffer,  RaytracedGeometry& raytracedGeometry, const MultipleVolatileMemory<VkAabbPositionsKHR>& AABBs, uint32_t nb, uint32_t index, uint32_t customInstanceIndex, uint32_t shaderOffset)
 {
 	//firstly, creating the AABB GPU Buffer
 	VulkanHelper::CreateStaticBufferHandle(VulkanUploader, AABBStaticBuffer, sizeof(VkAabbPositionsKHR) * nb, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, 0, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
@@ -1291,7 +1297,7 @@ bool VulkanHelper::CreateRaytracedProceduralFromAABB(Uploader& VulkanUploader, S
 	
 	//we'll let the function fill up our build struct
 	VkAccelerationStructureBuildGeometryInfoKHR AABBBuildInfo{};
-	CreateRaytracedGeometry(VulkanUploader, aabb, ASRange, raytracedGeometry, AABBBuildInfo, index);
+	CreateRaytracedGeometry(VulkanUploader, aabb, ASRange, raytracedGeometry, AABBBuildInfo, index, customInstanceIndex, shaderOffset);
 
 	VkAccelerationStructureBuildRangeInfoKHR* rangePtr = &ASRange;
 	//finally, asking to build the acceleration structures (this is basically a copy command, so it is a defered call)
@@ -1311,14 +1317,12 @@ void VulkanHelper::ClearRaytracedGeometry(const VkDevice& VulkanDevice, Raytrace
 	VK_CLEAR_ARRAY(raytracedGeometry._AccelerationStructureMemory, raytracedGeometry._AccelerationStructureMemory.Nb(), vkFreeMemory, VulkanDevice);
 }
 
-bool VulkanHelper::CreateInstanceFromGeometry(Uploader& VulkanUploader, VkAccelerationStructureBuildGeometryInfoKHR& instancesInfo, VkAccelerationStructureBuildRangeInfoKHR& instancesRange, const mat4& transform, const MultipleVolatileMemory<uint32_t>& shaderGroupIndices, const MultipleVolatileMemory<uint32_t>& customInstanceIndices, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb)
+bool VulkanHelper::CreateInstanceFromGeometry(Uploader& VulkanUploader, VkAccelerationStructureBuildGeometryInfoKHR& instancesInfo, VkAccelerationStructureBuildRangeInfoKHR& instancesRange, const mat4& transform, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb)
 {
 	//to record if an error happened
 	VkResult result = VK_SUCCESS;
 
-	//first, does it have specific shaderGroupIndices or custom Instance Indices
-	bool useShaderGroup		= shaderGroupIndices != nullptr;
-	bool useCustomInstance	= customInstanceIndices != nullptr;
+
 
 	//count the total nb of instance we need to create.
 	uint32_t totalInstanceNb = 0;
@@ -1364,10 +1368,15 @@ bool VulkanHelper::CreateInstanceFromGeometry(Uploader& VulkanUploader, VkAccele
 		uint32_t instanceIndex = 0;
 		for (uint32_t i = 0; i < nb; i++)
 		{
-			templateInstance.instanceCustomIndex = useCustomInstance ? customInstanceIndices[i] : 0;
-			templateInstance.instanceShaderBindingTableRecordOffset = useShaderGroup ? shaderGroupIndices[i] : 0;
+			//first, does it have specific shaderGroupIndices or custom Instance Indices
+			bool useShaderGroup = geometry[i]->_ShaderOffset != nullptr;
+			bool useCustomInstance = geometry[i]->_CustomInstanceIndex != nullptr;
+
 			for (uint32_t j = 0; j < geometry[i]->_AccelerationStructureBuffer.Nb(); j++, instanceIndex++)
 			{
+				templateInstance.instanceCustomIndex = useCustomInstance ? geometry[i]->_CustomInstanceIndex[j] : 0;
+				templateInstance.instanceShaderBindingTableRecordOffset = useShaderGroup ? geometry[i]->_ShaderOffset[j] : 0;
+
 				ASInstances[instanceIndex] = templateInstance;
 				VK_GET_BUFFER_ADDRESS(VulkanUploader._VulkanDevice, uint64_t, geometry[i]->_AccelerationStructureBuffer[j], ASInstances[instanceIndex].accelerationStructureReference);
 				instancesAS[instanceIndex] = templateGeom;
@@ -1393,14 +1402,14 @@ bool VulkanHelper::CreateInstanceFromGeometry(Uploader& VulkanUploader, VkAccele
 	return result == VK_SUCCESS;
 }
 
-bool VulkanHelper::UploadRaytracedGroupFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedObject, const mat4& transform, const MultipleVolatileMemory<uint32_t>& shaderGroupIndices, const MultipleVolatileMemory<uint32_t>& customInstanceIndices, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb, bool isUpdate)
+bool VulkanHelper::UploadRaytracedGroupFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedObject, const mat4& transform, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb, bool isUpdate)
 {
 	//to record if an error happened
 	VkResult result = VK_SUCCESS;
 
 	VkAccelerationStructureBuildRangeInfoKHR	buildRange		= {};
 	VkAccelerationStructureBuildGeometryInfoKHR	instancesInfo	= {};
-	CreateInstanceFromGeometry(VulkanUploader, instancesInfo, buildRange, transform, shaderGroupIndices, customInstanceIndices, geometry, nb);
+	CreateInstanceFromGeometry(VulkanUploader, instancesInfo, buildRange, transform, geometry, nb);
 	instancesInfo.mode = static_cast<VkBuildAccelerationStructureModeKHR>(isUpdate);
 
 	VkAccelerationStructureBuildSizesInfoKHR buildSize{};

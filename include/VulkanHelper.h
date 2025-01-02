@@ -364,14 +364,21 @@ namespace VulkanHelper
 	*/
 	struct RaytracedGeometry
 	{
+		//model info
+
 		VolatileLoopArray<VkAccelerationStructureKHR>	_AccelerationStructure;
 		VolatileLoopArray<VkBuffer>						_AccelerationStructureBuffer;
 		VolatileLoopArray<VkDeviceMemory>				_AccelerationStructureMemory;
+
+		//material info
+
+		VolatileLoopArray<uint32_t>						_CustomInstanceIndex;
+		VolatileLoopArray<uint32_t>						_ShaderOffset;
 	};
 
 	/* Creates the Accelerations Structure Buffers and objects, and fills the build info, but does not call build.
 	 * /!\ RaytracedGeometry needs to be pre allocated /!\ */
-	bool CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index = 0);
+	bool CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index = 0, uint32_t customInstanceIndex = 0, uint32_t shaderOffset = 0);
 	/*
 	* Creates and Build Acceleration Structure of all mesh in array, with one Acceleration Structure per mesh.
 	*/
@@ -380,7 +387,7 @@ namespace VulkanHelper
 	* Creates and builds Accelerations Structure at index of raytracedGeometry from and array of AABBs. 
 	* /!\ raytraced geometry must be pre allocated /!\
 	*/
-	bool CreateRaytracedProceduralFromAABB(Uploader& VulkanUploader, StaticBufferHandle& AABBBuffer, RaytracedGeometry& raytracedGeometry, const MultipleVolatileMemory<VkAabbPositionsKHR>& AABBs, uint32_t nb, uint32_t index = 0);
+	bool CreateRaytracedProceduralFromAABB(Uploader& VulkanUploader, StaticBufferHandle& AABBBuffer, RaytracedGeometry& raytracedGeometry, const MultipleVolatileMemory<VkAabbPositionsKHR>& AABBs, uint32_t nb, uint32_t index = 0, uint32_t customInstanceIndex = 0, uint32_t shaderOffset = 0);
 	void ClearRaytracedGeometry(const VkDevice& VulkanDevice, RaytracedGeometry& raytracedGeometry);
 
 	/*
@@ -404,13 +411,11 @@ namespace VulkanHelper
 	* However, they will all share the same transform.
 	* 
 	* - transform				: the mat4 transformation matrix of all the instances in this group
-	* - shaderGroupIndices		: the shader group the associated raytraced geometry should use. should be either nullptr or the same size as nb. defaults to zero if nullptr.
-	* - customInstanceIndices	: the custom Instance Index for each Raytraced Geometry. should be either nullptr or the same size as nb. defaults to zero if nullptr
 	* - geometry				: the array of raytraced geometry to make into instances and group into a single TLAS. should be the size of nb.
 	* - nb						: the nb of raytraced geometry in the geometry array. NOT THE TOTAL NB OF BLAS, JUST THE NUMBER OF RAYTRACED GEOMETRY.
 	*/
-	bool UploadRaytracedGroupFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedObject, const mat4& transform, const MultipleVolatileMemory<uint32_t>& shaderGroupIndices, const MultipleVolatileMemory<uint32_t>& customInstanceIndices, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb, bool isUpdate = false);
-	bool CreateInstanceFromGeometry(Uploader& VulkanUploader, VkAccelerationStructureBuildGeometryInfoKHR& instancesInfo, VkAccelerationStructureBuildRangeInfoKHR& instancesRange, const mat4& transform, const MultipleVolatileMemory<uint32_t>& shaderGroupIndices, const MultipleVolatileMemory<uint32_t>& customInstanceIndices, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb);
+	bool UploadRaytracedGroupFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedObject, const mat4& transform, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb, bool isUpdate = false);
+	bool CreateInstanceFromGeometry(Uploader& VulkanUploader, VkAccelerationStructureBuildGeometryInfoKHR& instancesInfo, VkAccelerationStructureBuildRangeInfoKHR& instancesRange, const mat4& transform, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb);
 	void ClearRaytracedGroup(const VkDevice& VulkanDevice, RaytracedGroup& raytracedGeometry);
 
 

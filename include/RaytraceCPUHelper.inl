@@ -136,7 +136,7 @@ struct dieletrics : public metal
 			//the tangential component to our contact plane of our refracted ray
 			vec3 tangent_comp	= normal * -sqrtf(fabs(1.0f - dot(orth_comp, orth_comp)));
 			//the total refracted ray
-			refract.direction = normalize(tangent_comp + tangent_comp);
+			refract.direction = normalize(tangent_comp + orth_comp);
 			return refract;
 		}
 	}
