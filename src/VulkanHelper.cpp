@@ -21,7 +21,7 @@ using namespace VulkanHelper;
 
 /*===== Uploader =====*/
 
-bool VulkanHelper::StartUploader(GraphicsAPIManager& GAPI, Uploader& VulkanUploader)
+bool VulkanHelper::StartUploader(const GraphicsAPIManager& GAPI, Uploader& VulkanUploader)
 {
 	//to know if we succeeded
 	VkResult result = VK_SUCCESS;
@@ -54,6 +54,19 @@ bool VulkanHelper::StartUploader(GraphicsAPIManager& GAPI, Uploader& VulkanUploa
 	return result == VK_SUCCESS;
 }
 
+void VulkanHelper::StartUploader(const GAPIHandle& GAPIHandle, Uploader& VulkanUploader)
+{
+
+	//The Uploader will use the same command buffer and queues as the Runtime Handle
+	VulkanUploader._VulkanDevice	= GAPIHandle._VulkanDevice;
+	VulkanUploader._CopyQueue		= GAPIHandle._VulkanQueues[0];
+	VulkanUploader._CopyBuffer		= GAPIHandle.GetCurrentVulkanCommand();
+	VulkanUploader._CopyPool		= VK_NULL_HANDLE;
+
+	VulkanUploader._MemoryProperties = {};
+}
+
+
 
 bool VulkanHelper::SubmitUploader(Uploader& VulkanUploader)
 {
@@ -74,7 +87,20 @@ bool VulkanHelper::SubmitUploader(Uploader& VulkanUploader)
 	VK_CLEAR_LIST(VulkanUploader._ToFreeBuffers, VulkanUploader._ToFreeBuffers.Nb(), vkDestroyBuffer, VulkanUploader._VulkanDevice);
 	VK_CLEAR_LIST(VulkanUploader._ToFreeMemory, VulkanUploader._ToFreeMemory.Nb(), vkFreeMemory, VulkanUploader._VulkanDevice);
 
-	vkFreeCommandBuffers(VulkanUploader._VulkanDevice, VulkanUploader._CopyPool, 1, &VulkanUploader._CopyBuffer);
+	//if there is a copy pool, it is a one time buffer we want to destroy
+	if (VulkanUploader._CopyPool != VK_NULL_HANDLE)
+		vkFreeCommandBuffers(VulkanUploader._VulkanDevice, VulkanUploader._CopyPool, 1, &VulkanUploader._CopyBuffer);
+	else//this is a runtime upload, where we used an opened command, we need to make it available
+	{
+		vkResetCommandBuffer(VulkanUploader._CopyBuffer, 0);
+
+		// beginning the copy command
+		VkCommandBufferBeginInfo beginInfo{};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+		VK_CALL_PRINT(vkBeginCommandBuffer(VulkanUploader._CopyBuffer, &beginInfo));
+	}
 
 	return result == VK_SUCCESS;
 }
@@ -194,7 +220,7 @@ uint32_t VulkanHelper::GetMemoryTypeFromRequirements(const VkMemoryPropertyFlags
 	return 0;
 }
 
-bool VulkanHelper::AllocateVulkanMemory(Uploader& VulkanUploader, VkMemoryPropertyFlags properties, const const VkMemoryRequirements& memRequirements, VkDeviceMemory& bufferMemory, VkMemoryAllocateFlags flags)
+bool VulkanHelper::AllocateVulkanMemory(const Uploader& VulkanUploader, VkMemoryPropertyFlags properties, const VkMemoryRequirements& memRequirements, uint32_t memoryType, VkDeviceMemory& bufferMemory, VkMemoryAllocateFlags flags)
 {
 	VkResult result = VK_SUCCESS;
 
@@ -205,7 +231,7 @@ bool VulkanHelper::AllocateVulkanMemory(Uploader& VulkanUploader, VkMemoryProper
 		VkMemoryAllocateInfo allocInfo{};
 		allocInfo.sType				= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		allocInfo.allocationSize	= AlignUp(memRequirements.size, memRequirements.alignment);//allocate the required size (add a few bytes if a particular alignement is needed)
-		allocInfo.memoryTypeIndex	= GetMemoryTypeFromRequirements(properties, memRequirements, VulkanUploader._MemoryProperties);
+		allocInfo.memoryTypeIndex	= memoryType;
 
 		VkMemoryAllocateFlagsInfo flagsInfo{};
 		if (flags != 0)
@@ -234,7 +260,7 @@ void VulkanHelper::MemorySyncScope(VkCommandBuffer cmdBuffer, VkAccessFlagBits s
 
 }
 
-bool VulkanHelper::CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buffer)
+bool VulkanHelper::CreateVulkanBuffer(const Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buffer)
 {
 	//to know if we succeeded
 	VkResult result = VK_SUCCESS;
@@ -251,17 +277,17 @@ bool VulkanHelper::CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize siz
 	return result == VK_SUCCESS;
 }
 
-bool VulkanHelper::CreateVulkanBufferMemory(Uploader& VulkanUploader, VkMemoryPropertyFlags properties, const VkBuffer& buffer, VkDeviceMemory& bufferMemory, VkMemoryAllocateFlags flags)
+bool VulkanHelper::CreateVulkanBufferMemory(const Uploader& VulkanUploader, VkMemoryPropertyFlags properties, const VkBuffer& buffer, VkDeviceMemory& bufferMemory, VkMemoryAllocateFlags flags)
 {
 	//first let's get the requirements that the memory should follow (like it needs to be 4 bytes and such)
 	VkMemoryRequirements memRequirements;
 	vkGetBufferMemoryRequirements(VulkanUploader._VulkanDevice, buffer, &memRequirements);
 	//then allocate
-	return AllocateVulkanMemory(VulkanUploader, properties, memRequirements, bufferMemory, flags);
+	return AllocateVulkanMemory(VulkanUploader, properties, memRequirements, GetMemoryTypeFromRequirements(properties, memRequirements, VulkanUploader._MemoryProperties), bufferMemory, flags);
 }
 
 
-bool VulkanHelper::CreateVulkanBufferAndMemory(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset, bool allocate_memory, VkMemoryAllocateFlags flags)
+bool VulkanHelper::CreateVulkanBufferAndMemory(const Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset, bool allocate_memory, VkMemoryAllocateFlags flags)
 {
 	//to know if we succeeded
 	VkResult result = VK_SUCCESS;
@@ -298,7 +324,7 @@ bool VulkanHelper::CreateTmpBufferAndAddress(Uploader& VulkanUploader, VkDeviceS
 }
 
 bool VulkanHelper::CreateUniformBufferHandle(Uploader& VulkanUploader, UniformBufferHandle& bufferHandle, uint32_t bufferNb, VkDeviceSize size,
-	VkMemoryPropertyFlags properties, VkBufferUsageFlags usage, bool map_cpu_memory_handle)
+	VkMemoryPropertyFlags properties, VkBufferUsageFlags usage, bool map_cpu_memory_handle, VkMemoryAllocateFlags flags)
 
 {
 	VkResult result = VK_SUCCESS;
@@ -315,7 +341,7 @@ bool VulkanHelper::CreateUniformBufferHandle(Uploader& VulkanUploader, UniformBu
 	for (uint32_t i = 0; i < bufferNb; i++)
 	{
 		//create the new buffer and associated gpu memory with parameter
-		result = CreateVulkanBufferAndMemory(VulkanUploader, size, usage, properties, bufferHandle._GPUBuffer[i], bufferHandle._GPUMemoryHandle[i]) ? VK_SUCCESS : VK_ERROR_UNKNOWN;
+		result = CreateVulkanBufferAndMemory(VulkanUploader, size, usage, properties, bufferHandle._GPUBuffer[i], bufferHandle._GPUMemoryHandle[i], 0, true, flags) ? VK_SUCCESS : VK_ERROR_UNKNOWN;
 
 		//link the GPU handlke with the cpu handle if necessary
 		if (map_cpu_memory_handle && result == VK_SUCCESS)
@@ -333,7 +359,7 @@ void VulkanHelper::ClearUniformBufferHandle(const VkDevice& VulkanDevice, Unifor
 }
 
 
-bool VulkanHelper::CreateStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, VkDeviceSize size, VkBufferUsageFlags staticBufferUsage, VkMemoryPropertyFlags staticBufferProperties, VkMemoryAllocateFlags flags)
+bool VulkanHelper::CreateStaticBufferHandle(const Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, VkDeviceSize size, VkBufferUsageFlags staticBufferUsage, VkMemoryPropertyFlags staticBufferProperties, VkMemoryAllocateFlags flags)
 {
 	//creating the static buffer the definition of this implementation of a static buffer, is a device local buffer. tehrefore, it needs at least transfer dst and device local)
 	return CreateVulkanBufferAndMemory(VulkanUploader, size, staticBufferUsage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, staticBufferProperties | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, bufferHandle._StaticGPUBuffer, bufferHandle._StaticGPUMemoryHandle, 0, true, flags);
@@ -965,7 +991,7 @@ bool VulkanHelper::CreateVulkanImageMemory(Uploader& VulkanUploader, VkMemoryPro
 	VkMemoryRequirements memRequirements;
 	vkGetImageMemoryRequirements(VulkanUploader._VulkanDevice, image, &memRequirements);
 	//then allocating the necessarry space
-	return AllocateVulkanMemory(VulkanUploader, properties, memRequirements, bufferMemory, flags);
+	return AllocateVulkanMemory(VulkanUploader, properties, memRequirements, GetMemoryTypeFromRequirements(properties, memRequirements, VulkanUploader._MemoryProperties), bufferMemory, flags);
 }
 
 bool VulkanHelper::CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, VkDeviceMemory& imageMemory, uint32_t width, uint32_t height, uint32_t depth, VkImageType imagetype, VkFormat format, VkImageUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryProperties, uint32_t offset, bool allocate_memory)
@@ -1185,7 +1211,7 @@ bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAcc
 
 
 //creating a bottom level AS for each mesh of model
-bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh)
+bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh, const VkBuffer& transformBuffer, const MultipleVolatileMemory<uint32_t>& transformOffset)
 {
 	//if an error happens...
 	VkResult result = VK_SUCCESS;
@@ -1197,8 +1223,6 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 	//used to build the Acceleration structure
 	VkAccelerationStructureGeometryTrianglesDataKHR bottomLevelMeshASData{};
 	bottomLevelMeshASData.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR;
-
-	//Note QB : this makes quite a lot of stack memory allocated, but it would be quite slow to allocate heap memory for this
 
 	//array for the actual geometry description (in our case triangles)
 	MultipleScopedMemory<VkAccelerationStructureGeometryKHR>			bottomLevelMeshAS{ mesh.Nb() };
@@ -1216,6 +1240,15 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 	raytracedGeometry._AccelerationStructure.Alloc(mesh.Nb());
 	raytracedGeometry._AccelerationStructureBuffer.Alloc(mesh.Nb());
 	raytracedGeometry._AccelerationStructureMemory.Alloc(mesh.Nb());
+
+	bool usesOffset = transformOffset != nullptr;
+
+	VkDeviceOrHostAddressConstKHR transformAddress = VkDeviceOrHostAddressConstKHR{ 0 };
+	if (transformBuffer != VK_NULL_HANDLE)
+	{
+		addressInfo.buffer = transformBuffer;
+		transformAddress = VkDeviceOrHostAddressConstKHR{ vkGetBufferDeviceAddress(VulkanUploader._VulkanDevice, &addressInfo) };
+	}
 
 	//describing gemetry and creating necessarry buyffer for each mesh
 	for (uint32_t i = 0; i < mesh.Nb(); i++)
@@ -1242,6 +1275,8 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 		bottomLevelMeshASData.indexData = VkDeviceOrHostAddressConstKHR{ GPUBufferAddress };// this is sure to be a static buffer as we will not change vertex data
 		bottomLevelMeshASData.indexType = iMesh._indices_type;
 
+		bottomLevelMeshASData.transformData = transformAddress;
+
 		//we now have a proper triangle geometry
 		VkAccelerationStructureGeometryKHR& meshAS = bottomLevelMeshAS[i];
 		meshAS.sType		= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR;
@@ -1254,7 +1289,7 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 		meshASRange.firstVertex		= iMesh._pos_offset;
 		meshASRange.primitiveOffset = iMesh._indices_type == VK_INDEX_TYPE_UINT16 ? iMesh._indices_offset * sizeof(uint16_t) : iMesh._indices_offset * sizeof(uint32_t);
 		meshASRange.primitiveCount	= iMesh._indices_nb / 3;
-		meshASRange.transformOffset = 0;
+		meshASRange.transformOffset = usesOffset ? transformOffset[i] : 0;
 		bottomLevelMeshASRangeInfoPtr[i] = &meshASRange;
 
 		CreateRaytracedGeometry(VulkanUploader, meshAS, meshASRange, raytracedGeometry, bottomLevelMeshASInfo[i], i);
@@ -1317,12 +1352,13 @@ void VulkanHelper::ClearRaytracedGeometry(const VkDevice& VulkanDevice, Raytrace
 	VK_CLEAR_ARRAY(raytracedGeometry._AccelerationStructureMemory, raytracedGeometry._AccelerationStructureMemory.Nb(), vkFreeMemory, VulkanDevice);
 }
 
-bool VulkanHelper::CreateInstanceFromGeometry(Uploader& VulkanUploader, VkAccelerationStructureBuildGeometryInfoKHR& instancesInfo, VkAccelerationStructureBuildRangeInfoKHR& instancesRange, const mat4& transform, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb)
+bool VulkanHelper::CreateInstanceFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedGroup, const mat4& transform, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb)
 {
 	//to record if an error happened
 	VkResult result = VK_SUCCESS;
 
-
+	VkAccelerationStructureBuildGeometryInfoKHR& instancesInfo = raytracedGroup._InstancesInfo;
+	VkAccelerationStructureBuildRangeInfoKHR&	instancesRange = raytracedGroup._InstancesRange[0]; 
 
 	//count the total nb of instance we need to create.
 	uint32_t totalInstanceNb = 0;
@@ -1332,8 +1368,8 @@ bool VulkanHelper::CreateInstanceFromGeometry(Uploader& VulkanUploader, VkAccele
 	instancesRange.primitiveCount = totalInstanceNb;
 
 	//the description of the Top level Acceleration Structure
-	MultipleVolatileMemory<VkAccelerationStructureInstanceKHR> ASInstances{ totalInstanceNb };
-	memset(*ASInstances, 0, sizeof(VkAccelerationStructureInstanceKHR) * totalInstanceNb);
+	raytracedGroup._Instances.Alloc(totalInstanceNb);
+	memset(*raytracedGroup._Instances, 0, sizeof(VkAccelerationStructureInstanceKHR) * totalInstanceNb);
 	//the instances of TLAS
 	MultipleVolatileMemory<VkAccelerationStructureGeometryKHR> instancesAS{ totalInstanceNb };
 	memset(*instancesAS, 0, sizeof(VkAccelerationStructureGeometryKHR) * totalInstanceNb);
@@ -1342,9 +1378,9 @@ bool VulkanHelper::CreateInstanceFromGeometry(Uploader& VulkanUploader, VkAccele
 	{
 		VkAccelerationStructureInstanceKHR templateInstance = {};//will be used as only some parameters change
 		templateInstance.mask = 0xFF;//every instance will be hittable
-		templateInstance.transform = { transform[0], transform[1], transform[2], transform[3],
-								transform[4], transform[5], transform[6], transform[7],
-								transform[8], transform[9], transform[10],  transform[11] };
+		templateInstance.transform = { transform[0], transform[1], transform[2], transform[12],
+								transform[4], transform[5], transform[6], transform[13],
+								transform[8], transform[9], transform[10],  transform[14] };
 		templateInstance.flags = VK_GEOMETRY_INSTANCE_TRIANGLE_FACING_CULL_DISABLE_BIT_KHR;
 
 		//all the instances make one group's "geometry"
@@ -1354,16 +1390,15 @@ bool VulkanHelper::CreateInstanceFromGeometry(Uploader& VulkanUploader, VkAccele
 		templateGeom.flags = VK_GEOMETRY_OPAQUE_BIT_KHR;
 		templateGeom.geometry.instances.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR;
 
-		//the starting address of the temporary GPU Buffer
+		//creating the instance buffer where every instance
 		VkDeviceAddress tmpAddress;
-		VkBuffer		tmpBuffer;
-		VkDeviceMemory	tmpMemory;
 		VkDeviceSize	tmpSize = sizeof(VkAccelerationStructureInstanceKHR) * totalInstanceNb;
-		CreateTmpBufferAndAddress(VulkanUploader, tmpSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR 
+		CreateVulkanBufferAndMemory(VulkanUploader, tmpSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR
 															| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
 															VK_MEMORY_PROPERTY_HOST_COHERENT_BIT 
 															| VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-															tmpBuffer, tmpMemory, tmpAddress, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+			raytracedGroup._InstancesBufferHandle._StaticGPUBuffer, raytracedGroup._InstancesBufferHandle._StaticGPUMemoryHandle, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+		VK_GET_BUFFER_ADDRESS(VulkanUploader._VulkanDevice, VkDeviceAddress, raytracedGroup._InstancesBufferHandle._StaticGPUBuffer, tmpAddress);
 
 		uint32_t instanceIndex = 0;
 		for (uint32_t i = 0; i < nb; i++)
@@ -1377,52 +1412,80 @@ bool VulkanHelper::CreateInstanceFromGeometry(Uploader& VulkanUploader, VkAccele
 				templateInstance.instanceCustomIndex = useCustomInstance ? geometry[i]->_CustomInstanceIndex[j] : 0;
 				templateInstance.instanceShaderBindingTableRecordOffset = useShaderGroup ? geometry[i]->_ShaderOffset[j] : 0;
 
-				ASInstances[instanceIndex] = templateInstance;
-				VK_GET_BUFFER_ADDRESS(VulkanUploader._VulkanDevice, uint64_t, geometry[i]->_AccelerationStructureBuffer[j], ASInstances[instanceIndex].accelerationStructureReference);
+				raytracedGroup._Instances[instanceIndex] = templateInstance;
+				VK_GET_BUFFER_ADDRESS(VulkanUploader._VulkanDevice, uint64_t, geometry[i]->_AccelerationStructureBuffer[j], raytracedGroup._Instances[instanceIndex].accelerationStructureReference);
 				instancesAS[instanceIndex] = templateGeom;
 				instancesAS[instanceIndex].geometry.instances.data = VkDeviceOrHostAddressConstKHR{ tmpAddress + instanceIndex * sizeof(VkAccelerationStructureInstanceKHR) };//we need to offset it from the buffer's beginning
 			}
 		}
 
-		// copy our instances into the temporary buffer
+		// copy our instances into the instances buffer
 		void* tmpHandle;
-		VK_CALL_PRINT(vkMapMemory(VulkanUploader._VulkanDevice, tmpMemory, 0, tmpSize, 0, &tmpHandle));
-		memcpy(tmpHandle, *ASInstances, tmpSize);
-		vkUnmapMemory(VulkanUploader._VulkanDevice, tmpMemory);
-
-		ASInstances.Clear();
+		VK_CALL_PRINT(vkMapMemory(VulkanUploader._VulkanDevice, raytracedGroup._InstancesBufferHandle._StaticGPUMemoryHandle, 0, tmpSize, 0, &tmpHandle));
+		memcpy(tmpHandle, *raytracedGroup._Instances, tmpSize);
+		vkUnmapMemory(VulkanUploader._VulkanDevice, raytracedGroup._InstancesBufferHandle._StaticGPUMemoryHandle);
 	}
 
 	instancesInfo.sType			= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
 	instancesInfo.type			= VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR;//we are specifying an instance, so it is a top level
 	instancesInfo.pGeometries	= *instancesAS;
 	instancesInfo.geometryCount = 1;
-	instancesInfo.flags			= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR;
+	instancesInfo.flags			= VK_BUILD_ACCELERATION_STRUCTURE_PREFER_FAST_TRACE_BIT_KHR | VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR;
 
 	return result == VK_SUCCESS;
 }
 
-bool VulkanHelper::UploadRaytracedGroupFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedObject, const mat4& transform, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb, bool isUpdate)
+bool VulkanHelper::UpdateTransform(const VkDevice& VulkanDevice, RaytracedGroup& raytracedObject, const mat4& transform, uint32_t index, uint32_t nb)
 {
 	//to record if an error happened
 	VkResult result = VK_SUCCESS;
 
-	VkAccelerationStructureBuildRangeInfoKHR	buildRange		= {};
-	VkAccelerationStructureBuildGeometryInfoKHR	instancesInfo	= {};
-	CreateInstanceFromGeometry(VulkanUploader, instancesInfo, buildRange, transform, geometry, nb);
-	instancesInfo.mode = static_cast<VkBuildAccelerationStructureModeKHR>(isUpdate);
+	if (nb > raytracedObject._InstancesRange[0].primitiveCount || index + nb > raytracedObject._InstancesRange[0].primitiveCount)
+	{
+		printf("Update Transform of raytraced Object out of instances array's bound !");
+		return false;
+	}
+
+	{
+		VkTransformMatrixKHR mat = { transform[0], transform[1], transform[2], transform[12],
+								transform[4], transform[5], transform[6], transform[13],
+								transform[8], transform[9], transform[10],  transform[14] };
+
+		for (uint32_t i = index; i < nb; i++)
+		{
+			raytracedObject._Instances[i].transform = mat;
+		}
+
+		void* tmpHandle;
+		VK_CALL_PRINT(vkMapMemory(VulkanDevice, raytracedObject._InstancesBufferHandle._StaticGPUMemoryHandle, index * sizeof(VkAccelerationStructureInstanceKHR), nb * sizeof(VkAccelerationStructureInstanceKHR), 0, &tmpHandle));
+		memcpy(tmpHandle, *raytracedObject._Instances, sizeof(VkAccelerationStructureInstanceKHR) * nb);
+		vkUnmapMemory(VulkanDevice, raytracedObject._InstancesBufferHandle._StaticGPUMemoryHandle);
+	}
+
+	return result == VK_SUCCESS;
+}
+
+bool VulkanHelper::CreateRaytracedGroupFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedObject, const mat4& transform, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb)
+{
+	//to record if an error happened
+	VkResult result = VK_SUCCESS;
+
+	raytracedObject._InstancesRange.Alloc(1);
+	VkAccelerationStructureBuildRangeInfoKHR& buildRange = raytracedObject._InstancesRange[0];
+	buildRange = {};
+	CreateInstanceFromGeometry(VulkanUploader, raytracedObject, transform, geometry, nb);
+	raytracedObject._InstancesInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_BUILD_KHR;
 
 	VkAccelerationStructureBuildSizesInfoKHR buildSize{};
 	buildSize.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
-	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkGetAccelerationStructureBuildSizesKHR, VulkanUploader._VulkanDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &instancesInfo, &buildRange.primitiveCount, &buildSize);
+	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkGetAccelerationStructureBuildSizesKHR, VulkanUploader._VulkanDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &raytracedObject._InstancesInfo, &buildRange.primitiveCount, &buildSize);
 
 	//we first need to create the Top Level AS Buffer
-	if (!isUpdate)
 	{
 
 		//creating our acceleration structure buffer
-		VulkanHelper::CreateVulkanBufferAndMemory(VulkanUploader, buildSize.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
-			raytracedObject._AccelerationStructureBuffer, raytracedObject._AccelerationStructureMemory);
+		VulkanHelper::CreateVulkanBufferAndMemory(VulkanUploader, buildSize.accelerationStructureSize, VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT,
+			raytracedObject._AccelerationStructureBuffer, raytracedObject._AccelerationStructureMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 
 		VkAccelerationStructureCreateInfoKHR instanceASCreateInfo{};
 		instanceASCreateInfo.sType	= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_CREATE_INFO_KHR;
@@ -1432,26 +1495,43 @@ bool VulkanHelper::UploadRaytracedGroupFromGeometry(Uploader& VulkanUploader, Ra
 
 		VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCreateAccelerationStructureKHR, VulkanUploader._VulkanDevice, &instanceASCreateInfo, nullptr, &raytracedObject._AccelerationStructure);
 	}
-	else
-	{
-		instancesInfo.srcAccelerationStructure = raytracedObject._AccelerationStructure;
-	}
 
-	instancesInfo.dstAccelerationStructure = raytracedObject._AccelerationStructure;
+	raytracedObject._InstancesInfo.dstAccelerationStructure = raytracedObject._AccelerationStructure;
 
 	{
-		//make the scratch buffer 
+		//we'll make the scratch buffer, by hand because we need to save the meomory type
+
 		VkBuffer		scratchBuffer;
 		VkDeviceMemory	scratchMemory;
-		VkDeviceSize	scratchSize = isUpdate ? buildSize.updateScratchSize : buildSize.buildScratchSize;
-		CreateTmpBufferAndAddress(VulkanUploader, scratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT
-			| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-			scratchBuffer, scratchMemory, instancesInfo.scratchData.deviceAddress, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+		VkDeviceSize	scratchSize = buildSize.buildScratchSize;
+
+		//making the buffer
+		CreateVulkanBuffer(VulkanUploader, scratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, scratchBuffer);
+
+		//first let's get the requirements that the memory should follow (like it needs to be 4 bytes and such)
+		VkMemoryRequirements memRequirements;
+		vkGetBufferMemoryRequirements(VulkanUploader._VulkanDevice, scratchBuffer, &memRequirements);
+
+		//this is what we need for future updates
+		raytracedObject._ScratchMemoryType = GetMemoryTypeFromRequirements(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memRequirements, VulkanUploader._MemoryProperties);
+
+		//then allocate
+		AllocateVulkanMemory(VulkanUploader, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memRequirements, raytracedObject._ScratchMemoryType, scratchMemory, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+
+
+		//then link together the buffer "interface" object, and the allcated memory
+		VK_CALL_PRINT(vkBindBufferMemory(VulkanUploader._VulkanDevice, scratchBuffer, scratchMemory, 0));
+
+		//get the address of our newly created buffer and give it to the addresss in parameters
+		VK_GET_BUFFER_ADDRESS(VulkanUploader._VulkanDevice, VkDeviceAddress, scratchBuffer, raytracedObject._InstancesInfo.scratchData.deviceAddress);
+
+		//do not forget to free the temporary buffer
+		VulkanUploader._ToFreeBuffers.Add(scratchBuffer);
+		VulkanUploader._ToFreeMemory.Add(scratchMemory);
 	}
 
 	VkAccelerationStructureBuildRangeInfoKHR* buildRangePtr = &buildRange;
-	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCmdBuildAccelerationStructuresKHR, VulkanUploader._CopyBuffer, 1, &instancesInfo, &buildRangePtr);
+	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCmdBuildAccelerationStructuresKHR, VulkanUploader._CopyBuffer, 1, &raytracedObject._InstancesInfo, &buildRangePtr);
 
 	//making the AS accessible
 	MemorySyncScope(VulkanUploader._CopyBuffer, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
@@ -1459,6 +1539,57 @@ bool VulkanHelper::UploadRaytracedGroupFromGeometry(Uploader& VulkanUploader, Ra
 
 	return result == VK_SUCCESS;
 }
+
+bool VulkanHelper::UpdateRaytracedGroup(VulkanHelper::Uploader& VulkanUploader, RaytracedGroup& raytracedGroup)
+{
+	//to record if an error happened
+	VkResult result = VK_SUCCESS;
+
+	//we'll update
+	raytracedGroup._InstancesInfo.srcAccelerationStructure = raytracedGroup._AccelerationStructure;
+	raytracedGroup._InstancesInfo.mode = VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR;
+
+	VkAccelerationStructureBuildSizesInfoKHR buildSize{};
+	buildSize.sType = VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_SIZES_INFO_KHR;
+	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkGetAccelerationStructureBuildSizesKHR, VulkanUploader._VulkanDevice, VK_ACCELERATION_STRUCTURE_BUILD_TYPE_DEVICE_KHR, &raytracedGroup._InstancesInfo, &(*raytracedGroup._InstancesRange)->primitiveCount, &buildSize);
+
+	{
+		//we'll make the scratch buffer, by hand because we need to save the meomory type
+
+		VkBuffer		scratchBuffer;
+		VkDeviceMemory	scratchMemory;
+		VkDeviceSize	scratchSize = buildSize.updateScratchSize;
+
+		//making the buffer
+		CreateVulkanBuffer(VulkanUploader, scratchSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, scratchBuffer);
+
+		//first let's get the requirements that the memory should follow (like it needs to be 4 bytes and such)
+		VkMemoryRequirements memRequirements;
+		vkGetBufferMemoryRequirements(VulkanUploader._VulkanDevice, scratchBuffer, &memRequirements);
+
+		//then allocate
+		AllocateVulkanMemory(VulkanUploader, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memRequirements, raytracedGroup._ScratchMemoryType, scratchMemory, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+
+		//then link together the buffer "interface" object, and the allcated memory
+		VK_CALL_PRINT(vkBindBufferMemory(VulkanUploader._VulkanDevice, scratchBuffer, scratchMemory, 0));
+
+		//get the address of our newly created buffer and give it to the addresss in parameters
+		VK_GET_BUFFER_ADDRESS(VulkanUploader._VulkanDevice, VkDeviceAddress, scratchBuffer, raytracedGroup._InstancesInfo.scratchData.deviceAddress);
+
+		//do not forget to free the temporary buffer
+		VulkanUploader._ToFreeBuffers.Add(scratchBuffer);
+		VulkanUploader._ToFreeMemory.Add(scratchMemory);
+	}
+
+	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCmdBuildAccelerationStructuresKHR, VulkanUploader._CopyBuffer, 1, &raytracedGroup._InstancesInfo, &raytracedGroup._InstancesRange);
+
+	//making the AS accessible
+	MemorySyncScope(VulkanUploader._CopyBuffer, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
+		VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);//basically just changing this memory to be visible, so the scope can be "immediate"
+
+	return result == VK_SUCCESS;
+}
+
 
 void VulkanHelper::ClearRaytracedGroup(const VkDevice& VulkanDevice, RaytracedGroup& raytracedModel)
 {

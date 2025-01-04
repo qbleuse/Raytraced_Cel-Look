@@ -133,7 +133,16 @@ namespace VulkanHelper
 	};
 
 	// Creates an Uploader Object to use in all other Vulkan Helper method. will create an open command buffer for copy command and such
-	bool StartUploader(class GraphicsAPIManager& GAPI, Uploader& VulkanUploader);
+	bool StartUploader(const GraphicsAPIManager& GAPI, Uploader& VulkanUploader);
+
+	/* Creates an Uploader Object to use in all other Vulkan Helper method. 
+	* will reuse the runtime command buffer of this frame to create an uplaoder
+	* This one is for creation in realtime, using the Runtime Handle.
+	* 
+	* Memory Properties will not be populated, so memory allocation will not work.
+	* if memory allocation is needed, save some parameters during creation time.
+	*/
+	void StartUploader(const GAPIHandle& GAPIHandle, Uploader& VulkanUploader);
 
 	// Submit the recorded copy commands, wait for it to finish, then releases the copy command memory.
 	bool SubmitUploader(Uploader& VulkanUploader);
@@ -163,7 +172,7 @@ namespace VulkanHelper
 	uint32_t GetMemoryTypeFromRequirements(const VkMemoryPropertyFlags& wantedMemoryProperties, const VkMemoryRequirements& memoryRequirements, const VkPhysicalDeviceMemoryProperties& memoryProperties);
 
 	/* Allocates GPU memory based on requirements */
-	bool AllocateVulkanMemory(Uploader& VulkanUploader, VkMemoryPropertyFlags properties, const VkMemoryRequirements& requirements, VkDeviceMemory& bufferMemory, VkMemoryAllocateFlags flags = 0);
+	bool AllocateVulkanMemory(const Uploader& VulkanUploader, VkMemoryPropertyFlags properties, const VkMemoryRequirements& requirements, uint32_t memoryType, VkDeviceMemory& bufferMemory, VkMemoryAllocateFlags flags = 0);
 
 	/* Buffers */
 
@@ -180,21 +189,21 @@ namespace VulkanHelper
 	};
 
 	/* Creates a one dimensionnal buffer of any usage and the association between CPU and GPU. if AllocateMemory is set to false, bufferMemory MUST BE VALID ! */
-	bool CreateVulkanBuffer(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buffer);
+	bool CreateVulkanBuffer(const Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkBuffer& buffer);
 
 
 	/* Allocates memory on GPU dempending on what needsthe buffer given in parameter */
-	bool CreateVulkanBufferMemory(Uploader& VulkanUploader, VkMemoryPropertyFlags properties, const VkBuffer& buffer, VkDeviceMemory& bufferMemory, VkMemoryAllocateFlags flags = 0);
+	bool CreateVulkanBufferMemory(const Uploader& VulkanUploader, VkMemoryPropertyFlags properties, const VkBuffer& buffer, VkDeviceMemory& bufferMemory, VkMemoryAllocateFlags flags = 0);
 
 	/* Creates a one dimensionnal buffer of any usage and the association between CPU and GPU. if AllocateMemory is set to false, bufferMemory MUST BE VALID ! */
-	bool CreateVulkanBufferAndMemory(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset = 0, bool allocate_memory = true, VkMemoryAllocateFlags flags = 0);
+	bool CreateVulkanBufferAndMemory(const Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, uint32_t offset = 0, bool allocate_memory = true, VkMemoryAllocateFlags flags = 0);
 
 	/* Creates a one dimensional temporary buffer (allocated memory and buffer placed in the ToFree stack of the uploader), and gets the memory address of the buffer */
 	bool CreateTmpBufferAndAddress(Uploader& VulkanUploader, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory, VkDeviceAddress& tmpBufferAddress, VkMemoryAllocateFlags flags = 0);
 
 	/* Creates all the pointers and handle vulkan needs to create a buffer on the GPU and creates a UniformBufferHandle on the CPU to manage it*/
 	bool CreateUniformBufferHandle(Uploader& VulkanUploader, UniformBufferHandle& bufferHandle, uint32_t bufferNb, VkDeviceSize size,
-		VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, VkBufferUsageFlags usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, bool map_cpu_memory_handle = true);
+		VkMemoryPropertyFlags properties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, VkBufferUsageFlags usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, bool map_cpu_memory_handle = true, VkMemoryAllocateFlags flags = 0);
 
 	/* Asks for de-allocation of all allocated resources for this UniformBufferHandle, on CPU and GPU*/
 	void ClearUniformBufferHandle(const VkDevice& VulkanDevice, UniformBufferHandle& bufferHandle);
@@ -210,7 +219,7 @@ namespace VulkanHelper
 	};
 
 	/* Creates all the pointers and handle vulkan needs to create a buffer on the GPU and creates a staging buffer to send the data */
-	bool CreateStaticBufferHandle(Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, VkDeviceSize size,
+	bool CreateStaticBufferHandle(const Uploader& VulkanUploader, StaticBufferHandle& bufferHandle, VkDeviceSize size,
 		VkBufferUsageFlags staticBufferUsage, VkMemoryPropertyFlags staticBufferProperties = 0, VkMemoryAllocateFlags flags = 0);
 
 	/* sends the data through the staging buffer to the static buffer */
@@ -381,8 +390,12 @@ namespace VulkanHelper
 	bool CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index = 0, uint32_t customInstanceIndex = 0, uint32_t shaderOffset = 0);
 	/*
 	* Creates and Build Acceleration Structure of all mesh in array, with one Acceleration Structure per mesh.
+	* 
+	* Each acceleration structure may have a transform associated:
+	* - it must be one buffer for each transform of each mesh. if it is null, we will consider that there is no transform
+	* - if offset is nullptr, we consider that every mesh uses the same transform. if it is not, offset must be the same size as mesh.
 	*/
-	bool CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh);
+	bool CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh, const VkBuffer& transformBuffer = VK_NULL_HANDLE, const MultipleVolatileMemory<uint32_t>& transformOffset = nullptr);
 	/*
 	* Creates and builds Accelerations Structure at index of raytracedGeometry from and array of AABBs. 
 	* /!\ raytraced geometry must be pre allocated /!\
@@ -400,6 +413,16 @@ namespace VulkanHelper
 		VkAccelerationStructureKHR	_AccelerationStructure;
 		VkBuffer					_AccelerationStructureBuffer;
 		VkDeviceMemory				_AccelerationStructureMemory;
+
+		//this needs to be kept for updates
+		VkAccelerationStructureBuildGeometryInfoKHR						_InstancesInfo{};
+		SingleScopedMemory<VkAccelerationStructureBuildRangeInfoKHR>	_InstancesRange;
+		MultipleScopedMemory<VkAccelerationStructureInstanceKHR>		_Instances;
+		StaticBufferHandle												_InstancesBufferHandle;
+
+
+		//the memory type of the scratch buffer
+		uint32_t _ScratchMemoryType;
 	};
 
 	/*
@@ -414,9 +437,13 @@ namespace VulkanHelper
 	* - geometry				: the array of raytraced geometry to make into instances and group into a single TLAS. should be the size of nb.
 	* - nb						: the nb of raytraced geometry in the geometry array. NOT THE TOTAL NB OF BLAS, JUST THE NUMBER OF RAYTRACED GEOMETRY.
 	*/
-	bool UploadRaytracedGroupFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedObject, const mat4& transform, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb, bool isUpdate = false);
-	bool CreateInstanceFromGeometry(Uploader& VulkanUploader, VkAccelerationStructureBuildGeometryInfoKHR& instancesInfo, VkAccelerationStructureBuildRangeInfoKHR& instancesRange, const mat4& transform, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb);
-	void ClearRaytracedGroup(const VkDevice& VulkanDevice, RaytracedGroup& raytracedGeometry);
+	bool CreateRaytracedGroupFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedObject, const mat4& transform, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb);
+	/* populates the Instances parameters of the raytraced group */
+	bool CreateInstanceFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedObject, const mat4& transform, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb);
+	/* Updates the transform for the specfied nb of instances, starting from index. */
+	bool UpdateTransform(const VkDevice& VulkanDevice, RaytracedGroup& raytracedObject, const mat4& transform, uint32_t index, uint32_t nb);
+	bool UpdateRaytracedGroup(Uploader& VulkanUploader, RaytracedGroup& raytracedGroup);
+	void ClearRaytracedGroup(const VkDevice& VulkanDevice, RaytracedGroup& raytracedGroup);
 
 
 

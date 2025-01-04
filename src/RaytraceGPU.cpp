@@ -18,17 +18,18 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	VkResult result = VK_SUCCESS;
 
 	/*===== MODEL LOADING & AS BUILDING ======*/
+	{
+		//load the model
+		VulkanHelper::LoadObjFile(GAPI._VulkanUploader, "../../../media/teapot/teapot.obj", _RayModel._Meshes);
 
-	//load the model
-	VulkanHelper::LoadObjFile(GAPI._VulkanUploader, "../../../media/teapot/teapot.obj", _RayModel._Meshes);
+		//create bottom level AS from model
+		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _RayModel._Meshes);
 
-	//create bottom level AS from model
-	VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _RayModel._Meshes);
 
-	//create Top level AS from geometry with identity matrix
-	VulkanHelper::RaytracedGeometry* geometries[2] = {&_RayBottomAS , &_RaySphereBottomAS};
-	VulkanHelper::UploadRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RaySphereTopAS, identity(), geometries, 2);
+		VulkanHelper::RaytracedGeometry* bottomAS[2] = { &_RayBottomAS , &_RaySphereBottomAS };
+		VulkanHelper::CreateRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RayTopAS, identity(), bottomAS, 2);
 
+	}
 	/*===== DESCRIBE SHADER STAGE AND GROUPS =====*/
 
 	//the shader stages we'll give to the pipeline
@@ -984,7 +985,7 @@ void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
 	for (uint32_t i = 0; i < 3; i++)
 	{
 		uint32_t originalNb = nbOfSpherePerMat[i];
-		nbOfSpherePerMat[i] += static_cast<uint32_t>(randf(0, randomSphereIndex));
+		nbOfSpherePerMat[i] += static_cast<uint32_t>(randf(0, randomSphereIndex - 1));
 		randomSphereIndex -= nbOfSpherePerMat[i];
 	}
 	nbOfSpherePerMat[0] += randomSphereIndex;
@@ -1056,11 +1057,6 @@ void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
 		AABBPtr += nbOfSpherePerMat[i];
 	}
 
-	//MultipleVolatileMemory<VulkanHelper::RaytracedGeometry*> geometries;
-	//geometries.Alloc(1);
-	//geometries[0] = &_RaySphereBottomAS;
-	//VulkanHelper::UploadRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RaySphereTopAS, identity(), nullptr, nullptr, geometries, 1);
-
 	VulkanHelper::CreateStaticBufferHandle(GAPI._VulkanUploader, _RaySphereBuffer, sizeof(vec4) * 29, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 	VulkanHelper::UploadStaticBufferHandle(GAPI._VulkanUploader, _RaySphereBuffer, *spheres, sizeof(vec4) * 29);
 
@@ -1093,6 +1089,10 @@ void RaytraceGPU::Prepare(class GraphicsAPIManager& GAPI)
 		//then create the pipeline
 		PrepareVulkanRaytracingProps(GAPI, RayGenShader, MissShader, TriangleHitShader, HitShader, IntersectShader, DiffuseShader, MetalShader, DielectricsShader);
 	}
+
+	//a "zero init" of the transform values
+	_RayObjData.scale = vec3{ 1.0f, 1.0f, 1.0f };
+	_RayObjData.pos = vec3{ 0.0f, 0.0f, 0.0f };
 
 	_RayBuffer.model = identity();
 
@@ -1180,7 +1180,7 @@ void RaytraceGPU::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI,
 		//Adding our Top Level AS in each descriptor set
 		VkWriteDescriptorSetAccelerationStructureKHR ASInfo{};
 		ASInfo.sType						= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
-		ASInfo.pAccelerationStructures		= &_RaySphereTopAS._AccelerationStructure;
+		ASInfo.pAccelerationStructures		= &_RayTopAS._AccelerationStructure;
 		ASInfo.accelerationStructureCount	= 1;
 		
 		VkWriteDescriptorSet ASDescriptorWrite{};
@@ -1476,9 +1476,6 @@ void RaytraceGPU::Resize(class GraphicsAPIManager& GAPI, int32_t old_width, int3
 
 void RaytraceGPU::Act(struct AppWideContext& AppContext)
 {
-
-	//_RayObjData.euler_angles.y += AppContext.delta_time;
-	//
 	//it will change every frame
 	{
 		_RayBuffer.proj = inv_perspective_proj(_CopyScissors.extent.width, _CopyScissors.extent.height, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
@@ -1487,16 +1484,19 @@ void RaytraceGPU::Act(struct AppWideContext& AppContext)
 		_RayBuffer.view .y.w = 0.0f;
 		_RayBuffer.view .z.w = 0.0f;
 		_RayBuffer.view .w.xyz = AppContext.camera_pos;
-		//_RayMatBuffer.model = scale(_RayObjData.scale.x, _RayObjData.scale.y, _RayObjData.scale.z) * ro_intrinsic_rot(_RayObjData.euler_angles.x, _RayObjData.euler_angles.y, _RayObjData.euler_angles.z) * ro_translate(_RayObjData.pos);
 	}
-	//
-	////UI update
-	//if (SceneCanShowUI(AppContext))
-	//{
-	//	ImGui::SliderFloat3("Object Postion", _RayObjData.pos.scalar, -100.0f, 100.0f);
-	//	ImGui::SliderFloat3("Object Rotation", _RayObjData.euler_angles.scalar, -180.0f, 180.0f);
-	//	ImGui::SliderFloat3("Object Scale", _RayObjData.scale.scalar, 0.0f, 1.0f, "%0.01f");
-	//}
+	
+
+	//UI update
+	if (SceneCanShowUI(AppContext))
+	{
+		 changedFlag |= ImGui::SliderFloat3("Object Postion", _RayObjData.pos.scalar, -100.0f, 100.0f);
+		 changedFlag |= ImGui::SliderFloat3("Object Rotation", _RayObjData.euler_angles.scalar, -180.0f, 180.0f);
+		 changedFlag |= ImGui::SliderFloat3("Object Scale", _RayObjData.scale.scalar, 0.0f, 1.0f, "%0.01f");
+
+	}
+
+	_RayObjData.euler_angles.y += 20.0f * AppContext.delta_time;
 
 }
 
@@ -1523,6 +1523,20 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 
 		VK_CALL_PRINT(vkBeginCommandBuffer(commandBuffer, &info));
 
+	}
+
+
+	//if (changedFlag)
+	{
+		mat4 transform = scale(_RayObjData.scale.x, _RayObjData.scale.y, _RayObjData.scale.z) * intrinsic_rot(_RayObjData.euler_angles.x, _RayObjData.euler_angles.y, _RayObjData.euler_angles.z) * translate(_RayObjData.pos);
+
+		changedFlag = false;
+
+		VulkanHelper::Uploader tmpUploader;
+		VulkanHelper::StartUploader(GAPIHandle, tmpUploader);
+		VulkanHelper::UpdateTransform(GAPIHandle._VulkanDevice, _RayTopAS, transform, 0, _RayBottomAS._AccelerationStructure.Nb());
+		VulkanHelper::UpdateRaytracedGroup(tmpUploader, _RayTopAS);
+		VulkanHelper::SubmitUploader(tmpUploader);
 	}
 
 	//the buffer will change every frame as the object rotates every frame

@@ -59,8 +59,6 @@ private:
 	VulkanHelper::Model					_RayModel;
 	//the 3D geometry of the model in the GPU raytracing pipeline format (BLAS)
 	VulkanHelper::RaytracedGeometry		_RayBottomAS;
-	//the Instance encapsulating the raytraced gemometry (TLAS)
-	VulkanHelper::RaytracedGroup		_RayTopAS;
 
 	//the Buffer describing the AABB needed for sphere's procedural geometry
 	MultipleScopedMemory<VulkanHelper::StaticBufferHandle>	_RaySphereAABBBuffer;
@@ -72,8 +70,9 @@ private:
 	VulkanHelper::StaticBufferHandle	_RaySphereOffsets;
 	//the procedural spheres in the GPU raytracing pipeline format (BLAS)
 	VulkanHelper::RaytracedGeometry		_RaySphereBottomAS;
+
 	//the Instance encapsulating the raytraced gemometry (TLAS)
-	VulkanHelper::RaytracedGroup		_RaySphereTopAS;
+	VulkanHelper::RaytracedGroup		_RayTopAS;
 
 	/*
 	* Creates the necessary resources for raytracing with vulkan.
@@ -203,6 +202,16 @@ public:
 	* Releases all the resources allocated in Prepare
 	*/
 	virtual void Close(class GraphicsAPIManager& GAPI)final;
+	
+	struct ObjectData
+	{
+		vec3 pos;
+		vec3 euler_angles;
+		vec3 scale;
+	};
+	//a struct to group the data that can be changed by user
+	ObjectData _RayObjData;
+	bool changedFlag = false;
 
 	struct UniformBuffer
 	{
