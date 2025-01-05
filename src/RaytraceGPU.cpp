@@ -218,6 +218,7 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	pipelineInfo.groupCount						= 7;
 	pipelineInfo.pGroups						= *shaderGroups;
 	pipelineInfo.maxPipelineRayRecursionDepth	= 1;//for the moment we'll hardcode the value, we'll see if we'll make it editable
+	pipelineInfo.maxPipelineRayRecursionDepth	= 1;//for the moment we'll hardcode the value, we'll see if we'll make it editable
 	pipelineInfo.layout							= _RayLayout;//describe the attachement
 
 	VK_CALL_KHR(GAPI._VulkanDevice, vkCreateRayTracingPipelinesKHR, GAPI._VulkanDevice, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_RayPipeline);
@@ -330,6 +331,9 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 
 			void main()
 			{
+				vec4 origin = -view[3];
+				vec3 finalColor = vec3(0.0);
+
 				const vec2 pixelCenter = gl_LaunchIDEXT.xy + vec2(0.5);
 
 				//finding the pixel we are computing from the ray launch arguments
@@ -337,24 +341,19 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 
 				vec2 d = inUV * 2.0 - 1.0;
 
-				vec3 finalColor = vec3(0.0);
+				//the targets are on a viewport ahead of us by 3
+				vec4 target = proj * vec4(d,1.0,1.0);
+				target = target/target.w;
 
-				//for (int j = 0; j < 10; j++)
+				//creating a direction for our ray
+				vec4 direction = view * vec4(normalize(target.xyz),0.0);
+
+
+				for (int j = 0; j < 1; j++)
 				{
-
-					//for the moment, fixed
-					vec4 origin = -view[3];
-					
-					//the targets are on a viewport ahead of us by 3
-					vec4 target = proj * vec4(d,1.0,1.0);
-					target = target/target.w;
-
-					//creating a direction for our ray
-					vec4 direction = view * vec4(normalize(target.xyz),0.0);
-
 					//zero init
 					payload.bHit		= 0;
-					payload.hitColor	= vec3(0.5);
+					payload.hitColor	= vec3(0.0);
 					payload.hitDistance = 0.0;
 					payload.hitNormal	= vec3(0.0);
 
@@ -380,11 +379,12 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 						if (payload.hitDistance < 0.0 || payload.bHit == 0.0)
 							break;
 
+
 						origin		+= direction * payload.hitDistance;
 						direction	= vec4(payload.hitNormal,0.0);
 					}
 
-					finalColor = fragColor;
+					finalColor += fragColor;
 				}
 				
 				//our recursive call finished, let's write into the image
@@ -439,6 +439,7 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 			{
 				vec3	direction;// the original directio of the hit 
 				vec3	normal;// the normal got from contact with the object
+				float	matInfo;
 				
 			};
 			layout(location = 1) callableDataEXT RayDispatch callablePayload;
@@ -459,6 +460,7 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 
 				callablePayload.direction	= gl_WorldRayDirectionEXT;
 				callablePayload.normal		= normal;
+				callablePayload.matInfo		= colour.w;
 				executeCallableEXT(gl_InstanceCustomIndexEXT, 1);
 				payload.hitNormal	= callablePayload.normal;
 
@@ -658,6 +660,7 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 			{
 				vec3	direction;// the original directio of the hit 
 				vec3	normal;// the normal got from contact with the object
+				float	matInfo;
 				
 			};
 			layout(location = 1) callableDataInEXT RayDispatch callablePayload;
@@ -702,10 +705,42 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 		R"(#version 460
 			#extension GL_EXT_ray_tracing : enable
 
+			uint InitRandomSeed(uint val0, uint val1)
+			{
+				uint v0 = val0, v1 = val1, s0 = 0;
+			
+				for (uint n = 0; n < 16; n++)
+				{
+					s0 += 0x9e3779b9;
+					v0 += ((v1 << 4) + 0xa341316c) ^ (v1 + s0) ^ ((v1 >> 5) + 0xc8013ea4);
+					v1 += ((v0 << 4) + 0xad90777d) ^ (v0 + s0) ^ ((v0 >> 5) + 0x7e95761e);
+				}
+			
+				return v0;
+			}
+
+			uint RandomInt(inout uint seed)
+			{
+				// LCG values from Numerical Recipes
+			    return (seed = 1664525 * seed + 1013904223);
+			}
+
+			float RandomFloat(inout uint seed)
+			{
+				//// Float version using bitmask from Numerical Recipes
+				//const uint one = 0x3f800000;
+				//const uint msk = 0x007fffff;
+				//return uintBitsToFloat(one | (msk & (RandomInt(seed) >> 9))) - 1;
+			
+				// Faster version from NVIDIA examples; quality good enough for our use case.
+				return (float(RandomInt(seed) & 0x00FFFFFF) / float(0x01000000));
+			}
+
 			struct RayDispatch
 			{
 				vec3	direction;// the original directio of the hit 
 				vec3	normal;// the normal got from contact with the object
+				float	matInfo;
 				
 			};
 			layout(location = 1) callableDataInEXT RayDispatch callablePayload;
@@ -715,15 +750,45 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				vec3 direction = callablePayload.direction;
 				vec3 normal = callablePayload.normal;
 
+				uint seed = InitRandomSeed(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y);
+
+				//are we in the object or outside ?
+				bool front_face		= dot(normal, direction) < 0.0f;
+				//normal is given inside-out, should be reversed if not front
+				normal			= front_face ? normal : -normal;
+				//the refractive index between the material (changes if we are inside or outside the object)
+				float refract_index = front_face ? (1.0f / callablePayload.matInfo) : callablePayload.matInfo;
+
+
 				//the cos angle between the ray and the normal
 				float cos_ray_normal = min(dot(-direction, normal), 1.0f);
-			
-				//the orthogonal component to our contact plane of our refracted ray
-				vec3 orth_comp		= (direction + (normal * cos_ray_normal)) * 1.0/1.50;
-				//the tangential component to our contact plane of our refracted ray
-				vec3 tangent_comp	= normal * -sqrt(abs(1.0f - dot(orth_comp, orth_comp)));
-				//the total refracted ray
-				callablePayload.normal  = normalize(tangent_comp + orth_comp);
+				//from trigonometry property -> cos^2 + sin^2 = 1, we get sin of angle
+				float sin_ray_normal = sqrt(1.0 - (cos_ray_normal * cos_ray_normal));
+
+				//this is the result of snell's law, a hard rule for which ray should refract or not.
+				bool cannot_refract = refract_index * sin_ray_normal > 1.0f;
+
+				//as snell's law is not really enough to properly represent refraction, 
+				//we'll also use Schlick's "reflectance", which is a quatitative approximation of the actual refraction law 
+				float reflectance = (1.0f - refract_index) / (1.0f + refract_index);
+				reflectance *= reflectance;
+				reflectance = reflectance + (1.0f * reflectance) * pow((1.0f - cos_ray_normal), 5);
+
+				//as snell's law is an approximation, it actually takes more of a probabilistic approach, thus the random.
+				if (cannot_refract || reflectance > RandomFloat(seed) )
+				{
+					callablePayload.normal = normalize(direction - (normal * 2.0f * dot(direction, normal)));
+				}
+				else
+				{	
+					//the orthogonal component to our contact plane of our refracted ray
+					vec3 orth_comp			= (direction + (normal * cos_ray_normal)) * refract_index;
+					//the tangential component to our contact plane of our refracted ray
+					vec3 tangent_comp		= normal * -sqrt(abs(1.0f - dot(orth_comp, orth_comp)));
+					//the total refracted ray
+					callablePayload.normal  = normalize(tangent_comp + orth_comp);
+				}
+
 
 			})";
 
@@ -978,14 +1043,14 @@ void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
 	// basically copy-paste of the CPU raytracing way of creating spheres
 
 	uint32_t nbOfRandomSpheres = NUMBER_OF_SPHERES;
-	uint32_t randomSphereIndex = nbOfRandomSpheres;
+	uint32_t randomSphereIndex = nbOfRandomSpheres - 4;
 	uint32_t nbOfSpherePerMat[3] = { 2, 1, 1 };//The 4 spheres are the ground and the three example one
 
 	/*randomy generating the number of sphere each material should have*/
-	for (uint32_t i = 0; i < 3; i++)
+	for (uint32_t i = 1; i < 3; i++)
 	{
 		uint32_t originalNb = nbOfSpherePerMat[i];
-		nbOfSpherePerMat[i] += static_cast<uint32_t>(randf(0, randomSphereIndex - 1));
+		nbOfSpherePerMat[i] += static_cast<uint32_t>(randf(1.0f, randomSphereIndex));
 		randomSphereIndex -= nbOfSpherePerMat[i];
 	}
 	nbOfSpherePerMat[0] += randomSphereIndex;
