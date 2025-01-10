@@ -35,11 +35,7 @@ private:
 	VkPipeline					_RayPipeline{};
 
 	//The binding table creatd from the raytracing shader
-	MultipleScopedMemory<VkStridedDeviceAddressRegionKHR>	_RayShaderBindingAddress;
-	//the buffer for the shader binding table
-	VkBuffer												_RayShaderBindingBuffer{ VK_NULL_HANDLE };
-	//the memory for the shader binding table
-	VkDeviceMemory											_RayShaderBindingMemory{VK_NULL_HANDLE};
+	VulkanHelper::ShaderBindingTable	_RayShaderBindingTable;
 
 	//A pool to allocate the descriptor sets needed
 	VkDescriptorPool						_RayDescriptorPool{};

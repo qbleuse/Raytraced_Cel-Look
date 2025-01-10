@@ -227,78 +227,81 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	/*===== SHADER BINDING TABLE CREATION =====*/
 	
 	//allocating space for the address of the SBT
-	_RayShaderBindingAddress.Alloc(4);
+	//_RayShaderBindingAddress.Alloc(4);
+	//
+	//{
+	//	//this machine's specific GPU properties to get the SBT alignement
+	//	VkPhysicalDeviceRayTracingPipelinePropertiesKHR rtProperties{};
+	//	rtProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+	//
+	//	//needed to get the above info
+	//	VkPhysicalDeviceProperties2 GPUProperties{};
+	//	GPUProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+	//	GPUProperties.pNext = &rtProperties;
+	//	vkGetPhysicalDeviceProperties2(GAPI._VulkanGPU, &GPUProperties);
+	//
+	//	//the needed alignement to create our shader binding table
+	//	uint32_t handleSize			= rtProperties.shaderGroupHandleSize;
+	//	uint32_t handleAlignment	= rtProperties.shaderGroupHandleAlignment;
+	//	uint32_t baseAlignment		= rtProperties.shaderGroupBaseAlignment;
+	//	uint32_t handleSizeAligned	= VulkanHelper::AlignUp(handleSize, handleAlignment);
+	//	uint32_t startSizeAligned	= VulkanHelper::AlignUp(handleSizeAligned, baseAlignment);
+	//
+	//	//raygen shader's aligned stride and size
+	//	_RayShaderBindingAddress[0].stride	= startSizeAligned;//there will only be one but still
+	//	_RayShaderBindingAddress[0].size	= startSizeAligned;
+	//
+	//	//miss shader's aligned stride and size
+	//	_RayShaderBindingAddress[1].stride	= handleSizeAligned;
+	//	_RayShaderBindingAddress[1].size	= startSizeAligned;
+	//
+	//	//hit shader's aligned stride and size
+	//	_RayShaderBindingAddress[2].stride	= handleSizeAligned;
+	//	_RayShaderBindingAddress[2].size	= startSizeAligned * 2;
+	//
+	//	//callable shader's aligned stride and size
+	//	_RayShaderBindingAddress[3].stride	= handleSizeAligned;
+	//	_RayShaderBindingAddress[3].size	= startSizeAligned * 3;
+	//
+	//	//creating a GPU buffer for the Shader Binding Table
+	//	VulkanHelper::CreateVulkanBufferAndMemory(GAPI._VulkanUploader, 7 * startSizeAligned, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+	//		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _RayShaderBindingBuffer, _RayShaderBindingMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+	//
+	//	//get back handle from shader group created in pipeline
+	//	MultipleVolatileMemory<uint8_t> shaderGroupHandle{ (uint8_t*)alloca(7 * handleSize) };
+	//	VK_CALL_KHR( GAPI._VulkanDevice, vkGetRayTracingShaderGroupHandlesKHR, GAPI._VulkanDevice, _RayPipeline, 0, 7, 7 * handleSize, *shaderGroupHandle);
+	//
+	//	//mapping memory to buffer
+	//	uint8_t* CPUSBTBufferMap;
+	//	vkMapMemory(GAPI._VulkanDevice, _RayShaderBindingMemory, 0, 7 * startSizeAligned, 0, (void**)(& CPUSBTBufferMap));
+	//
+	//	//memcpy(CPUSBTBufferMap, *shaderGroupHandle, 3 * startSizeAligned);
+	//	//copying every address to the shader table
+	//	memcpy(CPUSBTBufferMap, *shaderGroupHandle, handleSize);
+	//	memcpy(CPUSBTBufferMap + startSizeAligned, *shaderGroupHandle + handleSize, handleSize);
+	//	memcpy(CPUSBTBufferMap + 2 * startSizeAligned, *shaderGroupHandle + 2 * handleSize, handleSize);
+	//	memcpy(CPUSBTBufferMap + 3 * startSizeAligned, *shaderGroupHandle + 3 * handleSize, handleSize);
+	//	memcpy(CPUSBTBufferMap + 4 * startSizeAligned, *shaderGroupHandle + 4 * handleSize, handleSize*3);
+	//
+	//
+	//	//unmap and copy
+	//	vkUnmapMemory(GAPI._VulkanDevice, _RayShaderBindingMemory);
+	//
+	//	//get our GPU Buffer's address
+	//	VkBufferDeviceAddressInfo addressInfo{};
+	//	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+	//	addressInfo.buffer = _RayShaderBindingBuffer;
+	//	VkDeviceAddress GPUAddress = vkGetBufferDeviceAddress(GAPI._VulkanDevice, &addressInfo);
+	//
+	//	_RayShaderBindingAddress[0].deviceAddress = GPUAddress;
+	//	_RayShaderBindingAddress[1].deviceAddress = GPUAddress + _RayShaderBindingAddress[0].size;
+	//	_RayShaderBindingAddress[2].deviceAddress = GPUAddress + _RayShaderBindingAddress[0].size + _RayShaderBindingAddress[1].size;
+	//	_RayShaderBindingAddress[3].deviceAddress = GPUAddress + _RayShaderBindingAddress[0].size + _RayShaderBindingAddress[1].size + _RayShaderBindingAddress[2].size;
+	//
+	//}
 
-	{
-		//this machine's specific GPU properties to get the SBT alignement
-		VkPhysicalDeviceRayTracingPipelinePropertiesKHR rtProperties{};
-		rtProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
 
-		//needed to get the above info
-		VkPhysicalDeviceProperties2 GPUProperties{};
-		GPUProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-		GPUProperties.pNext = &rtProperties;
-		vkGetPhysicalDeviceProperties2(GAPI._VulkanGPU, &GPUProperties);
-
-		//the needed alignement to create our shader binding table
-		uint32_t handleSize			= rtProperties.shaderGroupHandleSize;
-		uint32_t handleAlignment	= rtProperties.shaderGroupHandleAlignment;
-		uint32_t baseAlignment		= rtProperties.shaderGroupBaseAlignment;
-		uint32_t handleSizeAligned	= VulkanHelper::AlignUp(handleSize, handleAlignment);
-		uint32_t startSizeAligned	= VulkanHelper::AlignUp(handleSizeAligned, baseAlignment);
-
-		//raygen shader's aligned stride and size
-		_RayShaderBindingAddress[0].stride	= startSizeAligned;//there will only be one but still
-		_RayShaderBindingAddress[0].size	= startSizeAligned;
-
-		//miss shader's aligned stride and size
-		_RayShaderBindingAddress[1].stride	= handleSizeAligned;
-		_RayShaderBindingAddress[1].size	= startSizeAligned;
-
-		//hit shader's aligned stride and size
-		_RayShaderBindingAddress[2].stride	= handleSizeAligned;
-		_RayShaderBindingAddress[2].size	= startSizeAligned * 2;
-
-		//callable shader's aligned stride and size
-		_RayShaderBindingAddress[3].stride	= handleSizeAligned;
-		_RayShaderBindingAddress[3].size	= startSizeAligned * 3;
-
-		//creating a GPU buffer for the Shader Binding Table
-		VulkanHelper::CreateVulkanBufferAndMemory(GAPI._VulkanUploader, 7 * startSizeAligned, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _RayShaderBindingBuffer, _RayShaderBindingMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
-
-		//get back handle from shader group created in pipeline
-		MultipleVolatileMemory<uint8_t> shaderGroupHandle{ (uint8_t*)alloca(7 * handleSize) };
-		VK_CALL_KHR( GAPI._VulkanDevice, vkGetRayTracingShaderGroupHandlesKHR, GAPI._VulkanDevice, _RayPipeline, 0, 7, 7 * handleSize, *shaderGroupHandle);
-
-		//mapping memory to buffer
-		uint8_t* CPUSBTBufferMap;
-		vkMapMemory(GAPI._VulkanDevice, _RayShaderBindingMemory, 0, 7 * startSizeAligned, 0, (void**)(& CPUSBTBufferMap));
-
-		//memcpy(CPUSBTBufferMap, *shaderGroupHandle, 3 * startSizeAligned);
-		//copying every address to the shader table
-		memcpy(CPUSBTBufferMap, *shaderGroupHandle, handleSize);
-		memcpy(CPUSBTBufferMap + startSizeAligned, *shaderGroupHandle + handleSize, handleSize);
-		memcpy(CPUSBTBufferMap + 2 * startSizeAligned, *shaderGroupHandle + 2 * handleSize, handleSize);
-		memcpy(CPUSBTBufferMap + 3 * startSizeAligned, *shaderGroupHandle + 3 * handleSize, handleSize);
-		memcpy(CPUSBTBufferMap + 4 * startSizeAligned, *shaderGroupHandle + 4 * handleSize, handleSize*3);
-
-
-		//unmap and copy
-		vkUnmapMemory(GAPI._VulkanDevice, _RayShaderBindingMemory);
-
-		//get our GPU Buffer's address
-		VkBufferDeviceAddressInfo addressInfo{};
-		addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-		addressInfo.buffer = _RayShaderBindingBuffer;
-		VkDeviceAddress GPUAddress = vkGetBufferDeviceAddress(GAPI._VulkanDevice, &addressInfo);
-
-		_RayShaderBindingAddress[0].deviceAddress = GPUAddress;
-		_RayShaderBindingAddress[1].deviceAddress = GPUAddress + _RayShaderBindingAddress[0].size;
-		_RayShaderBindingAddress[2].deviceAddress = GPUAddress + _RayShaderBindingAddress[0].size + _RayShaderBindingAddress[1].size;
-		_RayShaderBindingAddress[3].deviceAddress = GPUAddress + _RayShaderBindingAddress[0].size + _RayShaderBindingAddress[1].size + _RayShaderBindingAddress[2].size;
-
-	}
+	VulkanHelper::GetShaderBindingTable(GAPI._VulkanUploader, _RayPipeline, _RayShaderBindingTable, 1, 2, 3);
 }
 
 void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, 
@@ -1615,7 +1618,7 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 	//binding an available uniform buffer (current frame and frame index may be different, as we can ask for redraw multiple times while the frame is not presenting)
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _RayLayout, 0, 1, &_RayDescriptorSet[GAPIHandle._vk_current_frame], 0, nullptr);
 
-	VK_CALL_KHR(GAPIHandle._VulkanDevice, vkCmdTraceRaysKHR, commandBuffer, &_RayShaderBindingAddress[0], &_RayShaderBindingAddress[1], &_RayShaderBindingAddress[2], &_RayShaderBindingAddress[3], _CopyScissors.extent.width, _CopyScissors.extent.height, 1);
+	VK_CALL_KHR(GAPIHandle._VulkanDevice, vkCmdTraceRaysKHR, commandBuffer, &_RayShaderBindingTable._RayGenRegion, &_RayShaderBindingTable._MissRegion, &_RayShaderBindingTable._HitRegion, &_RayShaderBindingTable._CallableRegion, _CopyScissors.extent.width, _CopyScissors.extent.height, 1);
 
 	//allowing copy from write iamge to framebuffer
 	VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayWriteImage[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,

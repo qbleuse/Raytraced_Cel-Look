@@ -129,7 +129,8 @@ namespace VulkanHelper
 		List<VkBuffer>			_ToFreeBuffers;
 		List<VkDeviceMemory>	_ToFreeMemory;
 
-		VkPhysicalDeviceMemoryProperties	_MemoryProperties;
+		VkPhysicalDeviceMemoryProperties				_MemoryProperties;
+		VkPhysicalDeviceRayTracingPipelinePropertiesKHR _RTProperties;
 	};
 
 	// Creates an Uploader Object to use in all other Vulkan Helper method. will create an open command buffer for copy command and such
@@ -150,6 +151,28 @@ namespace VulkanHelper
 	/* Shaders */
 
 	bool CreateVulkanShaders(Uploader& VulkanUploader, VkShaderModule& shader, VkShaderStageFlagBits shaderStage, const char* shader_source, const char* shader_name, const char* entry_point = "main");
+
+	struct ShaderBindingTable
+	{
+		VkBuffer		_SBTBuffer{ VK_NULL_HANDLE };
+		VkDeviceMemory	_SBTMemory{ VK_NULL_HANDLE };
+
+		union 
+		{
+			struct
+			{
+				VkStridedDeviceAddressRegionKHR _RayGenRegion;
+				VkStridedDeviceAddressRegionKHR _MissRegion;
+				VkStridedDeviceAddressRegionKHR _HitRegion;
+				VkStridedDeviceAddressRegionKHR _CallableRegion;
+			};
+
+			VkStridedDeviceAddressRegionKHR _SBTRegion[4] = {};
+		};
+		
+	};
+
+	bool GetShaderBindingTable(Uploader& VulkanUploader, const VkPipeline& VulkanPipeline,  ShaderBindingTable& SBT, uint32_t nbMissGroup, uint32_t nbHitGroup, uint32_t nbCallable);
 
 	/* Memory */
 
