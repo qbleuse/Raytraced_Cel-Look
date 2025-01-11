@@ -1712,8 +1712,8 @@ bool VulkanHelper::CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBu
 	//very naive way of doing this. just copying the already allocated GPU memory into a new allocated scene buffer
 	{
 		//the offset buffer that tells the eqch mesh where its vertices are
-		MultipleScopedMemory<vec3> offsetBuffer{mesh.Nb()};
-		memset(*offsetBuffer, 0, mesh.Nb() * sizeof(vec3));
+		MultipleScopedMemory<uint32_t> offsetBuffer{mesh.Nb() * 3};
+		memset(*offsetBuffer, 0, mesh.Nb() * sizeof(uint32_t) * 3);
 
 		//to count the total nb of vertices there is to allocate a buffer of that size 
 		uint32_t totalIndexNb = 0;
@@ -1732,7 +1732,9 @@ bool VulkanHelper::CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBu
 			if (i == mesh.Nb())
 				break;
 
-			offsetBuffer[i] = vec3{ static_cast<float>(totalIndexNb), static_cast<float>(totalUVNb), static_cast<float>(totalNormalNb)};
+			offsetBuffer[i * 3 + 0] = totalIndexNb;
+			offsetBuffer[i * 3 + 1] = totalUVNb;
+			offsetBuffer[i * 3 + 2] = totalNormalNb;
 		}
 
 		//we can determine the final size of each buffer
@@ -1752,24 +1754,29 @@ bool VulkanHelper::CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBu
 
 			VkBufferCopy region;
 			region.srcOffset = indexedMesh._indices_offset * sizeof(uint32_t);
-			region.dstOffset = offsetBuffer[i].x * sizeof(uint32_t);
+			region.dstOffset = offsetBuffer[i * 3] * sizeof(uint32_t);
 			region.size		= indexedMesh._indices_nb * sizeof(uint32_t);
 			vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Indices, sceneBuffer._IndexBuffer._StaticGPUBuffer, 1, &region);
 
 
 			region.srcOffset = indexedMesh._uv_offset * sizeof(vec2);
-			region.dstOffset = offsetBuffer[i].y * sizeof(vec2);
+			region.dstOffset = offsetBuffer[i * 3 + 1] * sizeof(vec2);
 			region.size = indexedMesh._uv_nb * sizeof(vec2);
 			vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Uvs, sceneBuffer._UVsBuffer._StaticGPUBuffer, 1, &region);
 
 
 			region.srcOffset = indexedMesh._normal_offset * sizeof(vec3);
-			region.dstOffset = offsetBuffer[i].z * sizeof(vec3);
+			region.dstOffset = offsetBuffer[i*3 + 2] * sizeof(vec3);
 			region.size = indexedMesh._normal_nb * sizeof(vec3);
 			vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Normals, sceneBuffer._NormalBuffer._StaticGPUBuffer, 1, &region);
 		}
 
-		sceneBuffer._OffsetBufferSize = mesh.Nb() * sizeof(vec3);
+		//making the AS accessible
+		MemorySyncScope(VulkanUploader._CopyBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);//basically just changing this memory to be visible, so the scope can be "immediate"
+
+
+		sceneBuffer._OffsetBufferSize = mesh.Nb() * sizeof(uint32_t) * 3;
 
 		//creating our offset buffer
 		CreateStaticBufferHandle(VulkanUploader, sceneBuffer._OffsetBuffer, sceneBuffer._OffsetBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
