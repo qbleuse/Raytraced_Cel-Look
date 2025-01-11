@@ -57,6 +57,8 @@ private:
 	VulkanHelper::UniformBufferHandle	_RayUniformBuffer;
 	//a struct containing the preallocated Vulkan memory and buffer of a loaded model
 	VulkanHelper::Model					_RayModel;
+	//static buffers concatenating all primitive data in the scene for use in the shader
+	VulkanHelper::SceneBuffer			_RaySceneBuffer;
 	//the 3D geometry of the model in the GPU raytracing pipeline format (BLAS)
 	VulkanHelper::RaytracedGeometry		_RayBottomAS;
 

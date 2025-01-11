@@ -556,6 +556,12 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* file_name, 
 		meshes[i]._indices_offset = indexOffset;
 		meshes[i]._indices_type = VK_INDEX_TYPE_UINT32;
 
+		//sets the nb of vertices in the buffers
+		meshes[i]._pos_nb		= nbVertices;
+		meshes[i]._uv_nb		= nbVertices;
+		meshes[i]._normal_nb	= nbVertices;
+		meshes[i]._tangent_nb	= nbVertices;
+
 		indexOffset += indexNb;
 	}
 
@@ -564,7 +570,8 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* file_name, 
 	StaticBufferHandle posBuffer;
 	CreateStaticBufferHandle(VulkanUploader, posBuffer, sizeof(vec3) * nbVertices, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT 
 																				| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT 
-																				| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR, 
+																				| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR
+																				| VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 																				0, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 	UploadStaticBufferHandle(VulkanUploader, posBuffer, (void*)objAttrib.vertices.data(), sizeof(vec3) * nbVertices);
 
@@ -572,7 +579,8 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* file_name, 
 	StaticBufferHandle indexBuffer;
 	CreateStaticBufferHandle(VulkanUploader, indexBuffer, sizeof(uint32_t)* totalIndexNb, VK_BUFFER_USAGE_INDEX_BUFFER_BIT 
 																						| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT 
-																						| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+																						| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR
+																						| VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 																						0, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 	UploadStaticBufferHandle(VulkanUploader, indexBuffer, (void*)*indices, sizeof(uint32_t) * totalIndexNb);
 
@@ -582,7 +590,8 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* file_name, 
 	{
 		CreateStaticBufferHandle(VulkanUploader, uvBuffer, sizeof(vec2) * nbVertices, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT 
 																					| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT 
-																					| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+																					| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR
+																					| VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 																					0, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 		UploadStaticBufferHandle(VulkanUploader, uvBuffer, (void*)*tex_coords, sizeof(vec2) * nbVertices);
 	}
@@ -593,7 +602,8 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* file_name, 
 	{
 		CreateStaticBufferHandle(VulkanUploader, normalBuffer, sizeof(vec3) * nbVertices, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT 
 																						| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT 
-																						| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR,
+																						| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR
+																						| VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 																						0, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 		UploadStaticBufferHandle(VulkanUploader, normalBuffer, (void*)*_Normals, sizeof(vec3) * nbVertices);
 	}
@@ -872,7 +882,6 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 
 				model._Meshes[meshIndex]._indices_nb = accessor.count;
 				model._Meshes[meshIndex]._indices_offset = 0;
-
 				switch (accessor.componentType)
 				{
 				case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
@@ -897,6 +906,8 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 					model._Meshes[meshIndex]._Positions, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._pos_offset = accessor.byteOffset + bufferView.byteOffset;
+				model._Meshes[meshIndex]._pos_nb = accessor.count;
+
 			}
 
 			//_Uvs
@@ -909,6 +920,8 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 					model._Meshes[meshIndex]._Uvs, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._uv_offset = bufferView.byteOffset + accessor.byteOffset;
+				model._Meshes[meshIndex]._uv_nb = accessor.count;
+
 			}
 
 			//_Normals
@@ -921,6 +934,8 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 					model._Meshes[meshIndex]._Normals, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._normal_offset = bufferView.byteOffset + accessor.byteOffset;
+				model._Meshes[meshIndex]._normal_nb = accessor.count;
+
 			}
 
 			//tangents
@@ -933,6 +948,8 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 					model._Meshes[meshIndex]._Tangents, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._tangent_offset = bufferView.byteOffset + accessor.byteOffset;
+				model._Meshes[meshIndex]._tangent_nb = accessor.count;
+
 			}
 
 			meshIndex++;
@@ -1211,7 +1228,7 @@ bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAcc
 
 
 //creating a bottom level AS for each mesh of model
-bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh, const VkBuffer& transformBuffer, const MultipleVolatileMemory<uint32_t>& transformOffset)
+bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh, const VkBuffer& transformBuffer, const MultipleVolatileMemory<uint32_t>& transformOffset, uint32_t customInstanceIndex, uint32_t shaderOffset)
 {
 	//if an error happens...
 	VkResult result = VK_SUCCESS;
@@ -1240,6 +1257,8 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 	raytracedGeometry._AccelerationStructure.Alloc(mesh.Nb());
 	raytracedGeometry._AccelerationStructureBuffer.Alloc(mesh.Nb());
 	raytracedGeometry._AccelerationStructureMemory.Alloc(mesh.Nb());
+	raytracedGeometry._CustomInstanceIndex.Alloc(mesh.Nb());
+	raytracedGeometry._ShaderOffset.Alloc(mesh.Nb());
 
 	bool usesOffset = transformOffset != nullptr;
 
@@ -1264,7 +1283,7 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 		bottomLevelMeshASData.vertexData	= VkDeviceOrHostAddressConstKHR{ GPUBufferAddress };// this is sure to be a static buffer as we will not change vertex data
 		bottomLevelMeshASData.vertexFormat	= VK_FORMAT_R32G32B32_SFLOAT;//pos is vec3
 		bottomLevelMeshASData.vertexStride	= sizeof(vec3);//pos is vec3
-		//bottomLevelMeshASData.maxVertex = 2;
+		bottomLevelMeshASData.maxVertex		= iMesh._pos_nb;
 		//we do not have the data to know "bottomLevelMeshAS.maxVertex"
 
 		//getting back the indices' GPU address
@@ -1292,7 +1311,7 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 		meshASRange.transformOffset = usesOffset ? transformOffset[i] : 0;
 		bottomLevelMeshASRangeInfoPtr[i] = &meshASRange;
 
-		CreateRaytracedGeometry(VulkanUploader, meshAS, meshASRange, raytracedGeometry, bottomLevelMeshASInfo[i], i);
+		CreateRaytracedGeometry(VulkanUploader, meshAS, meshASRange, raytracedGeometry, bottomLevelMeshASInfo[i], i, customInstanceIndex, shaderOffset);
 	}
 
 	//finally, asking to build all of the acceleration structures at once (this is basically a copy command, so it is a defered call)
@@ -1596,4 +1615,82 @@ void VulkanHelper::ClearRaytracedGroup(const VkDevice& VulkanDevice, RaytracedGr
 	VK_CALL_KHR(VulkanDevice, vkDestroyAccelerationStructureKHR, VulkanDevice, raytracedModel._AccelerationStructure, nullptr);
 	vkDestroyBuffer(VulkanDevice, raytracedModel._AccelerationStructureBuffer, nullptr);
 	vkFreeMemory(VulkanDevice, raytracedModel._AccelerationStructureMemory, nullptr);
+}
+
+
+bool VulkanHelper::CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBuffer& sceneBuffer, const VolatileLoopArray<Mesh>& mesh)
+{
+	//to record if an error happened
+	VkResult result = VK_SUCCESS;
+
+	//very naive way of doing this. just copying the already allocated GPU memory into a new allocated scene buffer
+	{
+		//the offset buffer that tells the eqch mesh where its vertices are
+		MultipleScopedMemory<vec3> offsetBuffer{mesh.Nb()};
+		memset(*offsetBuffer, 0, mesh.Nb() * sizeof(vec3));
+
+		//to count the total nb of vertices there is to allocate a buffer of that size 
+		uint32_t totalIndexNb = 0;
+		uint32_t totalUVNb = 0;
+		uint32_t totalNormalNb = 0;
+
+		//filling the offset buffer and the total count
+		for (uint32_t i = 1; i <= mesh.Nb(); i++)
+		{
+			const Mesh& indexedMesh = mesh[i - 1];
+
+			totalIndexNb	+= indexedMesh._indices_nb;
+			totalUVNb		+= indexedMesh._uv_nb;
+			totalNormalNb	+= indexedMesh._normal_nb;
+
+			if (i == mesh.Nb())
+				break;
+
+			offsetBuffer[i] = vec3{ static_cast<float>(totalIndexNb), static_cast<float>(totalUVNb), static_cast<float>(totalNormalNb)};
+		}
+
+		//we can determine the final size of each buffer
+		sceneBuffer._IndexBufferSize	= totalIndexNb * sizeof(uint32_t);
+		sceneBuffer._UVsBufferSize		= totalUVNb * sizeof(vec2);
+		sceneBuffer._NormalBufferSize	= totalNormalNb * sizeof(vec3);
+
+		//creating the buffer we'll fil with the vertices data 
+		CreateStaticBufferHandle(VulkanUploader, sceneBuffer._IndexBuffer, sceneBuffer._IndexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+		CreateStaticBufferHandle(VulkanUploader, sceneBuffer._UVsBuffer, sceneBuffer._UVsBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+		CreateStaticBufferHandle(VulkanUploader, sceneBuffer._NormalBuffer, sceneBuffer._NormalBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+		//copy buffers
+		for (uint32_t i = 0; i < mesh.Nb(); i++)
+		{
+			const Mesh& indexedMesh = mesh[i];
+
+			VkBufferCopy region;
+			region.srcOffset = indexedMesh._indices_offset * sizeof(uint32_t);
+			region.dstOffset = offsetBuffer[i].x * sizeof(uint32_t);
+			region.size		= indexedMesh._indices_nb * sizeof(uint32_t);
+			vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Indices, sceneBuffer._IndexBuffer._StaticGPUBuffer, 1, &region);
+
+
+			region.srcOffset = indexedMesh._uv_offset * sizeof(vec2);
+			region.dstOffset = offsetBuffer[i].y * sizeof(vec2);
+			region.size = indexedMesh._uv_nb * sizeof(vec2);
+			vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Uvs, sceneBuffer._UVsBuffer._StaticGPUBuffer, 1, &region);
+
+
+			region.srcOffset = indexedMesh._normal_offset * sizeof(vec3);
+			region.dstOffset = offsetBuffer[i].z * sizeof(vec3);
+			region.size = indexedMesh._normal_nb * sizeof(vec3);
+			vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Normals, sceneBuffer._NormalBuffer._StaticGPUBuffer, 1, &region);
+		}
+
+		sceneBuffer._OffsetBufferSize = mesh.Nb() * sizeof(vec3);
+
+		//creating our offset buffer
+		CreateStaticBufferHandle(VulkanUploader, sceneBuffer._OffsetBuffer, sceneBuffer._OffsetBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+		UploadStaticBufferHandle(VulkanUploader, sceneBuffer._OffsetBuffer, *offsetBuffer, sceneBuffer._OffsetBufferSize);
+
+	}
+
+	return result == VK_SUCCESS;
+
 }

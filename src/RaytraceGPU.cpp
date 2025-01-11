@@ -23,8 +23,9 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 		VulkanHelper::LoadObjFile(GAPI._VulkanUploader, "../../../media/teapot/teapot.obj", _RayModel._Meshes);
 
 		//create bottom level AS from model
-		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _RayModel._Meshes);
+		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _RayModel._Meshes, VK_NULL_HANDLE, nullptr, 0, 0);
 
+		VulkanHelper::CreateSceneBufferFromMeshes(GAPI._VulkanUploader, _RaySceneBuffer, _RayModel._Meshes);
 
 		VulkanHelper::RaytracedGeometry* bottomAS[2] = { &_RayBottomAS , &_RaySphereBottomAS };
 		VulkanHelper::CreateRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RayTopAS, identity(), bottomAS, 2);
@@ -104,21 +105,20 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	shaderGroups[1].intersectionShader	= VK_SHADER_UNUSED_KHR;
 
 	//describing our hit group, it only includes the third shader of our pipeline, as we have not described multiple hits
-	shaderGroups[2].sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
-	//shaderGroups[2].type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
-	shaderGroups[2].type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR;
-	shaderGroups[2].generalShader		= VK_SHADER_UNUSED_KHR;
-	shaderGroups[2].closestHitShader	= 2;
-	shaderGroups[2].anyHitShader		= VK_SHADER_UNUSED_KHR;
-	shaderGroups[2].intersectionShader	= 3;
+	shaderGroups[3].sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+	shaderGroups[3].type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR;
+	shaderGroups[3].generalShader		= VK_SHADER_UNUSED_KHR;
+	shaderGroups[3].closestHitShader	= 2;
+	shaderGroups[3].anyHitShader		= VK_SHADER_UNUSED_KHR;
+	shaderGroups[3].intersectionShader	= 3;
 
 	//describing our hit group, it only includes the third shader of our pipeline, as we have not described multiple hits
-	shaderGroups[3].sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
-	shaderGroups[3].type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
-	shaderGroups[3].generalShader		= VK_SHADER_UNUSED_KHR;
-	shaderGroups[3].closestHitShader	= 4;
-	shaderGroups[3].anyHitShader		= VK_SHADER_UNUSED_KHR;
-	shaderGroups[3].intersectionShader	= VK_SHADER_UNUSED_KHR;
+	shaderGroups[2].sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+	shaderGroups[2].type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
+	shaderGroups[2].generalShader		= VK_SHADER_UNUSED_KHR;
+	shaderGroups[2].closestHitShader	= 4;
+	shaderGroups[2].anyHitShader		= VK_SHADER_UNUSED_KHR;
+	shaderGroups[2].intersectionShader	= VK_SHADER_UNUSED_KHR;
 
 	//describing our callable diffuse group
 	shaderGroups[4].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
@@ -189,10 +189,39 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 		sphereOffsetBinding.descriptorCount = 1;
 		sphereOffsetBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
 
+		//create a binding for our uniform buffers
+		VkDescriptorSetLayoutBinding offsetBinding{};
+		offsetBinding.binding = 6;
+		offsetBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		offsetBinding.descriptorCount = 1;
+		offsetBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+
+		//create a binding for our uniform buffers
+		VkDescriptorSetLayoutBinding sceneIndexBinding{};
+		sceneIndexBinding.binding = 7;
+		sceneIndexBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		sceneIndexBinding.descriptorCount = 1;
+		sceneIndexBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+
+		//create a binding for our uniform buffers
+		VkDescriptorSetLayoutBinding sceneUVBinding{};
+		sceneUVBinding.binding = 8;
+		sceneUVBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		sceneUVBinding.descriptorCount = 1;
+		sceneUVBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+
+		//create a binding for our uniform buffers
+		VkDescriptorSetLayoutBinding sceneNormalBinding{};
+		sceneNormalBinding.binding = 9;
+		sceneNormalBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		sceneNormalBinding.descriptorCount = 1;
+		sceneNormalBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+
 		VkDescriptorSetLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType		= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		layoutInfo.bindingCount = 6;
-		VkDescriptorSetLayoutBinding layoutsBinding[6] = {ASLayoutBinding , colourBackBufferBinding, uniformBufferBinding, sphereBufferBinding, sphereColourBinding, sphereOffsetBinding };
+		layoutInfo.bindingCount = 10;
+		VkDescriptorSetLayoutBinding layoutsBinding[10] = {ASLayoutBinding , colourBackBufferBinding, uniformBufferBinding, sphereBufferBinding, sphereColourBinding, sphereOffsetBinding,
+		offsetBinding, sceneIndexBinding, sceneUVBinding, sceneNormalBinding};
 		layoutInfo.pBindings = layoutsBinding;
 
 		VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI._VulkanDevice, &layoutInfo, nullptr, &_RayDescriptorLayout));
@@ -279,8 +308,7 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 		//copying every address to the shader table
 		memcpy(CPUSBTBufferMap, *shaderGroupHandle, handleSize);
 		memcpy(CPUSBTBufferMap + startSizeAligned, *shaderGroupHandle + handleSize, handleSize);
-		memcpy(CPUSBTBufferMap + 2 * startSizeAligned, *shaderGroupHandle + 2 * handleSize, handleSize);
-		memcpy(CPUSBTBufferMap + 3 * startSizeAligned, *shaderGroupHandle + 3 * handleSize, handleSize);
+		memcpy(CPUSBTBufferMap + 2 * startSizeAligned, *shaderGroupHandle + 2 * handleSize, handleSize*2);
 		memcpy(CPUSBTBufferMap + 4 * startSizeAligned, *shaderGroupHandle + 4 * handleSize, handleSize*3);
 
 
@@ -529,20 +557,28 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				}
 			}
 
+			layout(binding = 6) readonly buffer OffsetBuffer { vec3[] Offsets; };
+			layout(binding = 7) readonly buffer IndexBuffer { uint[] Indices; };
+			layout(binding = 8) readonly buffer UVBuffer { vec2[] UVs; };
+			layout(binding = 9) readonly buffer NormalBuffer { vec3[] Normals; };
+
 			hitAttributeEXT vec2 barycentric;
 
 			void main()
 			{
 				const vec3 hitPoint = gl_WorldRayOriginEXT + gl_HitTEXT * gl_WorldRayDirectionEXT;
-				//vec3 normal = (hitPoint - attribs.xyz) / attribs.w;
 
-				uint seed = InitRandomSeed(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y);
+				const vec3 offset = Offsets[gl_InstanceID];
 
-				const vec3 rand = RandomInUnitSphere(seed);
-				vec3 normal = normalize(rand);
+				const vec3 N1 = Normals[Indices[uint(offset.x) + gl_PrimitiveID * 3 + 0] + uint(offset.z)];
+				const vec3 N2 = Normals[Indices[uint(offset.x) + gl_PrimitiveID * 3 + 1] + uint(offset.z)];
+				const vec3 N3 = Normals[Indices[uint(offset.x) + gl_PrimitiveID * 3 + 2] + uint(offset.z)];
+				const vec3 coordinates = vec3(1.0 - barycentric.x - barycentric.y, barycentric.x, barycentric.y);
+
+				vec3 normal = normalize(N1 * coordinates.x + N2 * coordinates.y + N3 * coordinates.z);
 
 				payload.bHit		= 1.0;
-				payload.hitColor	= vec3(1.0,1.0,1.0);
+				payload.hitColor	= vec3(1.0);
 				payload.hitDistance = gl_HitTEXT;
 				payload.hitNormal	= normal;
 			})";
@@ -1118,7 +1154,7 @@ void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
 	VkAabbPositionsKHR* AABBPtr = *AABBs;
 	for (uint32_t i = 0; i < 3; i++)
 	{
-		VulkanHelper::CreateRaytracedProceduralFromAABB(GAPI._VulkanUploader, _RaySphereAABBBuffer[i], _RaySphereBottomAS, AABBPtr, nbOfSpherePerMat[i], i, i);
+		VulkanHelper::CreateRaytracedProceduralFromAABB(GAPI._VulkanUploader, _RaySphereAABBBuffer[i], _RaySphereBottomAS, AABBPtr, nbOfSpherePerMat[i], i, i, 1);
 		AABBPtr += nbOfSpherePerMat[i];
 	}
 
@@ -1208,8 +1244,8 @@ void RaytraceGPU::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI,
 		//creating our descriptor pool to allocate sets for each frame
 		VkDescriptorPoolCreateInfo poolInfo{};
 		poolInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		poolInfo.poolSizeCount	= 5;
-		VkDescriptorPoolSize poolSizes[5] = {ASPoolSize, imagePoolSize, bufferPoolSize, spherePoolSize, spherePoolSize};
+		poolInfo.poolSizeCount	= 10;
+		VkDescriptorPoolSize poolSizes[10] = {ASPoolSize, imagePoolSize, bufferPoolSize, spherePoolSize, spherePoolSize, spherePoolSize , spherePoolSize, spherePoolSize , spherePoolSize , spherePoolSize };
 		poolInfo.pPoolSizes		= poolSizes;
 		poolInfo.maxSets		= GAPI._nb_vk_frames;
 
@@ -1331,8 +1367,69 @@ void RaytraceGPU::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI,
 		sphereOffsetWrite.descriptorCount = 1;
 		sphereOffsetWrite.pBufferInfo = &sphereOffsetInfo;
 
-		VkWriteDescriptorSet descriptorWrites[6] = { ASDescriptorWrite,  imageDescriptorWrite, descriptorWrite, sphereWrite, sphereColourWrite, sphereOffsetWrite };
-		vkUpdateDescriptorSets(GAPI._VulkanDevice, 6, descriptorWrites, 0, nullptr);
+		VkDescriptorBufferInfo offsetInfo{};
+		offsetInfo.buffer	= _RaySceneBuffer._OffsetBuffer._StaticGPUBuffer;
+		offsetInfo.offset	= 0;
+		offsetInfo.range	= _RaySceneBuffer._OffsetBufferSize;
+
+		//then link it to the descriptor
+		VkWriteDescriptorSet offsetWrite{};
+		offsetWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		offsetWrite.dstSet = _RayDescriptorSet[i];
+		offsetWrite.dstBinding = 6;
+		offsetWrite.dstArrayElement = 0;
+		offsetWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		offsetWrite.descriptorCount = 1;
+		offsetWrite.pBufferInfo = &offsetInfo;
+
+		VkDescriptorBufferInfo indexInfo{};
+		indexInfo.buffer = _RaySceneBuffer._IndexBuffer._StaticGPUBuffer;
+		indexInfo.offset = 0;
+		indexInfo.range = _RaySceneBuffer._IndexBufferSize;
+
+		//then link it to the descriptor
+		VkWriteDescriptorSet indexWrite{};
+		indexWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		indexWrite.dstSet = _RayDescriptorSet[i];
+		indexWrite.dstBinding = 7;
+		indexWrite.dstArrayElement = 0;
+		indexWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		indexWrite.descriptorCount = 1;
+		indexWrite.pBufferInfo = &indexInfo;
+
+		VkDescriptorBufferInfo uvInfo{};
+		uvInfo.buffer = _RaySceneBuffer._UVsBuffer._StaticGPUBuffer;
+		uvInfo.offset = 0;
+		uvInfo.range = _RaySceneBuffer._UVsBufferSize;
+
+		//then link it to the descriptor
+		VkWriteDescriptorSet uvWrite{};
+		uvWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		uvWrite.dstSet = _RayDescriptorSet[i];
+		uvWrite.dstBinding = 8;
+		uvWrite.dstArrayElement = 0;
+		uvWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		uvWrite.descriptorCount = 1;
+		uvWrite.pBufferInfo = &uvInfo;
+
+		VkDescriptorBufferInfo normalInfo{};
+		normalInfo.buffer = _RaySceneBuffer._NormalBuffer._StaticGPUBuffer;
+		normalInfo.offset = 0;
+		normalInfo.range = _RaySceneBuffer._NormalBufferSize;
+
+		//then link it to the descriptor
+		VkWriteDescriptorSet normalWrite{};
+		normalWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		normalWrite.dstSet = _RayDescriptorSet[i];
+		normalWrite.dstBinding = 9;
+		normalWrite.dstArrayElement = 0;
+		normalWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		normalWrite.descriptorCount = 1;
+		normalWrite.pBufferInfo = &normalInfo;
+
+
+		VkWriteDescriptorSet descriptorWrites[10] = { ASDescriptorWrite,  imageDescriptorWrite, descriptorWrite, sphereWrite, sphereColourWrite, sphereOffsetWrite, offsetWrite, indexWrite, uvWrite, normalWrite };
+		vkUpdateDescriptorSets(GAPI._VulkanDevice, 10, descriptorWrites, 0, nullptr);
 	}
 }
 

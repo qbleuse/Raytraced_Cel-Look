@@ -262,6 +262,18 @@ namespace VulkanHelper
 			VkDeviceSize _vertex_offsets[4] = {0,0,0,0};
 		};
 
+		union
+		{
+			struct
+			{
+				VkDeviceSize _pos_nb;
+				VkDeviceSize _uv_nb;
+				VkDeviceSize _normal_nb;
+				VkDeviceSize _tangent_nb;
+			};
+			VkDeviceSize _vertex_nb[4] = { 0,0,0,0 };
+		};
+
 		VolatileLoopArray<VkDeviceMemory> _VertexMemoryHandle;
 
 		VkBuffer	_Indices{ VK_NULL_HANDLE };
@@ -395,7 +407,7 @@ namespace VulkanHelper
 	* - it must be one buffer for each transform of each mesh. if it is null, we will consider that there is no transform
 	* - if offset is nullptr, we consider that every mesh uses the same transform. if it is not, offset must be the same size as mesh.
 	*/
-	bool CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh, const VkBuffer& transformBuffer = VK_NULL_HANDLE, const MultipleVolatileMemory<uint32_t>& transformOffset = nullptr);
+	bool CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh, const VkBuffer& transformBuffer = VK_NULL_HANDLE, const MultipleVolatileMemory<uint32_t>& transformOffset = nullptr, uint32_t customInstanceIndex = 0, uint32_t shaderOffset = 0);
 	/*
 	* Creates and builds Accelerations Structure at index of raytracedGeometry from and array of AABBs. 
 	* /!\ raytraced geometry must be pre allocated /!\
@@ -444,6 +456,29 @@ namespace VulkanHelper
 	bool UpdateTransform(const VkDevice& VulkanDevice, RaytracedGroup& raytracedObject, const mat4& transform, uint32_t index, uint32_t nb);
 	bool UpdateRaytracedGroup(Uploader& VulkanUploader, RaytracedGroup& raytracedGroup);
 	void ClearRaytracedGroup(const VkDevice& VulkanDevice, RaytracedGroup& raytracedGroup);
+
+
+	struct SceneBuffer
+	{
+		//copy of the index buffer of all primitives in the scene
+		StaticBufferHandle _IndexBuffer;
+		//copy of the uv buffer of all primitives in the scene
+		StaticBufferHandle _UVsBuffer;
+		//copy of the normal buffer of all primitives in the scene
+		StaticBufferHandle _NormalBuffer;
+
+		//an offset buffer containing information on which part of the scene buffer to pick when rendering in shader
+		StaticBufferHandle _OffsetBuffer;
+
+
+		uint32_t _IndexBufferSize	= 0;
+		uint32_t _UVsBufferSize		= 0;
+		uint32_t _NormalBufferSize	= 0;
+
+		uint32_t _OffsetBufferSize = 0;
+	};
+
+	bool CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBuffer& sceneBuffer, const VolatileLoopArray<Mesh>& mesh);
 
 
 
