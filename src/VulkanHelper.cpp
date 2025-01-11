@@ -51,6 +51,16 @@ bool VulkanHelper::StartUploader(const GraphicsAPIManager& GAPI, Uploader& Vulka
 	//also get the memory properties to create buffers and images
 	vkGetPhysicalDeviceMemoryProperties(GAPI._VulkanGPU, &VulkanUploader._MemoryProperties);
 
+	//this machine's specific GPU properties to get the SBT alignement and other stuff
+	VulkanUploader._RTProperties = {};
+	VulkanUploader._RTProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
+
+	//needed to get the above info
+	VkPhysicalDeviceProperties2 GPUProperties{};
+	GPUProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+	GPUProperties.pNext = &VulkanUploader._RTProperties;
+	vkGetPhysicalDeviceProperties2(GAPI._VulkanGPU, &GPUProperties);
+
 	return result == VK_SUCCESS;
 }
 
@@ -203,6 +213,82 @@ bool VulkanHelper::CreateVulkanShaders(Uploader& VulkanUploader, VkShaderModule&
 	shaderc_compiler_release(shader_compiler);
 
 	return true;
+}
+
+bool VulkanHelper::GetShaderBindingTable(Uploader& VulkanUploader, const VkPipeline& VulkanPipeline,  ShaderBindingTable& SBT, uint32_t nbMissGroup, uint32_t nbHitGroup, uint32_t nbCallable)
+{
+	//to know if we succeeded
+	VkResult result = VK_SUCCESS;
+
+	//the needed alignement to create our shader binding table
+	uint32_t handleSize			= VulkanUploader._RTProperties.shaderGroupHandleSize;
+	uint32_t handleAlignment	= VulkanUploader._RTProperties.shaderGroupHandleAlignment;
+	uint32_t baseAlignment		= VulkanUploader._RTProperties.shaderGroupBaseAlignment;
+	uint32_t handleSizeAligned	= VulkanHelper::AlignUp(handleSize, handleAlignment);
+	uint32_t baseSizeAligned	= VulkanHelper::AlignUp(handleSizeAligned, baseAlignment);
+
+	//set raygen shader's aligned stride and size (there is always only one)
+	SBT._RayGenRegion.stride	= baseSizeAligned;
+	SBT._RayGenRegion.size		= baseSizeAligned;
+
+	//miss shader's aligned stride and size
+	SBT._MissRegion.stride	= handleSizeAligned;
+	SBT._MissRegion.size	= baseSizeAligned * nbMissGroup;
+
+	//hit shader's aligned stride and size
+	SBT._HitRegion.stride	= handleSizeAligned;
+	SBT._HitRegion.size		= baseSizeAligned * nbHitGroup;
+
+	//callable shader's aligned stride and size
+	SBT._CallableRegion.stride	= handleSizeAligned;
+	SBT._CallableRegion.size	= baseSizeAligned * nbCallable;
+
+	//computing the total nb of shader groups (with raygen being one)
+	uint32_t totalNbOfGroups = 1 + nbMissGroup + nbHitGroup + nbCallable;
+
+	//creating a GPU buffer for the Shader Binding Table
+	VulkanHelper::CreateVulkanBufferAndMemory(VulkanUploader, totalNbOfGroups * baseSizeAligned, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, SBT._SBTBuffer, SBT._SBTMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+
+	//get back handle from shader group created in pipeline
+	MultipleScopedMemory<uint8_t> shaderGroupHandle{ totalNbOfGroups * handleSize };
+	uint8_t* shaderGroupHandleIter = *shaderGroupHandle;
+	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkGetRayTracingShaderGroupHandlesKHR, VulkanUploader._VulkanDevice, VulkanPipeline, 0, totalNbOfGroups, totalNbOfGroups * handleSize, *shaderGroupHandle);
+
+	//mapping memory to buffer
+	uint8_t* CPUSBTBufferMap;
+	vkMapMemory(VulkanUploader._VulkanDevice, SBT._SBTMemory, 0, totalNbOfGroups * baseSizeAligned, 0, (void**)(&CPUSBTBufferMap));
+
+	//first copy ray gen handle
+	memcpy(CPUSBTBufferMap, shaderGroupHandleIter, handleSize);
+	CPUSBTBufferMap += baseSizeAligned;
+	shaderGroupHandleIter += handleSize;
+
+	//copy of miss group
+	memcpy(CPUSBTBufferMap, shaderGroupHandleIter, handleSize * nbMissGroup);
+	CPUSBTBufferMap += baseSizeAligned * nbMissGroup;
+	shaderGroupHandleIter += handleSize * nbMissGroup;
+	
+	//copy of hit group
+	memcpy(CPUSBTBufferMap, shaderGroupHandleIter, handleSize * nbHitGroup);
+	CPUSBTBufferMap += baseSizeAligned * nbHitGroup;
+	shaderGroupHandleIter += handleSize * nbHitGroup;
+
+	//copy of hit group
+	memcpy(CPUSBTBufferMap, shaderGroupHandleIter, handleSize * nbCallable);
+
+	//unmap and copy
+	vkUnmapMemory(VulkanUploader._VulkanDevice, SBT._SBTMemory);
+
+	//get the created gpu buffer's device address for the ray gen region
+	VK_GET_BUFFER_ADDRESS(VulkanUploader._VulkanDevice, VkDeviceAddress, SBT._SBTBuffer, SBT._RayGenRegion.deviceAddress);
+
+	//infer the adress of each shader group as they are copied sequentially
+	SBT._MissRegion.deviceAddress		= SBT._RayGenRegion.deviceAddress + SBT._RayGenRegion.size;
+	SBT._HitRegion.deviceAddress		= SBT._MissRegion.deviceAddress + SBT._MissRegion.size;
+	SBT._CallableRegion.deviceAddress	= SBT._HitRegion.deviceAddress + SBT._HitRegion.size;
+
+	return result == VK_SUCCESS;
 }
 
 /*===== BUFFERS =====*/
