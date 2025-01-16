@@ -166,7 +166,7 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 		uniformBufferBinding.binding		= 2;
 		uniformBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		uniformBufferBinding.descriptorCount = 1;
-		uniformBufferBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
+		uniformBufferBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR;
 
 		//create a binding for our uniform buffers
 		VkDescriptorSetLayoutBinding sphereBufferBinding{};
@@ -348,41 +348,72 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				vec3	hitColor;// the color of the hit object
 				float	hitDistance;// the distance from the ray's origin the hit was recorded
 				vec3	hitNormal;// the normal got from contact with the object
+				uint	RandomSeed;
 				
 			};
 			layout(location = 0) rayPayloadEXT HitRecord payload;
 
+			uint RandomInt(inout uint seed)
+			{
+				//using PCG hash for random number seed generation (found from this https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/)
+				seed = seed * 747796405u + 2891336453u;
+				uint word = ((seed >> ((seed >> 28u) + 4u)) ^ seed) * 277803737u;
+				return (word >> 22u) ^ word;
+
+				// LCG values from Numerical Recipes
+			    //return (seed = 1664525 * seed + 1013904223);
+			}
+
+			float RandomFloat(inout uint seed)
+			{
+				//// Float version using bitmask from Numerical Recipes
+				//const uint one = 0x3f800000;
+				//const uint msk = 0x007fffff;
+				//return uintBitsToFloat(one | (msk & (RandomInt(seed) >> 9))) - 1;
+			
+				// Faster version from NVIDIA examples; quality good enough for our use case.
+				return (float(RandomInt(seed) & 0x00FFFFFF) / float(0x01000000));
+			}
+
 			layout(binding = 0) uniform accelerationStructureEXT topLevelAS;
 			layout(binding = 1, rgba32f) uniform image2D image;
-			layout(binding = 2) uniform Transform
+			layout(binding = 2) uniform UniformBuffer
 			{
-				mat4 model;
 				mat4 view;
 				mat4 proj;
+				vec4 background_color_top;
+				vec4 background_color_bottom;
+				uint nb_samples;
+				uint depth;
+				uint nb_frame;
+				float random;
 			};
 
 			void main()
 			{
-				vec4 origin = -view[3];
 				vec3 finalColor = vec3(0.0);
 
-				const vec2 pixelCenter = gl_LaunchIDEXT.xy + vec2(0.5);
+				uint seed = 1;
+				payload.RandomSeed = (gl_LaunchIDEXT.x * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.y) * nb_frame;
+				payload.RandomSeed = RandomInt(payload.RandomSeed);
 
-				//finding the pixel we are computing from the ray launch arguments
-				const vec2 inUV = (pixelCenter) / vec2(gl_LaunchSizeEXT.xy);
-
-				vec2 d = inUV * 2.0 - 1.0;
-
-				//the targets are on a viewport ahead of us by 3
-				vec4 target = proj * vec4(d,1.0,1.0);
-				target = target/target.w;
-
-				//creating a direction for our ray
-				vec4 direction = view * vec4(normalize(target.xyz),0.0);
-
-
-				for (int j = 0; j < 1; j++)
+				for (int j = 0; j < nb_samples; j++)
 				{
+					const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(RandomFloat(seed) - 0.5,RandomFloat(seed) - 0.5);
+
+					//finding the pixel we are computing from the ray launch arguments
+					const vec2 inUV = (pixelCenter) / vec2(gl_LaunchSizeEXT.xy);
+
+					vec2 d = inUV * 2.0 - 1.0;
+
+					vec4 origin = -view[3];
+					//the targets are on a viewport ahead of us by 3
+					vec4 target = proj * vec4(d,1.0,1.0);
+					target = target/target.w;
+
+					//creating a direction for our ray
+					vec4 direction = view * vec4(normalize(target.xyz),0.0);
+
 					//zero init
 					payload.bHit		= 0;
 					payload.hitColor	= vec3(0.0);
@@ -391,7 +422,7 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 
 					vec3 fragColor = vec3(1.0);
 
-					for (int i = 0; i < 10; i++)
+					for (int i = 0; i < depth; i++)
 					{
 						//tracing rays
 						traceRayEXT(
@@ -418,6 +449,8 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 
 					finalColor += fragColor;
 				}
+
+				finalColor /= nb_samples;
 				
 				//our recursive call finished, let's write into the image
 				imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor,0.0));
@@ -435,19 +468,29 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				vec3	hitColor;// the color of the hit object
 				float	hitDistance;// the distance from the ray's origin the hit was recorded
 				vec3	hitNormal;// the normal got from contact with the object
+				uint	RandomSeed;
 				
 			};
 			layout(location = 0) rayPayloadInEXT HitRecord payload;
 
+			layout(binding = 2) uniform UniformBuffer
+			{
+				mat4 view;
+				mat4 proj;
+				vec4 background_color_top;
+				vec4 background_color_bottom;
+				uint nb_samples;
+				uint depth;
+				uint nb_frame;
+				uint random;
+			};
+
 			void main()
 			{
-				vec3 background_color_bottom = vec3(1.0);
-				vec3 background_color_top = vec3(0.3, 0.7, 1.0);
-
 				float backgroundGradient = 0.5 * (gl_WorldRayDirectionEXT.y + 1.0);
 
 				payload.bHit = 0.0;
-				payload.hitColor = background_color_bottom * (1.0 - backgroundGradient) + background_color_top * backgroundGradient;
+				payload.hitColor = background_color_bottom.rgb * (1.0 - backgroundGradient) + background_color_top.rgb * backgroundGradient;
 				payload.hitDistance = 0.0;
 				payload.hitNormal = vec3(0.0);
 			})";
@@ -464,6 +507,7 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				vec3	hitColor;// the color of the hit object
 				float	hitDistance;// the distance from the ray's origin the hit was recorded
 				vec3	hitNormal;// the normal got from contact with the object
+				uint	RandomSeed;
 				
 			};
 			layout(location = 0) rayPayloadInEXT HitRecord payload;
@@ -472,7 +516,7 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				vec3	direction;// the original directio of the hit 
 				vec3	normal;// the normal got from contact with the object
 				float	matInfo;
-				
+				uint	RandomSeed;
 			};
 			layout(location = 1) callableDataEXT RayDispatch callablePayload;
 
@@ -493,8 +537,11 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				callablePayload.direction	= gl_WorldRayDirectionEXT;
 				callablePayload.normal		= normal;
 				callablePayload.matInfo		= colour.w;
+				callablePayload.RandomSeed	= payload.RandomSeed;
 				executeCallableEXT(gl_InstanceCustomIndexEXT, 1);
 				payload.hitNormal	= callablePayload.normal;
+				payload.RandomSeed	= callablePayload.RandomSeed;
+
 
 
 			})";
@@ -511,6 +558,7 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				vec3	hitColor;// the color of the hit object
 				float	hitDistance;// the distance from the ray's origin the hit was recorded
 				vec3	hitNormal;// the normal got from contact with the object
+				uint	RandomSeed;
 				
 			};
 			layout(location = 0) rayPayloadInEXT HitRecord payload;
@@ -519,6 +567,7 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				vec3	direction;// the original directio of the hit 
 				vec3	normal;// the normal got from contact with the object
 				float	matInfo;
+				uint	RandomSeed;
 				
 			};
 			layout(location = 1) callableDataEXT RayDispatch callablePayload;
@@ -558,8 +607,11 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				callablePayload.direction	= gl_WorldRayDirectionEXT;
 				callablePayload.normal		= normal;
 				callablePayload.matInfo		= 0.0;
+				callablePayload.RandomSeed	= payload.RandomSeed;
 				executeCallableEXT(gl_InstanceCustomIndexEXT, 1);
 				payload.hitNormal	= callablePayload.normal;
+				payload.RandomSeed	= callablePayload.RandomSeed;
+
 			})";
 
 	//define intersect shader
@@ -625,25 +677,15 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 		R"(#version 460
 			#extension GL_EXT_ray_tracing : enable
 
-			uint InitRandomSeed(uint val0, uint val1)
-			{
-				uint v0 = val0, v1 = val1, s0 = 0;
-			
-				for (uint n = 0; n < 16; n++)
-				{
-					s0 += 0x9e3779b9;
-					v0 += ((v1 << 4) + 0xa341316c) ^ (v1 + s0) ^ ((v1 >> 5) + 0xc8013ea4);
-					v1 += ((v0 << 4) + 0xad90777d) ^ (v0 + s0) ^ ((v0 >> 5) + 0x7e95761e);
-				}
-			
-				return v0;
-			}
-
-
 			uint RandomInt(inout uint seed)
 			{
+				//using PCG hash for random number seed generation (found from this https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/)
+				seed = seed * 747796405u + 2891336453u;
+				uint word = ((seed >> ((seed >> 28u) + 4u)) ^ seed) * 277803737u;
+				return (word >> 22u) ^ word;
+
 				// LCG values from Numerical Recipes
-			    return (seed = 1664525 * seed + 1013904223);
+			    //return (seed = 1664525 * seed + 1013904223);
 			}
 
 			float RandomFloat(inout uint seed)
@@ -676,15 +718,14 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				vec3	direction;// the original directio of the hit 
 				vec3	normal;// the normal got from contact with the object
 				float	matInfo;
+				uint	RandomSeed;
 				
 			};
 			layout(location = 1) callableDataInEXT RayDispatch callablePayload;
 
 			void main()
 			{
-				uint seed = InitRandomSeed(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y);
-
-				const vec3 rand = RandomInUnitSphere(seed);
+				const vec3 rand = RandomInUnitSphere(callablePayload.RandomSeed);
 				callablePayload.normal = normalize(callablePayload.normal + rand);
 
 			})";
@@ -698,6 +739,8 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 			{
 				vec3	direction;// the original directio of the hit 
 				vec3	normal;// the normal got from contact with the object
+				float	matInfo;
+				uint	RandomSeed;
 				
 			};
 			layout(location = 1) callableDataInEXT RayDispatch callablePayload;
@@ -720,24 +763,15 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 		R"(#version 460
 			#extension GL_EXT_ray_tracing : enable
 
-			uint InitRandomSeed(uint val0, uint val1)
-			{
-				uint v0 = val0, v1 = val1, s0 = 0;
-			
-				for (uint n = 0; n < 16; n++)
-				{
-					s0 += 0x9e3779b9;
-					v0 += ((v1 << 4) + 0xa341316c) ^ (v1 + s0) ^ ((v1 >> 5) + 0xc8013ea4);
-					v1 += ((v0 << 4) + 0xad90777d) ^ (v0 + s0) ^ ((v0 >> 5) + 0x7e95761e);
-				}
-			
-				return v0;
-			}
-
 			uint RandomInt(inout uint seed)
 			{
+				//using PCG hash for random number seed generation (found from this https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/)
+				seed = seed * 747796405u + 2891336453u;
+				uint word = ((seed >> ((seed >> 28u) + 4u)) ^ seed) * 277803737u;
+				return (word >> 22u) ^ word;
+
 				// LCG values from Numerical Recipes
-			    return (seed = 1664525 * seed + 1013904223);
+			    //return (seed = 1664525 * seed + 1013904223);
 			}
 
 			float RandomFloat(inout uint seed)
@@ -756,6 +790,7 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				vec3	direction;// the original directio of the hit 
 				vec3	normal;// the normal got from contact with the object
 				float	matInfo;
+				uint	RandomSeed;
 				
 			};
 			layout(location = 1) callableDataInEXT RayDispatch callablePayload;
@@ -764,8 +799,6 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 			{
 				vec3 direction = callablePayload.direction;
 				vec3 normal = callablePayload.normal;
-
-				uint seed = InitRandomSeed(gl_LaunchIDEXT.x, gl_LaunchIDEXT.y);
 
 				//are we in the object or outside ?
 				bool front_face		= dot(normal, direction) < 0.0f;
@@ -790,7 +823,7 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				reflectance = reflectance + (1.0f * reflectance) * pow((1.0f - cos_ray_normal), 5);
 
 				//as snell's law is an approximation, it actually takes more of a probabilistic approach, thus the random.
-				if (cannot_refract || reflectance > RandomFloat(seed) )
+				if (cannot_refract || reflectance > RandomFloat(callablePayload.RandomSeed) )
 				{
 					callablePayload.normal = normalize(direction - (normal * 2.0f * dot(direction, normal)));
 				}
@@ -1174,8 +1207,6 @@ void RaytraceGPU::Prepare(class GraphicsAPIManager& GAPI)
 	_RayObjData.scale = vec3{ 1.0f, 1.0f, 1.0f };
 	_RayObjData.pos = vec3{ 0.0f, 0.0f, 0.0f };
 
-	_RayBuffer.model = identity();
-
 	//preparing full screen copy pipeline
 	{
 		//the shaders needed
@@ -1250,7 +1281,7 @@ void RaytraceGPU::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI,
 	/*===== UNIFORM BUFFERS ======*/
 
 	//recreate the uniform buffer
-	CreateUniformBufferHandle(GAPI._VulkanUploader, _RayUniformBuffer, GAPI._nb_vk_frames, sizeof(mat4) * 3);
+	CreateUniformBufferHandle(GAPI._VulkanUploader, _RayUniformBuffer, GAPI._nb_vk_frames, sizeof(UniformBuffer));
 
 	/*===== LINKING RESOURCES ======*/
 
@@ -1289,7 +1320,7 @@ void RaytraceGPU::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI,
 		VkDescriptorBufferInfo bufferInfo{};
 		bufferInfo.buffer = _RayUniformBuffer._GPUBuffer[i];
 		bufferInfo.offset = 0;
-		bufferInfo.range = sizeof(mat4) * 3;
+		bufferInfo.range = sizeof(UniformBuffer);
 
 		//then link it to the descriptor
 		VkWriteDescriptorSet descriptorWrite{};
@@ -1619,12 +1650,12 @@ void RaytraceGPU::Act(struct AppWideContext& AppContext)
 {
 	//it will change every frame
 	{
-		_RayBuffer.proj = inv_perspective_proj(_CopyScissors.extent.width, _CopyScissors.extent.height, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
-		_RayBuffer.view = transpose(AppContext.view_mat);
-		_RayBuffer.view .x.w = 0.0f;
-		_RayBuffer.view .y.w = 0.0f;
-		_RayBuffer.view .z.w = 0.0f;
-		_RayBuffer.view .w.xyz = AppContext.camera_pos;
+		_RayBuffer._proj = inv_perspective_proj(_CopyScissors.extent.width, _CopyScissors.extent.height, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
+		_RayBuffer._view = transpose(AppContext.view_mat);
+		_RayBuffer._view .x.w = 0.0f;
+		_RayBuffer._view .y.w = 0.0f;
+		_RayBuffer._view .z.w = 0.0f;
+		_RayBuffer._view .w.xyz = AppContext.camera_pos;
 	}
 	
 
@@ -1635,10 +1666,17 @@ void RaytraceGPU::Act(struct AppWideContext& AppContext)
 		 changedFlag |= ImGui::SliderFloat3("Object Rotation", _RayObjData.euler_angles.scalar, -180.0f, 180.0f);
 		 changedFlag |= ImGui::SliderFloat3("Object Scale", _RayObjData.scale.scalar, 0.0f, 1.0f, "%0.01f");
 
+		 changedFlag |= ImGui::SliderInt("SampleNb", (int*)&_RayBuffer._nb_samples, 1, 50);
+		 changedFlag |= ImGui::SliderInt("Max Bounce Depth", (int*)&_RayBuffer._depth, 1, 20);
+
+		 changedFlag |= ImGui::ColorPicker4("Background Gradient Top", _RayBuffer._background_color_top.scalar);
+		 changedFlag |= ImGui::ColorPicker4("Background Gradient Bottom", _RayBuffer._background_color_bottom.scalar);
+
 	}
 
 	_RayObjData.euler_angles.y += 20.0f * AppContext.delta_time;
-
+	_RayBuffer._random = randf();
+	_RayBuffer._nb_frame = ImGui::GetFrameCount();
 }
 
 /*===== Show =====*/
@@ -1681,7 +1719,7 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 	}
 
 	//the buffer will change every frame as the object rotates every frame
-	memcpy(_RayUniformBuffer._CPUMemoryHandle[GAPIHandle._vk_current_frame], (void*)&_RayBuffer, sizeof(mat4) * 3);
+	memcpy(_RayUniformBuffer._CPUMemoryHandle[GAPIHandle._vk_current_frame], (void*)&_RayBuffer, sizeof(UniformBuffer));
 
 	// changing the back buffer to be able to being written by pipeline
 	VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayWriteImage[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT,

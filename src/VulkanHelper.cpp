@@ -1773,7 +1773,7 @@ bool VulkanHelper::CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBu
 
 		//making the AS accessible
 		MemorySyncScope(VulkanUploader._CopyBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
-			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);//basically just changing this memory to be visible, so the scope can be "immediate"
+			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);//basically just changing this memory to be visible, so the scope can be "immediate"
 
 
 		sceneBuffer._OffsetBufferSize = mesh.Nb() * sizeof(uint32_t) * 3;
