@@ -40,6 +40,18 @@
 		delete[] raw_array;\
 	}\
 
+#define CLEAR_ARRAY(_array, size, call, device) \
+	if (_array != nullptr)\
+	{\
+		for (uint32_t i = 0; i < size; i++)\
+			if (_array[i] != nullptr)\
+			{\
+				call(device, _array[i]); \
+				_array[i] = nullptr;\
+			}\
+		_array.Clear();\
+	}\
+
 #define VK_CLEAR_ARRAY(_array, size, call, device) \
 	if (_array != nullptr)\
 	{\
@@ -50,6 +62,18 @@
 				_array[i] = nullptr;\
 			}\
 		_array.Clear();\
+	}\
+
+#define CLEAR_LIST(_list, size, call, device) \
+	if (_list.Nb() > 0)\
+	{\
+		auto start = _list.GetHead();\
+		for (uint32_t i = 0; i < size; i++)\
+		{\
+			call(device, start->data);\
+			start = ++(*start);\
+		}\
+		_list.Clear();\
 	}\
 
 #define VK_CLEAR_LIST(_list, size, call, device) \
@@ -64,6 +88,8 @@
 		_list.Clear();\
 	}\
 
+
+
 #define VK_CALL_KHR(device, vk_call, ...) \
 	{\
 		auto func = (PFN_##vk_call) vkGetDeviceProcAddr(device, #vk_call);\
@@ -75,6 +101,18 @@
 		{\
 			printf("Vulkan extension call error : we could not find %s .\n", #vk_call); \
 		}\
+	}\
+
+#define VK_CLEAR_KHR(_array, size, device, call) \
+	if (_array != nullptr)\
+	{\
+		for (uint32_t i = 0; i < size; i++)\
+			if (_array[i] != nullptr)\
+			{\
+				VK_CALL_KHR(device, call, device, _array[i], nullptr); \
+				_array[i] = nullptr;\
+			}\
+		_array.Clear();\
 	}\
 
 #define VK_GET_BUFFER_ADDRESS(device, type, var_buffer, var) \
@@ -119,6 +157,9 @@ namespace VulkanHelper
 
 	/* Uploader */
 
+	/*
+	* a struct containging all interfaces needed to create buffer and allocate memory on GPU.
+	*/
 	struct Uploader
 	{
 		VkDevice			_VulkanDevice;
@@ -150,8 +191,29 @@ namespace VulkanHelper
 
 	/* Shaders */
 
-	bool CreateVulkanShaders(Uploader& VulkanUploader, VkShaderModule& shader, VkShaderStageFlagBits shaderStage, const char* shader_source, const char* shader_name, const char* entry_point = "main");
+	/*
+	* a struct concatenating all info of a shader.
+	*/
+	struct ShaderScripts
+	{
+		MultipleVolatileMemory<char> _ShaderName;
+		MultipleVolatileMemory<char> _ShaderSource;
 
+		VkShaderStageFlagBits	_ShaderStage;
+		VkShaderModule			_ShaderModule;
+
+	};
+
+	bool CompileVulkanShaders(Uploader& VulkanUploader, VkShaderModule& shader, VkShaderStageFlagBits shaderStage, const char* shader_source, const char* shader_name, const char* entry_point = "main");
+	bool CreateVulkanShaders(Uploader& VulkanUploader, ShaderScripts& shader, VkShaderStageFlagBits shaderStage, const char* shader_source, const char* shader_name, const char* entry_point = "main");
+	void ClearVulkanShader(const VkDevice& VulkanDevice, ShaderScripts& shader);
+
+	void MakePipelineShaderFromScripts(MultipleScopedMemory<VkPipelineShaderStageCreateInfo>& PipelineShaderStages, const List<ShaderScripts>& ShaderList);
+
+
+	/*
+	* a struct containing the buffer and memory objects of the Shader Binding Table that is created after creating a Raytracing Pipeline Object
+	*/
 	struct ShaderBindingTable
 	{
 		VkBuffer		_SBTBuffer{ VK_NULL_HANDLE };
@@ -173,6 +235,7 @@ namespace VulkanHelper
 	};
 
 	bool GetShaderBindingTable(Uploader& VulkanUploader, const VkPipeline& VulkanPipeline,  ShaderBindingTable& SBT, uint32_t nbMissGroup, uint32_t nbHitGroup, uint32_t nbCallable);
+	void ClearShaderBindingTable(const VkDevice& VulkanDevice, ShaderBindingTable& SBT);
 
 	/* Memory */
 
@@ -502,6 +565,7 @@ namespace VulkanHelper
 	};
 
 	bool CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBuffer& sceneBuffer, const VolatileLoopArray<Mesh>& mesh);
+	void ClearSceneBuffer(const VkDevice& VulkanDevice, SceneBuffer& sceneBuffer);
 
 
 

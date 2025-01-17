@@ -142,6 +142,9 @@ public:
 
 };
 
+#define ZERO_SET(heap, size) \
+	memset(*heap,0,size);
+
 template<typename T>
 using SingleVolatileMemory = HeapMemory<T, false, true>;
 template<typename T>

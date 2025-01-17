@@ -42,6 +42,7 @@ private:
 
 	//The binding table creatd from the raytracing shader
 	VulkanHelper::ShaderBindingTable	_RayShaderBindingTable;
+	List<VulkanHelper::ShaderScripts>	_RayShaders;
 
 	//A pool to allocate the descriptor sets needed
 	VkDescriptorPool						_RayDescriptorPool{};
@@ -88,12 +89,12 @@ private:
 	* - the Model
 	* - DescriptorSets Objects for the model's samplers (using Descriptor Pool)
 	*/
-	void PrepareVulkanRaytracingProps(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& TriangleHitShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader, VkShaderModule& DiffuseShader, VkShaderModule& MetalShader, VkShaderModule& Dieletrics);
+	void PrepareVulkanRaytracingProps(class GraphicsAPIManager& GAPI);
 
 	/*
 	* Compiles the shaders to use in the Raytracing Pipeline Object creation
 	*/
-	void PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, VkShaderModule& TriangleHitShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader, VkShaderModule& DiffuseShader, VkShaderModule& MetalShader, VkShaderModule& Dieletrics);
+	void PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI);
 
 	//This scene's renderpass, defining what is attached to the pipeline, and what is outputed
 	VkRenderPass				_CopyRenderPass{ VK_NULL_HANDLE };

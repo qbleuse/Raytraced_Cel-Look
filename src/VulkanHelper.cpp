@@ -117,7 +117,7 @@ bool VulkanHelper::SubmitUploader(Uploader& VulkanUploader)
 
 /*===== SHADERS =====*/
 
-bool VulkanHelper::CreateVulkanShaders(Uploader& VulkanUploader, VkShaderModule& shader, VkShaderStageFlagBits shaderStage, const char* shader_source, const char* shader_name, const char* entry_point)
+bool VulkanHelper::CompileVulkanShaders(Uploader& VulkanUploader, VkShaderModule& shader, VkShaderStageFlagBits shaderStage, const char* shader_source, const char* shader_name, const char* entry_point)
 {
 	//our shader compiler 
 	shaderc_compiler_t shader_compiler = shaderc_compiler_initialize();
@@ -215,6 +215,59 @@ bool VulkanHelper::CreateVulkanShaders(Uploader& VulkanUploader, VkShaderModule&
 	return true;
 }
 
+bool VulkanHelper::CreateVulkanShaders(Uploader& VulkanUploader, ShaderScripts& shader, VkShaderStageFlagBits shaderStage, const char* shader_source, const char* shader_name, const char* entry_point)
+{
+	//copying source for potential edit down the line
+	uint32_t source_length = strlen(shader_source);
+	shader._ShaderSource.Alloc(source_length + 1);
+	ZERO_SET(shader._ShaderSource, (source_length + 1) *sizeof(char))
+	memcpy((void*)*shader._ShaderSource, shader_source, source_length * sizeof(char));
+
+	//copyinmg the name 
+	uint32_t name_length = strlen(shader_name);
+	shader._ShaderName.Alloc(name_length + 1);
+	ZERO_SET(shader._ShaderName, (name_length + 1) * sizeof(char))
+	memcpy((void*)*shader._ShaderName, shader_name, name_length * sizeof(char));
+
+	//putting the stage in the struct to rememeber the kind of shader it is
+	shader._ShaderStage = shaderStage;
+
+	return CompileVulkanShaders(VulkanUploader, shader._ShaderModule, shader._ShaderStage, *shader._ShaderSource, *shader._ShaderName, entry_point);
+}
+
+void VulkanHelper::ClearVulkanShader(const VkDevice& VulkanDevice, ShaderScripts& shader)
+{
+	//free memory
+	shader._ShaderSource.Clear();
+	shader._ShaderName.Clear();
+
+	//free shader module
+	vkDestroyShaderModule(VulkanDevice, shader._ShaderModule,nullptr);
+}
+
+void VulkanHelper::MakePipelineShaderFromScripts(MultipleScopedMemory<VkPipelineShaderStageCreateInfo>& PipelineShaderStages, const List<ShaderScripts>& ShaderList)
+{
+	//the idea is that as this is a scoped array, we allocate here and it will be created before calling this function for it being freed at the end of the calling function scope
+	PipelineShaderStages.Alloc(ShaderList.Nb());
+	ZERO_SET(PipelineShaderStages, ShaderList.Nb() * sizeof(VkPipelineShaderStageCreateInfo));
+
+	{
+		List<ShaderScripts>::ListNode* indexedNode = ShaderList.GetHead();
+		for (uint32_t i = 0; i < ShaderList.Nb(); i++)
+		{
+			VkPipelineShaderStageCreateInfo& iShaderStage = PipelineShaderStages[i];
+			const ShaderScripts& iShaderScripts = indexedNode->data;
+
+			iShaderStage.sType	= VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+			iShaderStage.module = iShaderScripts._ShaderModule;
+			iShaderStage.stage	= iShaderScripts._ShaderStage;
+			iShaderStage.pName	= "main";
+
+			indexedNode = indexedNode->next;
+		}
+	}
+}
+
 bool VulkanHelper::GetShaderBindingTable(Uploader& VulkanUploader, const VkPipeline& VulkanPipeline,  ShaderBindingTable& SBT, uint32_t nbMissGroup, uint32_t nbHitGroup, uint32_t nbCallable)
 {
 	//to know if we succeeded
@@ -290,6 +343,17 @@ bool VulkanHelper::GetShaderBindingTable(Uploader& VulkanUploader, const VkPipel
 
 	return result == VK_SUCCESS;
 }
+
+void VulkanHelper::ClearShaderBindingTable(const VkDevice& VulkanDevice, ShaderBindingTable& SBT)
+{
+	if (SBT._SBTBuffer != nullptr)
+		vkDestroyBuffer(VulkanDevice, SBT._SBTBuffer, nullptr);
+	SBT._SBTBuffer = nullptr;
+	if (SBT._SBTMemory != nullptr)
+		vkFreeMemory(VulkanDevice, SBT._SBTMemory, nullptr);
+	SBT._SBTMemory = nullptr;
+}
+
 
 /*===== BUFFERS =====*/
 
@@ -1453,8 +1517,12 @@ bool VulkanHelper::CreateRaytracedProceduralFromAABB(Uploader& VulkanUploader, S
 
 void VulkanHelper::ClearRaytracedGeometry(const VkDevice& VulkanDevice, RaytracedGeometry& raytracedGeometry)
 {
+	
+	VK_CLEAR_KHR(raytracedGeometry._AccelerationStructure, raytracedGeometry._AccelerationStructure.Nb(), VulkanDevice, vkDestroyAccelerationStructureKHR);
 	VK_CLEAR_ARRAY(raytracedGeometry._AccelerationStructureBuffer, raytracedGeometry._AccelerationStructureBuffer.Nb(), vkDestroyBuffer, VulkanDevice);
 	VK_CLEAR_ARRAY(raytracedGeometry._AccelerationStructureMemory, raytracedGeometry._AccelerationStructureMemory.Nb(), vkFreeMemory, VulkanDevice);
+	raytracedGeometry._CustomInstanceIndex.Clear();
+	raytracedGeometry._ShaderOffset.Clear();
 }
 
 bool VulkanHelper::CreateInstanceFromGeometry(Uploader& VulkanUploader, RaytracedGroup& raytracedGroup, const mat4& transform, const MultipleVolatileMemory<RaytracedGeometry*>& geometry, uint32_t nb)
@@ -1698,9 +1766,16 @@ bool VulkanHelper::UpdateRaytracedGroup(VulkanHelper::Uploader& VulkanUploader, 
 
 void VulkanHelper::ClearRaytracedGroup(const VkDevice& VulkanDevice, RaytracedGroup& raytracedModel)
 {
+	//destroy acceleration structure data
 	VK_CALL_KHR(VulkanDevice, vkDestroyAccelerationStructureKHR, VulkanDevice, raytracedModel._AccelerationStructure, nullptr);
 	vkDestroyBuffer(VulkanDevice, raytracedModel._AccelerationStructureBuffer, nullptr);
 	vkFreeMemory(VulkanDevice, raytracedModel._AccelerationStructureMemory, nullptr);
+
+	//free instances data
+	raytracedModel._Instances.Clear();
+	ClearStaticBufferHandle(VulkanDevice, raytracedModel._InstancesBufferHandle);
+	delete[] raytracedModel._InstancesInfo.pGeometries;
+	raytracedModel._InstancesRange.Clear();
 }
 
 
@@ -1787,3 +1862,12 @@ bool VulkanHelper::CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBu
 	return result == VK_SUCCESS;
 
 }
+
+void VulkanHelper::ClearSceneBuffer(const VkDevice& VulkanDevice, SceneBuffer& sceneBuffer)
+{
+	ClearStaticBufferHandle(VulkanDevice, sceneBuffer._IndexBuffer);
+	ClearStaticBufferHandle(VulkanDevice, sceneBuffer._NormalBuffer);
+	ClearStaticBufferHandle(VulkanDevice, sceneBuffer._OffsetBuffer);
+	ClearStaticBufferHandle(VulkanDevice, sceneBuffer._UVsBuffer);
+}
+

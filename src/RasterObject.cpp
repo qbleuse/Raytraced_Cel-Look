@@ -414,8 +414,8 @@ void RasterObject::PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShader
 		)";
 
 
-	CreateVulkanShaders(GAPI._VulkanUploader, VertexShader, VK_SHADER_STAGE_VERTEX_BIT, vertex_shader, "Raster Object Vertex");
-	CreateVulkanShaders(GAPI._VulkanUploader, FragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_shader, "Raster Object Frag");
+	CompileVulkanShaders(GAPI._VulkanUploader, VertexShader, VK_SHADER_STAGE_VERTEX_BIT, vertex_shader, "Raster Object Vertex");
+	CompileVulkanShaders(GAPI._VulkanUploader, FragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_shader, "Raster Object Frag");
 }
 
 void RasterObject::Prepare(class GraphicsAPIManager& GAPI)

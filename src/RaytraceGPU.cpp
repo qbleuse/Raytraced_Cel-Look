@@ -11,9 +11,7 @@
 
 /*==== Prepare =====*/
 
-void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, 
-	VkShaderModule& TriangleHitShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader, 
-	VkShaderModule& DiffuseShader, VkShaderModule& MetalShader, VkShaderModule& Dieletrics)
+void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 {
 	VkResult result = VK_SUCCESS;
 
@@ -34,59 +32,12 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	/*===== DESCRIBE SHADER STAGE AND GROUPS =====*/
 
 	//the shader stages we'll give to the pipeline
-	MultipleVolatileMemory<VkPipelineShaderStageCreateInfo> shaderStages{ static_cast<VkPipelineShaderStageCreateInfo*>(alloca(sizeof(VkPipelineShaderStageCreateInfo) * 8)) };
-	memset(*shaderStages, 0, sizeof(VkPipelineShaderStageCreateInfo) * 8);
-	//the shader groups, to allow the pipeline to create the shader table
+	MultipleScopedMemory<VkPipelineShaderStageCreateInfo> shaderStages;
+	VulkanHelper::MakePipelineShaderFromScripts(shaderStages, _RayShaders);
+
+
 	MultipleVolatileMemory<VkRayTracingShaderGroupCreateInfoKHR> shaderGroups{ static_cast<VkRayTracingShaderGroupCreateInfoKHR*>(alloca(sizeof(VkRayTracingShaderGroupCreateInfoKHR) * 7)) };
 	memset(*shaderGroups, 0, sizeof(VkRayTracingShaderGroupCreateInfoKHR) * 7);
-
-	//first, we'll describe ray gen
-	shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	shaderStages[0].stage = VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-	shaderStages[0].module = RayGenShader;
-	shaderStages[0].pName = "main";
-
-	//then, miss shader
-	shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	shaderStages[1].stage = VK_SHADER_STAGE_MISS_BIT_KHR;
-	shaderStages[1].module = MissShader;
-	shaderStages[1].pName = "main";
-
-	//finally, closest hit shader
-	shaderStages[2].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	shaderStages[2].stage = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
-	shaderStages[2].module = HitShader;
-	shaderStages[2].pName = "main";
-
-	//intersect shader for procedural
-	shaderStages[3].sType	= VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	shaderStages[3].stage	= VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
-	shaderStages[3].module	= IntersectShader;
-	shaderStages[3].pName	= "main";
-
-	//triangle hit shader for meshes
-	shaderStages[4].sType	= VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	shaderStages[4].stage	= VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
-	shaderStages[4].module	= TriangleHitShader;
-	shaderStages[4].pName	= "main";
-
-	//diffuse shader
-	shaderStages[5].sType	= VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	shaderStages[5].stage	= VK_SHADER_STAGE_CALLABLE_BIT_KHR;
-	shaderStages[5].module	= DiffuseShader;
-	shaderStages[5].pName	= "main";
-
-	//metal shader
-	shaderStages[6].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	shaderStages[6].stage = VK_SHADER_STAGE_CALLABLE_BIT_KHR;
-	shaderStages[6].module = MetalShader;
-	shaderStages[6].pName = "main";
-
-	//dielectrics shader
-	shaderStages[7].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	shaderStages[7].stage = VK_SHADER_STAGE_CALLABLE_BIT_KHR;
-	shaderStages[7].module = Dieletrics;
-	shaderStages[7].pName = "main";
 
 	//describing our raygen group, it only includes the first shader of our pipeline
 	shaderGroups[0].sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
@@ -108,15 +59,15 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	shaderGroups[3].sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 	shaderGroups[3].type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR;
 	shaderGroups[3].generalShader		= VK_SHADER_UNUSED_KHR;
-	shaderGroups[3].closestHitShader	= 2;
+	shaderGroups[3].closestHitShader	= 3;
 	shaderGroups[3].anyHitShader		= VK_SHADER_UNUSED_KHR;
-	shaderGroups[3].intersectionShader	= 3;
+	shaderGroups[3].intersectionShader	= 4;
 
 	//describing our hit group, it only includes the third shader of our pipeline, as we have not described multiple hits
 	shaderGroups[2].sType				= VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 	shaderGroups[2].type				= VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
 	shaderGroups[2].generalShader		= VK_SHADER_UNUSED_KHR;
-	shaderGroups[2].closestHitShader	= 4;
+	shaderGroups[2].closestHitShader	= 2;
 	shaderGroups[2].anyHitShader		= VK_SHADER_UNUSED_KHR;
 	shaderGroups[2].intersectionShader	= VK_SHADER_UNUSED_KHR;
 
@@ -242,7 +193,7 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	//our raytracing pipeline
 	VkRayTracingPipelineCreateInfoKHR pipelineInfo{};
 	pipelineInfo.sType							= VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
-	pipelineInfo.stageCount						= 8;
+	pipelineInfo.stageCount						= _RayShaders.Nb();
 	pipelineInfo.pStages						= *shaderStages;
 	pipelineInfo.groupCount						= 7;
 	pipelineInfo.pGroups						= *shaderGroups;
@@ -253,89 +204,10 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI, VkShade
 	VK_CALL_KHR(GAPI._VulkanDevice, vkCreateRayTracingPipelinesKHR, GAPI._VulkanDevice, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_RayPipeline);
 
 
-	/*===== SHADER BINDING TABLE CREATION =====*/
-	
-	//allocating space for the address of the SBT
-	//_RayShaderBindingAddress.Alloc(4);
-	//
-	//{
-	//	//this machine's specific GPU properties to get the SBT alignement
-	//	VkPhysicalDeviceRayTracingPipelinePropertiesKHR rtProperties{};
-	//	rtProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_PROPERTIES_KHR;
-	//
-	//	//needed to get the above info
-	//	VkPhysicalDeviceProperties2 GPUProperties{};
-	//	GPUProperties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
-	//	GPUProperties.pNext = &rtProperties;
-	//	vkGetPhysicalDeviceProperties2(GAPI._VulkanGPU, &GPUProperties);
-	//
-	//	//the needed alignement to create our shader binding table
-	//	uint32_t handleSize			= rtProperties.shaderGroupHandleSize;
-	//	uint32_t handleAlignment	= rtProperties.shaderGroupHandleAlignment;
-	//	uint32_t baseAlignment		= rtProperties.shaderGroupBaseAlignment;
-	//	uint32_t handleSizeAligned	= VulkanHelper::AlignUp(handleSize, handleAlignment);
-	//	uint32_t startSizeAligned	= VulkanHelper::AlignUp(handleSizeAligned, baseAlignment);
-	//
-	//	//raygen shader's aligned stride and size
-	//	_RayShaderBindingAddress[0].stride	= startSizeAligned;//there will only be one but still
-	//	_RayShaderBindingAddress[0].size	= startSizeAligned;
-	//
-	//	//miss shader's aligned stride and size
-	//	_RayShaderBindingAddress[1].stride	= handleSizeAligned;
-	//	_RayShaderBindingAddress[1].size	= startSizeAligned;
-	//
-	//	//hit shader's aligned stride and size
-	//	_RayShaderBindingAddress[2].stride	= handleSizeAligned;
-	//	_RayShaderBindingAddress[2].size	= startSizeAligned * 2;
-	//
-	//	//callable shader's aligned stride and size
-	//	_RayShaderBindingAddress[3].stride	= handleSizeAligned;
-	//	_RayShaderBindingAddress[3].size	= startSizeAligned * 3;
-	//
-	//	//creating a GPU buffer for the Shader Binding Table
-	//	VulkanHelper::CreateVulkanBufferAndMemory(GAPI._VulkanUploader, 7 * startSizeAligned, VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
-	//		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, _RayShaderBindingBuffer, _RayShaderBindingMemory, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
-	//
-	//	//get back handle from shader group created in pipeline
-	//	MultipleVolatileMemory<uint8_t> shaderGroupHandle{ (uint8_t*)alloca(7 * handleSize) };
-	//	VK_CALL_KHR( GAPI._VulkanDevice, vkGetRayTracingShaderGroupHandlesKHR, GAPI._VulkanDevice, _RayPipeline, 0, 7, 7 * handleSize, *shaderGroupHandle);
-	//
-	//	//mapping memory to buffer
-	//	uint8_t* CPUSBTBufferMap;
-	//	vkMapMemory(GAPI._VulkanDevice, _RayShaderBindingMemory, 0, 7 * startSizeAligned, 0, (void**)(& CPUSBTBufferMap));
-	//
-	//	//memcpy(CPUSBTBufferMap, *shaderGroupHandle, 3 * startSizeAligned);
-	//	//copying every address to the shader table
-	//	memcpy(CPUSBTBufferMap, *shaderGroupHandle, handleSize);
-	//	memcpy(CPUSBTBufferMap + startSizeAligned, *shaderGroupHandle + handleSize, handleSize);
-	//	memcpy(CPUSBTBufferMap + 2 * startSizeAligned, *shaderGroupHandle + 2 * handleSize, handleSize);
-	//	memcpy(CPUSBTBufferMap + 3 * startSizeAligned, *shaderGroupHandle + 3 * handleSize, handleSize);
-	//	memcpy(CPUSBTBufferMap + 4 * startSizeAligned, *shaderGroupHandle + 4 * handleSize, handleSize*3);
-	//
-	//
-	//	//unmap and copy
-	//	vkUnmapMemory(GAPI._VulkanDevice, _RayShaderBindingMemory);
-	//
-	//	//get our GPU Buffer's address
-	//	VkBufferDeviceAddressInfo addressInfo{};
-	//	addressInfo.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-	//	addressInfo.buffer = _RayShaderBindingBuffer;
-	//	VkDeviceAddress GPUAddress = vkGetBufferDeviceAddress(GAPI._VulkanDevice, &addressInfo);
-	//
-	//	_RayShaderBindingAddress[0].deviceAddress = GPUAddress;
-	//	_RayShaderBindingAddress[1].deviceAddress = GPUAddress + _RayShaderBindingAddress[0].size;
-	//	_RayShaderBindingAddress[2].deviceAddress = GPUAddress + _RayShaderBindingAddress[0].size + _RayShaderBindingAddress[1].size;
-	//	_RayShaderBindingAddress[3].deviceAddress = GPUAddress + _RayShaderBindingAddress[0].size + _RayShaderBindingAddress[1].size + _RayShaderBindingAddress[2].size;
-	//
-	//}
-
-
 	VulkanHelper::GetShaderBindingTable(GAPI._VulkanUploader, _RayPipeline, _RayShaderBindingTable, 1, 2, 3);
 }
 
-void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI, VkShaderModule& RayGenShader, VkShaderModule& MissShader, 
-	VkShaderModule& TriangleHitShader, VkShaderModule& HitShader, VkShaderModule& IntersectShader, 
-	VkShaderModule& DiffuseShader, VkShaderModule& MetalShader, VkShaderModule& Dieletrics)
+void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI)
 {
 	//define ray gen shader
 	const char* ray_gen_shader =
@@ -394,7 +266,7 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 				vec3 finalColor = vec3(0.0);
 
 				uint seed = 1;
-				payload.RandomSeed = (gl_LaunchIDEXT.x * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.y) * nb_frame;
+				payload.RandomSeed = (gl_LaunchIDEXT.x * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.y);
 				payload.RandomSeed = RandomInt(payload.RandomSeed);
 
 				for (int j = 0; j < nb_samples; j++)
@@ -840,15 +712,33 @@ void RaytraceGPU::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI,
 
 			})";
 
-	CreateVulkanShaders(GAPI._VulkanUploader, RayGenShader, VK_SHADER_STAGE_RAYGEN_BIT_KHR, ray_gen_shader, "Raytrace GPU RayGen");
-	CreateVulkanShaders(GAPI._VulkanUploader, MissShader, VK_SHADER_STAGE_MISS_BIT_KHR, miss_shader, "Raytrace GPU Miss");
-	CreateVulkanShaders(GAPI._VulkanUploader, TriangleHitShader, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, trinagle_closest_hit_shader, "Raytrace GPU Triangle Closest");
-	CreateVulkanShaders(GAPI._VulkanUploader, HitShader, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, closest_hit_shader, "Raytrace GPU Sphere Closest");
-	CreateVulkanShaders(GAPI._VulkanUploader, IntersectShader, VK_SHADER_STAGE_INTERSECTION_BIT_KHR, intersect_shader, "Raytrace GPU Intersect");
+	{
+		VulkanHelper::ShaderScripts Script;
+		
+		//add raygen shader
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_RAYGEN_BIT_KHR, ray_gen_shader, "Raytrace GPU RayGen"))
+			_RayShaders.Add(Script);
 
-	CreateVulkanShaders(GAPI._VulkanUploader, DiffuseShader, VK_SHADER_STAGE_CALLABLE_BIT_KHR, diffuse_shader, "Raytrace GPU Diffuse");
-	CreateVulkanShaders(GAPI._VulkanUploader, MetalShader, VK_SHADER_STAGE_CALLABLE_BIT_KHR, metal_shader, "Raytrace GPU Metal");
-	CreateVulkanShaders(GAPI._VulkanUploader, Dieletrics, VK_SHADER_STAGE_CALLABLE_BIT_KHR, dieletctrics_shader, "Raytrace GPU Dieletctrics");
+		//add miss shader
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_MISS_BIT_KHR, miss_shader, "Raytrace GPU Miss"))
+			_RayShaders.Add(Script);
+
+		//add hit shaders
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, trinagle_closest_hit_shader, "Raytrace GPU Triangle Closest"))
+			_RayShaders.Add(Script);
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, closest_hit_shader, "Raytrace GPU Sphere Closest"))
+			_RayShaders.Add(Script);
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_INTERSECTION_BIT_KHR, intersect_shader, "Raytrace GPU Intersect"))
+			_RayShaders.Add(Script);
+
+		//add callable shaders
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_CALLABLE_BIT_KHR, diffuse_shader, "Raytrace GPU Diffuse"))
+			_RayShaders.Add(Script);
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_CALLABLE_BIT_KHR, metal_shader, "Raytrace GPU Metal"))
+			_RayShaders.Add(Script);
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_CALLABLE_BIT_KHR, dieletctrics_shader, "Raytrace GPU Dieletctrics"))
+			_RayShaders.Add(Script);
+	}
 }
 
 
@@ -1082,8 +972,8 @@ void RaytraceGPU::PrepareVulkanScripts(GraphicsAPIManager& GAPI, VkShaderModule&
 		)";
 
 
-	CreateVulkanShaders(GAPI._VulkanUploader, VertexShader, VK_SHADER_STAGE_VERTEX_BIT, vertex_shader, "Raytrace Fullscreen Vertex");
-	CreateVulkanShaders(GAPI._VulkanUploader, FragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_shader, "Raytrace Fullscreen Frag");
+	CompileVulkanShaders(GAPI._VulkanUploader, VertexShader, VK_SHADER_STAGE_VERTEX_BIT, vertex_shader, "Raytrace Fullscreen Vertex");
+	CompileVulkanShaders(GAPI._VulkanUploader, FragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_shader, "Raytrace Fullscreen Frag");
 }
 
 void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
@@ -1192,15 +1082,10 @@ void RaytraceGPU::Prepare(class GraphicsAPIManager& GAPI)
 
 	//preparing hardware raytracing props
 	{
-		//the shaders needed
-		VkShaderModule RayGenShader, MissShader, TriangleHitShader, HitShader, IntersectShader;
-		VkShaderModule DiffuseShader, MetalShader, DielectricsShader;
-
-
 		//compile the shaders here...
-		PrepareVulkanRaytracingScripts(GAPI, RayGenShader, MissShader, TriangleHitShader, HitShader, IntersectShader, DiffuseShader, MetalShader, DielectricsShader);
+		PrepareVulkanRaytracingScripts(GAPI);
 		//then create the pipeline
-		PrepareVulkanRaytracingProps(GAPI, RayGenShader, MissShader, TriangleHitShader, HitShader, IntersectShader, DiffuseShader, MetalShader, DielectricsShader);
+		PrepareVulkanRaytracingProps(GAPI);
 	}
 
 	//a "zero init" of the transform values
@@ -1791,15 +1676,52 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 void RaytraceGPU::Close(class GraphicsAPIManager& GAPI)
 {
 	//the memory allocated by the Vulkan Helper is volatile : it must be explecitly freed !
-	ClearModel(GAPI._VulkanDevice, _RayModel);
+
+	//Clear geometry data
+	ClearMesh(GAPI._VulkanDevice, _RayModel._Meshes[0]);
+	VulkanHelper::ClearSceneBuffer(GAPI._VulkanDevice, _RaySceneBuffer);
+
+	//clear Acceleration Structures
+	VulkanHelper::ClearRaytracedGeometry(GAPI._VulkanDevice, _RayBottomAS);
+	VulkanHelper::ClearRaytracedGeometry(GAPI._VulkanDevice, _RaySphereBottomAS);
+	VulkanHelper::ClearRaytracedGroup(GAPI._VulkanDevice, _RayTopAS);
 
 	//release descriptors
+	vkDestroyDescriptorPool(GAPI._VulkanDevice, _CopyDescriptorPool, nullptr);
 	vkDestroyDescriptorPool(GAPI._VulkanDevice, _RayDescriptorPool, nullptr);
 	_RayDescriptorSet.Clear();
 	vkDestroyDescriptorSetLayout(GAPI._VulkanDevice, _RayDescriptorLayout, nullptr);
+	vkDestroyDescriptorSetLayout(GAPI._VulkanDevice, _CopyDescriptorLayout, nullptr);
+	_CopyDescriptorSet.Clear();
+	vkDestroySampler(GAPI._VulkanDevice, _CopySampler,nullptr);
 
+
+	//clear buffers
+	VulkanHelper::ClearUniformBufferHandle(GAPI._VulkanDevice, _RayUniformBuffer);
+	ClearStaticBufferHandle(GAPI._VulkanDevice, _RaySphereBuffer);
+	ClearStaticBufferHandle(GAPI._VulkanDevice, _RaySphereColour);
+	ClearStaticBufferHandle(GAPI._VulkanDevice, _RaySphereOffsets);
+	for (uint32_t i = 0; i < 3; i++)
+	{
+		ClearStaticBufferHandle(GAPI._VulkanDevice, _RaySphereAABBBuffer[i]);
+
+	}
+
+	//clear shader resources
+	ClearShaderBindingTable(GAPI._VulkanDevice, _RayShaderBindingTable);
+	CLEAR_LIST(_RayShaders, _RayShaders.Nb(), VulkanHelper::ClearVulkanShader, GAPI._VulkanDevice);
+
+	//clear the fullscreen images buffer
+	VK_CLEAR_ARRAY(_RayWriteImageView, GAPI._nb_vk_frames, vkDestroyImageView, GAPI._VulkanDevice);
+	VK_CLEAR_ARRAY(_RayWriteImage, GAPI._nb_vk_frames, vkDestroyImage, GAPI._VulkanDevice);
+	VK_CLEAR_ARRAY(_CopyOutput, GAPI._nb_vk_frames, vkDestroyFramebuffer, GAPI._VulkanDevice);
+	//free the allocated memory for the fullscreen images
+	vkFreeMemory(GAPI._VulkanDevice, _RayImageMemory, nullptr);
 
 	//release pipeline objects
+	vkDestroyRenderPass(GAPI._VulkanDevice, _CopyRenderPass, nullptr);
 	vkDestroyPipelineLayout(GAPI._VulkanDevice, _RayLayout, nullptr);
 	vkDestroyPipeline(GAPI._VulkanDevice, _RayPipeline, nullptr);
+	vkDestroyPipelineLayout(GAPI._VulkanDevice, _CopyLayout, nullptr);
+	vkDestroyPipeline(GAPI._VulkanDevice, _CopyPipeline, nullptr);
 }
