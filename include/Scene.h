@@ -10,6 +10,8 @@
 class Scene
 {
 public:
+	bool enabled = false;
+
 	/*
 	* Prepares once all the unmovable resources needed (such as pipelines in recent Graphics APIs)
 	*/

@@ -98,82 +98,25 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 	/*===== PIPELINE ATTACHEMENT =====*/
 
 	{
-		//creating our acceleration structure binder
-		VkDescriptorSetLayoutBinding ASLayoutBinding{};
-		ASLayoutBinding.binding			= 0;
-		ASLayoutBinding.descriptorType	= VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR;
-		ASLayoutBinding.descriptorCount = 1;
-		ASLayoutBinding.stageFlags		= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-
-		//create a binding for our colour buffers
-		VkDescriptorSetLayoutBinding colourBackBufferBinding{};
-		colourBackBufferBinding.binding			= 1;
-		colourBackBufferBinding.descriptorType	= VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-		colourBackBufferBinding.descriptorCount	= 1;
-		colourBackBufferBinding.stageFlags		= VK_SHADER_STAGE_RAYGEN_BIT_KHR;
-
-		//create a binding for our uniform buffers
-		VkDescriptorSetLayoutBinding uniformBufferBinding{};
-		uniformBufferBinding.binding		= 2;
-		uniformBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		uniformBufferBinding.descriptorCount = 1;
-		uniformBufferBinding.stageFlags = VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR;
-
-		//create a binding for our uniform buffers
-		VkDescriptorSetLayoutBinding sphereBufferBinding{};
-		sphereBufferBinding.binding				= 3;
-		sphereBufferBinding.descriptorType		= VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		sphereBufferBinding.descriptorCount		= 1;
-		sphereBufferBinding.stageFlags			= VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
-
-		//create a binding for our uniform buffers
-		VkDescriptorSetLayoutBinding sphereColourBinding{};
-		sphereColourBinding.binding			= 4;
-		sphereColourBinding.descriptorType	= VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		sphereColourBinding.descriptorCount = 1;
-		sphereColourBinding.stageFlags		= VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
-
-		//create a binding for our uniform buffers
-		VkDescriptorSetLayoutBinding sphereOffsetBinding{};
-		sphereOffsetBinding.binding = 5;
-		sphereOffsetBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		sphereOffsetBinding.descriptorCount = 1;
-		sphereOffsetBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_INTERSECTION_BIT_KHR;
-
-		//create a binding for our uniform buffers
-		VkDescriptorSetLayoutBinding offsetBinding{};
-		offsetBinding.binding = 6;
-		offsetBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		offsetBinding.descriptorCount = 1;
-		offsetBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
-
-		//create a binding for our uniform buffers
-		VkDescriptorSetLayoutBinding sceneIndexBinding{};
-		sceneIndexBinding.binding = 7;
-		sceneIndexBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		sceneIndexBinding.descriptorCount = 1;
-		sceneIndexBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
-
-		//create a binding for our uniform buffers
-		VkDescriptorSetLayoutBinding sceneUVBinding{};
-		sceneUVBinding.binding = 8;
-		sceneUVBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		sceneUVBinding.descriptorCount = 1;
-		sceneUVBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
-
-		//create a binding for our uniform buffers
-		VkDescriptorSetLayoutBinding sceneNormalBinding{};
-		sceneNormalBinding.binding = 9;
-		sceneNormalBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-		sceneNormalBinding.descriptorCount = 1;
-		sceneNormalBinding.stageFlags = VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR;
+		VkDescriptorSetLayoutBinding layoutBinding[10] =
+		{
+			//binding , descriptor type, descriptor count, shader stage
+			{ 0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//acceleration structure
+			{ 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//framebuffer
+			{ 2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR},//uniform global buffer
+			{ 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_INTERSECTION_BIT_KHR},//sphere buffer
+			{ 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//sphere colour buffer
+			{ 5, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_INTERSECTION_BIT_KHR},//sphere offset buffer
+			{ 6, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer offset
+			{ 7, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer indices
+			{ 8, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer uvs
+			{ 9, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR}//scene buffer normals
+		};
 
 		VkDescriptorSetLayoutCreateInfo layoutInfo{};
 		layoutInfo.sType		= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 		layoutInfo.bindingCount = 10;
-		VkDescriptorSetLayoutBinding layoutsBinding[10] = {ASLayoutBinding , colourBackBufferBinding, uniformBufferBinding, sphereBufferBinding, sphereColourBinding, sphereOffsetBinding,
-		offsetBinding, sceneIndexBinding, sceneUVBinding, sceneNormalBinding};
-		layoutInfo.pBindings = layoutsBinding;
+		layoutInfo.pBindings	= layoutBinding;
 
 		VK_CALL_PRINT(vkCreateDescriptorSetLayout(GAPI._VulkanDevice, &layoutInfo, nullptr, &_RayDescriptorLayout));
 	}
@@ -1102,6 +1045,8 @@ void RaytraceGPU::Prepare(class GraphicsAPIManager& GAPI)
 		//then create the pipeline
 		PrepareVulkanProps(GAPI, VertexShader, FragmentShader);
 	}
+
+	enabled = true;
 }
 
 /*===== Resize =====*/

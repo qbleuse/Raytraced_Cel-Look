@@ -262,6 +262,8 @@ void RasterTriangle::Prepare(GraphicsAPIManager& GAPI)
 
 	//create the pipeline and copy commands here
 	PrepareVulkanProps(GAPI, vertexShader, fragmentShader);
+
+	enabled = true;
 }
 
 /*===== Resize =====*/

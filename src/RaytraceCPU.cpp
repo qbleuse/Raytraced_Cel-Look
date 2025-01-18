@@ -303,6 +303,8 @@ void RaytraceCPU::Prepare(GraphicsAPIManager& GAPI)
 			}
 		}
 	}
+
+	enabled = true;
 }
 
 

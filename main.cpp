@@ -243,21 +243,24 @@ int main(){
 		scenes[2] = new RaytraceCPU();
 		scenes[3] = new RaytraceGPU();
 
-
-		//init our scenes
-		GAPI.PrepareForUpload();
-		for (uint32_t i = 0; i < scenes.Nb(); i++)
-		{
-			scenes[i]->Prepare(GAPI);
-			scenes[i]->Resize(GAPI,GAPI._vk_width,GAPI._vk_height,GAPI._nb_vk_frames);
-		}
-		GAPI.SubmitUpload();
-
 		InitAppWideContext(GAPI, AppContext);
 
+		//variable to delay changing scene for one frame
+		uint32_t sceneIndex = 0;
 		while (!glfwWindowShouldClose(GAPI._VulkanWindow))
 		{
 			glfwPollEvents();
+
+
+			if (!scenes[AppContext.scene_index]->enabled)
+			{
+				vkDeviceWaitIdle(GAPI._VulkanDevice);
+				GAPI.PrepareForUpload();
+				scenes[AppContext.scene_index]->Prepare(GAPI);
+				scenes[AppContext.scene_index]->Resize(GAPI, GAPI._vk_width, GAPI._vk_height, GAPI._nb_vk_frames);
+				GAPI.SubmitUpload();
+				continue;
+			}
 
 			//try getting the next back buffer to draw in the swap chain
 			if (!GAPI.GetNextFrame())
@@ -267,7 +270,6 @@ int main(){
 				InitAppWideContext(GAPI, AppContext);
 				continue;
 			}
-
 
 			// Start the Dear ImGui frame
 			ImGui_ImplVulkan_NewFrame();
@@ -279,12 +281,16 @@ int main(){
 
 			//2. draw our ui window
 			BeginDrawUIWindow(GAPI, scenes, AppContext);
-			
-			//3. draw the ui of our scene and react to user input
-			scenes[AppContext.scene_index]->Act(AppContext);
 
-			//4. draw said scene
-			scenes[AppContext.scene_index]->Show(GAPI._RuntimeHandle);
+			if (scenes[sceneIndex]->enabled)
+			{
+				//3. draw the ui of our scene and react to user input
+				scenes[sceneIndex]->Act(AppContext);
+
+				//4. draw said scene
+				scenes[sceneIndex]->Show(GAPI._RuntimeHandle);
+			}
+			sceneIndex = AppContext.scene_index;
 
 			//5. draw the ui
 			FinishDrawUIWindow(GAPI, imguiResource, AppContext);

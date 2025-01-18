@@ -431,6 +431,8 @@ void RasterObject::Prepare(class GraphicsAPIManager& GAPI)
 	//a "zero init" of the transform values
 	_ObjData.scale = vec3{ 1.0f, 1.0f, 1.0f };
 	_ObjData.pos = vec3{ 0.0f, 0.0f, 1.0f };
+
+	enabled = true;
 }
 
 /*===== Resize =====*/

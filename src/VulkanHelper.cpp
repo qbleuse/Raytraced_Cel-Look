@@ -1327,6 +1327,147 @@ void VulkanHelper::ClearTexture(const VkDevice& VulkanDevice, Texture& texture)
 	texture._ImageView = nullptr;
 }
 
+/* Descriptors */
+bool VulkanHelper::CreatePipelineDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const MultipleVolatileMemory<VkDescriptorSetLayoutBinding>& Bindings, uint32_t bindingNb)
+{
+	//if an error happens...
+	VkResult result = VK_SUCCESS;
+
+	//copy the Bindings info inside the descriptor
+	PipelineDescriptor._DescriptorBindings.Alloc(bindingNb);
+	memcpy(*PipelineDescriptor._DescriptorBindings, *Bindings, sizeof(VkDescriptorSetLayoutBinding) * bindingNb);
+
+	//creating the descriptor layout from the info given
+	VkDescriptorSetLayoutCreateInfo layoutInfo{};
+	layoutInfo.sType		= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	layoutInfo.bindingCount = PipelineDescriptor._DescriptorBindings.Nb();
+	layoutInfo.pBindings	= *PipelineDescriptor._DescriptorBindings;
+
+	VK_CALL_PRINT(vkCreateDescriptorSetLayout(VulkanUploader._VulkanDevice, &layoutInfo, nullptr, &PipelineDescriptor._DescriptorLayout));
+
+	return result == VK_SUCCESS;
+}
+
+bool VulkanHelper::AllocateDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, uint32_t DescriptorSetNb)
+{
+	//if an error happens...
+	VkResult result = VK_SUCCESS;
+
+	//creating our pools
+	{
+		uint32_t descriptorNb = PipelineDescriptor._DescriptorBindings.Nb();
+
+		MultipleScopedMemory<VkDescriptorPoolSize> PoolInfo;
+		PoolInfo.Alloc(descriptorNb);
+
+		for (uint32_t i = 0; i < PipelineDescriptor._DescriptorBindings.Nb(); i++)
+		{
+			PoolInfo[i].type			= PipelineDescriptor._DescriptorBindings[i].descriptorType;
+			PoolInfo[i].descriptorCount = PipelineDescriptor._DescriptorBindings[i].descriptorCount;
+
+		}
+
+		//creating our descriptor pool to allocate the number of sets user asked for
+		VkDescriptorPoolCreateInfo poolInfo{};
+		poolInfo.sType			= VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.poolSizeCount	= descriptorNb;
+		poolInfo.pPoolSizes		= *PoolInfo;
+		poolInfo.maxSets		= DescriptorSetNb;
+
+		VK_CALL_PRINT(vkCreateDescriptorPool(VulkanUploader._VulkanDevice, &poolInfo, nullptr, &PipelineDescriptor._DescriptorPool))
+	}
+
+	//allocating our sets
+	{
+		MultipleScopedMemory<VkDescriptorSetLayout> layouts{ DescriptorSetNb };
+		for (uint32_t i = 0; i < DescriptorSetNb; i++)
+			memcpy(&layouts[i], &PipelineDescriptor._DescriptorLayout, sizeof(VkDescriptorSetLayout));
+		
+		//allocating the number of sets user asked for
+		VkDescriptorSetAllocateInfo allocInfo{};
+		allocInfo.sType					= VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		allocInfo.descriptorPool		= PipelineDescriptor._DescriptorPool;
+		allocInfo.descriptorSetCount	= DescriptorSetNb;
+		allocInfo.pSetLayouts			= *layouts;
+
+		//then create the resource
+		PipelineDescriptor._DescriptorSets.Alloc(DescriptorSetNb);
+		VK_CALL_PRINT(vkAllocateDescriptorSets(VulkanUploader._VulkanDevice, &allocInfo, *PipelineDescriptor._DescriptorSets));
+	}
+
+	return result == VK_SUCCESS;
+}
+
+void VulkanHelper::ReleaseDescriptor(const VkDevice& VulkanDevice, PipelineDescriptors& PipelineDescriptor)
+{
+	if (PipelineDescriptor._DescriptorPool)
+		vkDestroyDescriptorPool(VulkanDevice,PipelineDescriptor._DescriptorPool,nullptr);
+	PipelineDescriptor._DescriptorPool = VK_NULL_HANDLE;
+	PipelineDescriptor._DescriptorSets.Clear();
+}
+
+bool VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkAccelerationStructureKHR& AS, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex)
+{
+	//the acceleration structure data
+	VkWriteDescriptorSetAccelerationStructureKHR ASInfo{};
+	ASInfo.sType						= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_ACCELERATION_STRUCTURE_KHR;
+	ASInfo.pAccelerationStructures		= &AS;
+	ASInfo.accelerationStructureCount	= 1;
+
+	//writing to the set
+	VkWriteDescriptorSet descriptorWrite{};
+	descriptorWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrite.dstBinding		= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].binding;
+	descriptorWrite.dstSet			= PipelineDescriptor._DescriptorSets[descriptorSetIndex];
+	descriptorWrite.dstArrayElement	= 0;
+	descriptorWrite.descriptorType	= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].descriptorType;
+	descriptorWrite.descriptorCount	= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].descriptorCount;
+	descriptorWrite.pNext			= &ASInfo;
+	vkUpdateDescriptorSets(VulkanUploader._VulkanDevice, 1, &descriptorWrite, 0, nullptr);
+}
+
+
+bool VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkBuffer& Buffer, uint32_t offset, uint32_t range, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex)
+{
+	//the buffer data
+	VkDescriptorBufferInfo bufferInfo{};
+	bufferInfo.buffer	= Buffer;
+	bufferInfo.offset	= offset;
+	bufferInfo.range	= range;
+
+	//writing to the set
+	VkWriteDescriptorSet descriptorWrite{};
+	descriptorWrite.sType				= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrite.dstBinding			= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].binding;
+	descriptorWrite.dstSet				= PipelineDescriptor._DescriptorSets[descriptorSetIndex];
+	descriptorWrite.dstArrayElement		= 0;
+	descriptorWrite.descriptorType		= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].descriptorType;
+	descriptorWrite.descriptorCount		= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].descriptorCount;
+	descriptorWrite.pBufferInfo			= &bufferInfo;
+	vkUpdateDescriptorSets(VulkanUploader._VulkanDevice, 1, &descriptorWrite, 0, nullptr);
+}
+
+bool VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkImageView& ImageView, const VkSampler& Sampler, const VkImageLayout& ImageLayout, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex)
+{
+	//the image data
+	VkDescriptorImageInfo imageInfo{};
+	imageInfo.imageView		= ImageView;
+	imageInfo.sampler		= Sampler;
+	imageInfo.imageLayout	= ImageLayout;
+
+	//writing to the set
+	VkWriteDescriptorSet descriptorWrite{};
+	descriptorWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrite.dstBinding		= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].binding;
+	descriptorWrite.dstSet			= PipelineDescriptor._DescriptorSets[descriptorSetIndex];
+	descriptorWrite.dstArrayElement = 0;
+	descriptorWrite.descriptorType	= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].descriptorType;
+	descriptorWrite.descriptorCount = PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].descriptorCount;
+	descriptorWrite.pImageInfo		= &imageInfo;
+	vkUpdateDescriptorSets(VulkanUploader._VulkanDevice, 1, &descriptorWrite, 0, nullptr);
+}
+
+
 /* Acceleration Structures */
 
 bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index, uint32_t customInstanceIndex, uint32_t shaderOffset)

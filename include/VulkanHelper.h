@@ -461,6 +461,35 @@ namespace VulkanHelper
 		VkDescriptorSet				_TextureDescriptors;
 	};
 
+	/* Descriptors */
+
+	/* a struct concatenating data of descriptors in pipeline and the descriptor objects themselves */
+	struct PipelineDescriptors
+	{
+		//the binding info for all descriptors
+		VolatileLoopArray<VkDescriptorSetLayoutBinding> _DescriptorBindings;
+
+		//a layout object, basically an object that represents all the descriptors needed and their binding
+		VkDescriptorSetLayout					_DescriptorLayout;
+		//A pool to allocate the descriptor sets needed
+		VkDescriptorPool						_DescriptorPool{};
+		//the descriptor sets to use (one per frame)
+		VolatileLoopArray<VkDescriptorSet>		_DescriptorSets;
+	};
+
+	//saves the bindings inside the pipeline descriptor object, and creates the layout object
+	bool CreatePipelineDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const MultipleVolatileMemory<VkDescriptorSetLayoutBinding>& Bindings, uint32_t bindingNb);
+	//create the descriptor Pool and sets from the info inside the Pipeline Descriptor
+	bool AllocateDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, uint32_t DescriptorSetNb);
+	//release the descriptor Pool and sets from the Pipeline Descriptor
+	void ReleaseDescriptor(const VkDevice& VulkanDevice, PipelineDescriptors& PipelineDescriptor);
+	//uploads an acceleration structure at the descriptor's index given in parameter
+	bool UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkAccelerationStructureKHR& AS, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex);
+	//uploads a buffer at the descriptor's index given in parameter
+	bool UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkBuffer& Buffer, uint32_t offset, uint32_t range, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex);
+	//uploads an image at the descriptor's index given in parameter
+	bool UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkImageView& ImageView, const VkSampler& Sampler, const VkImageLayout& ImageLayout, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex);
+
 
 	/* Acceleration Structures */
 
