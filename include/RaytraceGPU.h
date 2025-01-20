@@ -33,8 +33,10 @@ private:
 
 	/* Vulkan */
 
-	//This scene's raytracing descriptor layout, defining how to use the AS and what image to store the result in
-	VkDescriptorSetLayout		_RayDescriptorLayout{};
+	//the layouts and descriptors of this scene that can change in real time
+	VulkanHelper::PipelineDescriptors _RayPipelineDynamicDescriptor;
+	//the layouts and descriptors of this scene that does not change
+	VulkanHelper::PipelineDescriptors _RayPipelineStaticDescriptor;
 	//This scene's raytracing pipeline layout, defining all the descriptors our raytracing pipeline will need (basically the above descriptor's copy)
 	VkPipelineLayout			_RayLayout{};
 	//This scene's raytracing pipeline, defining shader groups.
@@ -43,11 +45,6 @@ private:
 	//The binding table creatd from the raytracing shader
 	VulkanHelper::ShaderBindingTable	_RayShaderBindingTable;
 	List<VulkanHelper::ShaderScripts>	_RayShaders;
-
-	//A pool to allocate the descriptor sets needed
-	VkDescriptorPool						_RayDescriptorPool{};
-	//the descriptor sets to use (one per frame)
-	MultipleScopedMemory<VkDescriptorSet>	_RayDescriptorSet;
 
 	//the image we will write on with the raytracing pipeline
 	ScopedLoopArray<VkImage>		_RayWriteImage;
@@ -96,29 +93,21 @@ private:
 	*/
 	void PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI);
 
-	//This scene's renderpass, defining what is attached to the pipeline, and what is outputed
-	VkRenderPass				_CopyRenderPass{ VK_NULL_HANDLE };
-	//This scene's descriptor layout, defining how to use our resources
-	VkDescriptorSetLayout		_CopyDescriptorLayout{ VK_NULL_HANDLE };
 	//This scene's pipeline layout, defining all the descriptors our pipeline will need
-	VkPipelineLayout			_CopyLayout{ VK_NULL_HANDLE };
+	VkPipelineLayout					_CopyLayout{ VK_NULL_HANDLE };
 	//This scene's pipeline, defining the behaviour of all fixed function alongside the render pass and shaders.
-	VkPipeline					_CopyPipeline{ VK_NULL_HANDLE };
+	VkPipeline							_CopyPipeline{ VK_NULL_HANDLE };
 
-	//our scene's viewport (usually takes the whole screen)
-	VkViewport					_CopyViewport{};
-	//our scene's scissors (usually takes the whole screen, therefore not doing any cuts)
-	VkRect2D					_CopyScissors{};
-
-	//The outputs attached to the scene's pipeline as described in the renderpass
-	MultipleScopedMemory<VkFramebuffer>		_CopyOutput;
-	//A pool to allocate the descriptor needed to use our uniform buffers
-	VkDescriptorPool						_CopyDescriptorPool{ VK_NULL_HANDLE };
-	//the descriptor to use our Uniform Buffers
-	MultipleScopedMemory<VkDescriptorSet>	_CopyDescriptorSet;
 	//sampler used to sample out the Raytraced Write Image to our framebuffer
-	VkSampler								_CopySampler{ VK_NULL_HANDLE };
+	VkSampler							_CopySampler{ VK_NULL_HANDLE };
+	//the shaders used for the fullscreen copy
+	List<VulkanHelper::ShaderScripts>	_CopyShaders;
 
+
+	//an object describing the ouput attached to the copy pipeline (such as frame buffer)
+	VulkanHelper::PipelineOutput	_CopyPipelineOutput;
+	//the descriptor needed for the copy pipeline (such as the sampler)
+	VulkanHelper::PipelineDescriptors _CopyDescriptors;
 
 	/*
 	* Creates the necessary resources for copying teh raytraced image with vulkan.
@@ -129,12 +118,17 @@ private:
 	* - Pipeline Object
 	* - DescriptorSets Objects for the model's samplers (using Descriptor Pool)
 	*/
-	void PrepareVulkanProps(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
+	void PrepareVulkanProps(class GraphicsAPIManager& GAPI);
+
+	/*
+	* Creates a fullscreen Pipeline object using the Shaders and pipeline layout given in parameter.
+	*/
+	void CreateFullscreenCopyPipeline(class GraphicsAPIManager& GAPI, VkPipeline& Pipeline, const VkPipelineLayout& PipelineLayout, const VkRenderPass& RenderPass, const List<VulkanHelper::ShaderScripts>& Shaders);
 
 	/*
 	* Compiles the shaders to use in the Copy Pipeline Object creation
 	*/
-	void PrepareVulkanScripts(class GraphicsAPIManager& GAPI, VkShaderModule& VertexShader, VkShaderModule& FragmentShader);
+	void PrepareVulkanScripts(class GraphicsAPIManager& GAPI);
 
 
 	/*

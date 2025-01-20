@@ -1328,6 +1328,7 @@ void VulkanHelper::ClearTexture(const VkDevice& VulkanDevice, Texture& texture)
 }
 
 /* Descriptors */
+
 bool VulkanHelper::CreatePipelineDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const MultipleVolatileMemory<VkDescriptorSetLayoutBinding>& Bindings, uint32_t bindingNb)
 {
 	//if an error happens...
@@ -1406,7 +1407,7 @@ void VulkanHelper::ReleaseDescriptor(const VkDevice& VulkanDevice, PipelineDescr
 	PipelineDescriptor._DescriptorSets.Clear();
 }
 
-bool VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkAccelerationStructureKHR& AS, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex)
+void VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkAccelerationStructureKHR& AS, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex)
 {
 	//the acceleration structure data
 	VkWriteDescriptorSetAccelerationStructureKHR ASInfo{};
@@ -1414,20 +1415,30 @@ bool VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptor
 	ASInfo.pAccelerationStructures		= &AS;
 	ASInfo.accelerationStructureCount	= 1;
 
+	//finding the real index from the binding
+	uint32_t index = 0;
+	for (; index < PipelineDescriptor._DescriptorBindings.Nb(); index++)
+		if (PipelineDescriptor._DescriptorBindings[index].binding == descriptorBindingIndex)
+			break;
+
+	//the binding does not exist in this pipeline descriptor, we quit
+	if (index == PipelineDescriptor._DescriptorBindings.Nb())
+		return;
+
 	//writing to the set
 	VkWriteDescriptorSet descriptorWrite{};
 	descriptorWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	descriptorWrite.dstBinding		= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].binding;
+	descriptorWrite.dstBinding		= PipelineDescriptor._DescriptorBindings[index].binding;
 	descriptorWrite.dstSet			= PipelineDescriptor._DescriptorSets[descriptorSetIndex];
 	descriptorWrite.dstArrayElement	= 0;
-	descriptorWrite.descriptorType	= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].descriptorType;
-	descriptorWrite.descriptorCount	= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].descriptorCount;
+	descriptorWrite.descriptorType	= PipelineDescriptor._DescriptorBindings[index].descriptorType;
+	descriptorWrite.descriptorCount	= PipelineDescriptor._DescriptorBindings[index].descriptorCount;
 	descriptorWrite.pNext			= &ASInfo;
 	vkUpdateDescriptorSets(VulkanUploader._VulkanDevice, 1, &descriptorWrite, 0, nullptr);
 }
 
 
-bool VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkBuffer& Buffer, uint32_t offset, uint32_t range, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex)
+void VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkBuffer& Buffer, uint32_t offset, uint32_t range, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex)
 {
 	//the buffer data
 	VkDescriptorBufferInfo bufferInfo{};
@@ -1435,19 +1446,29 @@ bool VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptor
 	bufferInfo.offset	= offset;
 	bufferInfo.range	= range;
 
+	//finding the real index from the binding
+	uint32_t index = 0;
+	for (; index < PipelineDescriptor._DescriptorBindings.Nb(); index++)
+		if (PipelineDescriptor._DescriptorBindings[index].binding == descriptorBindingIndex)
+			break;
+
+	//the binding does not exist in this pipeline descriptor, we quit
+	if (index == PipelineDescriptor._DescriptorBindings.Nb())
+		return;
+
 	//writing to the set
 	VkWriteDescriptorSet descriptorWrite{};
 	descriptorWrite.sType				= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	descriptorWrite.dstBinding			= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].binding;
+	descriptorWrite.dstBinding			= PipelineDescriptor._DescriptorBindings[index].binding;
 	descriptorWrite.dstSet				= PipelineDescriptor._DescriptorSets[descriptorSetIndex];
 	descriptorWrite.dstArrayElement		= 0;
-	descriptorWrite.descriptorType		= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].descriptorType;
-	descriptorWrite.descriptorCount		= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].descriptorCount;
+	descriptorWrite.descriptorType		= PipelineDescriptor._DescriptorBindings[index].descriptorType;
+	descriptorWrite.descriptorCount		= PipelineDescriptor._DescriptorBindings[index].descriptorCount;
 	descriptorWrite.pBufferInfo			= &bufferInfo;
 	vkUpdateDescriptorSets(VulkanUploader._VulkanDevice, 1, &descriptorWrite, 0, nullptr);
 }
 
-bool VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkImageView& ImageView, const VkSampler& Sampler, const VkImageLayout& ImageLayout, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex)
+void VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkImageView& ImageView, const VkSampler& Sampler, VkImageLayout ImageLayout, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex)
 {
 	//the image data
 	VkDescriptorImageInfo imageInfo{};
@@ -1455,16 +1476,177 @@ bool VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptor
 	imageInfo.sampler		= Sampler;
 	imageInfo.imageLayout	= ImageLayout;
 
+	//finding the real index from the binding
+	uint32_t index = 0;
+	for (; index < PipelineDescriptor._DescriptorBindings.Nb(); index++)
+		if (PipelineDescriptor._DescriptorBindings[index].binding == descriptorBindingIndex)
+			break;
+
+	//the binding does not exist in this pipeline descriptor, we quit
+	if (index == PipelineDescriptor._DescriptorBindings.Nb())
+		return;
+
 	//writing to the set
 	VkWriteDescriptorSet descriptorWrite{};
 	descriptorWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	descriptorWrite.dstBinding		= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].binding;
+	descriptorWrite.dstBinding		= PipelineDescriptor._DescriptorBindings[index].binding;
 	descriptorWrite.dstSet			= PipelineDescriptor._DescriptorSets[descriptorSetIndex];
 	descriptorWrite.dstArrayElement = 0;
-	descriptorWrite.descriptorType	= PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].descriptorType;
-	descriptorWrite.descriptorCount = PipelineDescriptor._DescriptorBindings[descriptorBindingIndex].descriptorCount;
+	descriptorWrite.descriptorType	= PipelineDescriptor._DescriptorBindings[index].descriptorType;
+	descriptorWrite.descriptorCount = PipelineDescriptor._DescriptorBindings[index].descriptorCount;
 	descriptorWrite.pImageInfo		= &imageInfo;
 	vkUpdateDescriptorSets(VulkanUploader._VulkanDevice, 1, &descriptorWrite, 0, nullptr);
+}
+
+void VulkanHelper::ClearPipelineDescriptor(const VkDevice& VulkanDevice, PipelineDescriptors& PipelineDescriptor)
+{
+	ReleaseDescriptor(VulkanDevice, PipelineDescriptor);
+	if (PipelineDescriptor._DescriptorLayout)
+		vkDestroyDescriptorSetLayout(VulkanDevice, PipelineDescriptor._DescriptorLayout, nullptr);
+	PipelineDescriptor._DescriptorLayout = VK_NULL_HANDLE;
+	PipelineDescriptor._DescriptorBindings.Clear();
+}
+
+/* FrameBuffer */
+
+bool VulkanHelper::CreatePipelineOutput(Uploader& VulkanUploader, PipelineOutput& PipelineOutput, const MultipleVolatileMemory<VkAttachmentDescription>& colorAttachements, uint32_t colorAttachementNb, const VkAttachmentDescription& depthStencilAttachement)
+{
+	//if an error happens...
+	VkResult result = VK_SUCCESS;
+
+	//copy the attachement info inside the struct
+	PipelineOutput._OutputColorAttachement.Alloc(colorAttachementNb);
+	memcpy(*PipelineOutput._OutputColorAttachement, *colorAttachements, sizeof(VkAttachmentDescription) * colorAttachementNb);
+
+	PipelineOutput._OutputDepthStencilAttachement = depthStencilAttachement;
+
+	//we'll consider the depth attachement only if the format is a proper depth format
+	bool usesDepth = PipelineOutput._OutputDepthStencilAttachement.format >= VK_FORMAT_D16_UNORM && PipelineOutput._OutputDepthStencilAttachement.format <= VK_FORMAT_D32_SFLOAT_S8_UINT;
+
+	{
+		//first create all the attachement necessary
+		MultipleScopedMemory<VkAttachmentReference> colorAttachementRef{ colorAttachementNb};
+
+		//there is a lot of possible attachement, but for our use case in this application, this makes sense
+		for (uint32_t i = 0; i < colorAttachementNb; i++)
+		{
+			colorAttachementRef[i].attachment = i;
+			colorAttachementRef[i].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		}
+
+		//describing the subpass of the renderpass
+		VkSubpassDescription subpass{};
+		subpass.pipelineBindPoint		= VK_PIPELINE_BIND_POINT_GRAPHICS;
+		subpass.colorAttachmentCount	= colorAttachementNb;
+		subpass.pColorAttachments		= *colorAttachementRef;
+
+		if (usesDepth)
+		{
+			//describing the depth stencil output in the subpass
+			VkAttachmentReference depthBufferAttachmentRef{};
+			depthBufferAttachmentRef.attachment = colorAttachementNb;
+			depthBufferAttachmentRef.layout		= VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+			subpass.pDepthStencilAttachment = &depthBufferAttachmentRef;
+		}
+
+		//describing the renderpass
+		VkRenderPassCreateInfo renderPassInfo{};
+		renderPassInfo.sType		= VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+		renderPassInfo.subpassCount = 1;
+		renderPassInfo.pSubpasses	= &subpass;
+
+		if (usesDepth)
+		{
+			PipelineOutput._OutputClearValue.Alloc(colorAttachementNb + 1);
+			ZERO_SET(PipelineOutput._OutputClearValue, sizeof(VkClearValue) * PipelineOutput._OutputClearValue.Nb());
+
+			//copy the color attachement info
+			MultipleScopedMemory<VkAttachmentDescription> colorAndDepthAttachement{ colorAttachementNb + 1 };
+			memcpy(*colorAndDepthAttachement, *colorAttachements, sizeof(VkAttachmentDescription) * colorAttachementNb);
+			//then the depth
+			colorAndDepthAttachement[colorAttachementNb] = depthStencilAttachement;
+
+			//put our new array with all the attachements
+			renderPassInfo.pAttachments		= *colorAndDepthAttachement;
+			renderPassInfo.attachmentCount	= colorAttachementNb + 1;
+
+			//then create the render pass
+			VK_CALL_PRINT(vkCreateRenderPass(VulkanUploader._VulkanDevice, &renderPassInfo, nullptr, &PipelineOutput._OutputRenderPass));
+		}
+		else
+		{
+			PipelineOutput._OutputClearValue.Alloc(colorAttachementNb);
+			ZERO_SET(PipelineOutput._OutputClearValue, sizeof(VkClearValue) * PipelineOutput._OutputClearValue.Nb());
+
+			//only color attachement are required ...
+			renderPassInfo.pAttachments		= *PipelineOutput._OutputColorAttachement;
+			renderPassInfo.attachmentCount	= colorAttachementNb;
+
+			//... create the render pass with the info as-is
+			VK_CALL_PRINT(vkCreateRenderPass(VulkanUploader._VulkanDevice, &renderPassInfo, nullptr, &PipelineOutput._OutputRenderPass));
+		}
+	}
+
+	return result == VK_SUCCESS;
+}
+
+void VulkanHelper::AllocateFrameBuffer(PipelineOutput& PipelineOutput, uint32_t width, uint32_t height, uint32_t framebufferNb)
+{
+	//filling up the viewport and scissors
+	PipelineOutput._OutputViewport.width	= static_cast<float>(width);
+	PipelineOutput._OutputViewport.height	= static_cast<float>(height);
+	PipelineOutput._OutputViewport.maxDepth = 1.0f;
+	PipelineOutput._OutputViewport.minDepth = 0.0f;
+	PipelineOutput._OutputViewport.x		= 0.0f;
+	PipelineOutput._OutputViewport.y		= 0.0f;
+	PipelineOutput._OutputScissor.extent	= { width, height };
+	PipelineOutput._OutputScissor.offset	= { 0, 0};
+
+	PipelineOutput._OuputFrameBuffer.Alloc(framebufferNb);
+}
+
+void VulkanHelper::SetClearValue(PipelineOutput& PipelineOutput, const VkClearValue& clearValue, uint32_t clearValueIndex)
+{
+	PipelineOutput._OutputClearValue[clearValueIndex] = clearValue;
+}
+
+bool VulkanHelper::SetFrameBuffer(Uploader& VulkanUploader, PipelineOutput& PipelineOutput, const MultipleVolatileMemory<VkImageView>& framebuffers, uint32_t frameBufferIndex)
+{
+	//if an error happens...
+	VkResult result = VK_SUCCESS;
+
+	bool usesDepth = PipelineOutput._OutputDepthStencilAttachement.format >= VK_FORMAT_D16_UNORM && PipelineOutput._OutputDepthStencilAttachement.format <= VK_FORMAT_D32_SFLOAT_S8_UINT;
+
+	//describing the framebuffer
+	VkFramebufferCreateInfo framebufferInfo{};
+	framebufferInfo.sType			= VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+	framebufferInfo.renderPass		= PipelineOutput._OutputRenderPass;
+	framebufferInfo.width			= PipelineOutput._OutputScissor.extent.width;
+	framebufferInfo.height			= PipelineOutput._OutputScissor.extent.height;
+	framebufferInfo.layers			= 1;
+	framebufferInfo.attachmentCount = PipelineOutput._OutputColorAttachement.Nb() + static_cast<uint32_t>(usesDepth);//we add the depth at the end
+	framebufferInfo.pAttachments	= *framebuffers;//this expects the depth output to be at the end
+
+	//making our framebuffer
+	VK_CALL_PRINT(vkCreateFramebuffer(VulkanUploader._VulkanDevice, &framebufferInfo, nullptr, &PipelineOutput._OuputFrameBuffer[frameBufferIndex]))
+
+	return result == VK_SUCCESS;
+}
+
+void VulkanHelper::ReleaseFrameBuffer(const VkDevice& VulkanDevice, PipelineOutput& PipelineOutput)
+{
+	VK_CLEAR_ARRAY(PipelineOutput._OuputFrameBuffer, PipelineOutput._OuputFrameBuffer.Nb(), vkDestroyFramebuffer, VulkanDevice);
+}
+
+void VulkanHelper::ClearPipelineOutput(const VkDevice& VulkanDevice, PipelineOutput& PipelineOutput)
+{
+	ReleaseFrameBuffer(VulkanDevice, PipelineOutput);
+	if (PipelineOutput._OutputRenderPass)
+		vkDestroyRenderPass(VulkanDevice, PipelineOutput._OutputRenderPass, nullptr);
+	PipelineOutput._OutputRenderPass = VK_NULL_HANDLE;
+	PipelineOutput._OutputColorAttachement.Clear();
+	PipelineOutput._OutputClearValue.Clear();
 }
 
 

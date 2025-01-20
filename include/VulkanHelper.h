@@ -484,11 +484,46 @@ namespace VulkanHelper
 	//release the descriptor Pool and sets from the Pipeline Descriptor
 	void ReleaseDescriptor(const VkDevice& VulkanDevice, PipelineDescriptors& PipelineDescriptor);
 	//uploads an acceleration structure at the descriptor's index given in parameter
-	bool UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkAccelerationStructureKHR& AS, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex);
+	void UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkAccelerationStructureKHR& AS, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex = 0);
 	//uploads a buffer at the descriptor's index given in parameter
-	bool UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkBuffer& Buffer, uint32_t offset, uint32_t range, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex);
+	void UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkBuffer& Buffer, uint32_t offset, uint32_t range, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex = 0);
 	//uploads an image at the descriptor's index given in parameter
-	bool UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkImageView& ImageView, const VkSampler& Sampler, const VkImageLayout& ImageLayout, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex);
+	void UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkImageView& ImageView, const VkSampler& Sampler, VkImageLayout ImageLayout, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex = 0);
+	//clears all data from the pipeline descriptor object
+	void ClearPipelineDescriptor(const VkDevice& VulkanDevice, PipelineDescriptors& PipelineDescriptor);
+
+	/* FrameBuffer */
+
+	struct PipelineOutput
+	{
+		//the attachement info for the pipeline 
+		VolatileLoopArray<VkAttachmentDescription> _OutputColorAttachement;
+		VkAttachmentDescription _OutputDepthStencilAttachement;
+		//the Clear Value of each attachement if necessary
+		VolatileLoopArray<VkClearValue> _OutputClearValue;
+
+		//the render pass that produces the desired output
+		VkRenderPass _OutputRenderPass;
+		// the viewport that defines the size of the ouput
+		VkViewport _OutputViewport;
+		// the scissors that defines the size of the ouput
+		VkRect2D _OutputScissor;
+
+		VolatileLoopArray<VkFramebuffer> _OuputFrameBuffer;
+	};
+
+	//saves the color and depth attachement and creates the associated renderpass
+	bool CreatePipelineOutput(Uploader& VulkanUploader, PipelineOutput& PipelineOutput, const MultipleVolatileMemory<VkAttachmentDescription>& colorAttachements, uint32_t colorAttachementNb, const VkAttachmentDescription& depthStencilAttachement);
+	// allocates the output framebuffer without creating the objects, and sets value for the viewport and scissor
+	void AllocateFrameBuffer(PipelineOutput& PipelineOutput, uint32_t width, uint32_t height, uint32_t framebufferNb);
+	// Sets the clear value wanted for an attachement
+	void SetClearValue(PipelineOutput& PipelineOutput, const VkClearValue& clearValue, uint32_t clearValueIndex);
+	bool SetFrameBuffer(Uploader& VulkanUploader, PipelineOutput& PipelineOutput, const MultipleVolatileMemory<VkImageView>& framebuffers, uint32_t frameBufferIndex);
+	void ReleaseFrameBuffer(const VkDevice& VulkanDevice, PipelineOutput& PipelineOutput);
+
+	
+	//release the memory from all the objects in the Pipeline Output
+	void ClearPipelineOutput(const VkDevice& VulkanDevice, PipelineOutput& PipelineOutput);
 
 
 	/* Acceleration Structures */
