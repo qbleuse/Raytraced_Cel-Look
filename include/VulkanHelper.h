@@ -518,13 +518,30 @@ namespace VulkanHelper
 	void AllocateFrameBuffer(PipelineOutput& PipelineOutput, uint32_t width, uint32_t height, uint32_t framebufferNb);
 	// Sets the clear value wanted for an attachement
 	void SetClearValue(PipelineOutput& PipelineOutput, const VkClearValue& clearValue, uint32_t clearValueIndex);
+	//set images in the frame buffer object
 	bool SetFrameBuffer(Uploader& VulkanUploader, PipelineOutput& PipelineOutput, const MultipleVolatileMemory<VkImageView>& framebuffers, uint32_t frameBufferIndex);
+	//release the framebuffers objects allocated
 	void ReleaseFrameBuffer(const VkDevice& VulkanDevice, PipelineOutput& PipelineOutput);
-
-	
 	//release the memory from all the objects in the Pipeline Output
 	void ClearPipelineOutput(const VkDevice& VulkanDevice, PipelineOutput& PipelineOutput);
 
+	/*
+	* a struct to represent the content of a single framebuffer duplicated for multiple frames
+	*/
+	struct FrameBuffer
+	{
+		//the actual images objects of the framebuffer
+		VolatileLoopArray<VkImage> _Images;
+		//the render target associated with the images (same number as the images)
+		MultipleVolatileMemory<VkImageView> _ImageViews;
+		//the GPU memory for the sequentially contained images
+		VkDeviceMemory _ImagesMemory;
+	};
+
+	//fills up the framebuffer struct depending on the content of the pipeline output (PipelineOutput's framebuffer must be allocated beforehand)
+	bool CreateFrameBuffer(Uploader& VulkanUploader, FrameBuffer& Framebuffer, const PipelineOutput& Output, uint32_t associatedAttechementIndex, VkFormat overrideFormat = VK_FORMAT_UNDEFINED);
+	//Clears all the memory allocated by the Framebuffer
+	void ClearFrameBuffer(const VkDevice& VulkanDevice, FrameBuffer& Framebuffer);
 
 	/* Acceleration Structures */
 

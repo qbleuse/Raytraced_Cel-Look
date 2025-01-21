@@ -46,12 +46,8 @@ private:
 	VulkanHelper::ShaderBindingTable	_RayShaderBindingTable;
 	List<VulkanHelper::ShaderScripts>	_RayShaders;
 
-	//the image we will write on with the raytracing pipeline
-	ScopedLoopArray<VkImage>		_RayWriteImage;
-	//the image view associated with our image to write.
-	ScopedLoopArray<VkImageView>	_RayWriteImageView;
-	//the allocated memory on GPU in which the local image is
-	VkDeviceMemory					_RayImageMemory{ VK_NULL_HANDLE };
+	//the image to write to in the raytracing pipeline
+	VulkanHelper::FrameBuffer		_RayFramebuffer;
 
 	//a uniform buffer for matrices data
 	VulkanHelper::UniformBufferHandle	_RayUniformBuffer;

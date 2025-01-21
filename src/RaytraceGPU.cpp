@@ -1065,7 +1065,7 @@ void RaytraceGPU::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI,
 	for (uint32_t i = 0; i < GAPI._nb_vk_frames; i++)
 	{
 		//bind the back buffer to each descriptor
-		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _RayWriteImageView[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, 0, i);
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _RayFramebuffer._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, 0, i);
 
 		//bind uniform buffer to each descriptor
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _RayUniformBuffer._GPUBuffer[i], 0, sizeof(UniformBuffer), 1, i);
@@ -1080,22 +1080,14 @@ void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t w
 	/*===== CLEAR RESOURCES ======*/
 
 	//clear the fullscreen images buffer
-	VK_CLEAR_ARRAY(_RayWriteImageView, old_nb_frames, vkDestroyImageView, GAPI._VulkanDevice);
-	VK_CLEAR_ARRAY(_RayWriteImage, old_nb_frames, vkDestroyImage, GAPI._VulkanDevice);
-
+	ClearFrameBuffer(GAPI._VulkanDevice, _RayFramebuffer);
 	VulkanHelper::ReleaseFrameBuffer(GAPI._VulkanDevice, _CopyPipelineOutput);
-
-	//free the allocated memory for the fullscreen images
-	vkFreeMemory(GAPI._VulkanDevice, _RayImageMemory, nullptr);
 	VulkanHelper::ReleaseDescriptor(GAPI._VulkanDevice, _CopyDescriptors);
 
 	/*===== CPU SIDE IMAGE BUFFERS ======*/
 
 	//reallocate the fullscreen image buffers with the new number of available images
 	VulkanHelper::AllocateFrameBuffer(_CopyPipelineOutput, GAPI._vk_width, GAPI._vk_height, GAPI._nb_vk_frames);
-	_RayWriteImageView.Alloc(GAPI._nb_vk_frames);
-	_RayWriteImage.Alloc(GAPI._nb_vk_frames);
-
 
 	/*===== DESCRIPTORS ======*/
 
@@ -1103,48 +1095,7 @@ void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t w
 
 	/*===== GPU SIDE IMAGE BUFFERS ======*/
 
-	// the size of the fullscreen image's buffer : a fullscreen rgba texture
-	VkDeviceSize imageOffset = 0;
-
-	//allocate the memory for buffer and image
-	{
-
-		// creating the image object with data given in parameters
-		VkImageCreateInfo imageInfo{};
-		imageInfo.sType			= VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		imageInfo.imageType		= VK_IMAGE_TYPE_2D;//we copy a fullscreen image
-		imageInfo.format		= VK_FORMAT_R32G32B32A32_SFLOAT;//easier to manipulate (may be unsuppoorted by some GPUs)
-		imageInfo.extent.width	= _CopyPipelineOutput._OutputScissor.extent.width;
-		imageInfo.extent.height = _CopyPipelineOutput._OutputScissor.extent.height;
-		imageInfo.extent.depth	= 1;
-		imageInfo.mipLevels		= 1u;
-		imageInfo.arrayLayers	= 1u;
-		imageInfo.tiling		= VK_IMAGE_TILING_OPTIMAL;//will only load images from buffers, so no need to change this
-		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;//same this can be changed later and each _Scene will do what they need on their own
-		imageInfo.usage			= VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;//this is slighlty more important as we may use image as deffered rendering buffers, so made it available
-		imageInfo.sharingMode	= VK_SHARING_MODE_EXCLUSIVE;//we have to command queues : one for the app, one for the UI. the UI shouldn't use iamge we create.
-		imageInfo.samples		= VK_SAMPLE_COUNT_1_BIT;//why would you want more than one sample in a simple app ?
-		imageInfo.flags			= 0; // Optional
-
-		VK_CALL_PRINT(vkCreateImage(GAPI._VulkanDevice, &imageInfo, nullptr, &_RayWriteImage[0]));
-
-		//getting the necessary requirements to create our image
-		VkMemoryRequirements memRequirements;
-		vkGetImageMemoryRequirements(GAPI._VulkanDevice, _RayWriteImage[0], &memRequirements);
-		imageOffset = memRequirements.size;
-
-		//trying to find a matching memory type between what the app wants and the device's limitation.
-		VkMemoryAllocateInfo allocInfo{};
-		allocInfo.sType				= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		allocInfo.allocationSize	= memRequirements.size * GAPI._nb_vk_frames;//we want multiple frames
-		allocInfo.memoryTypeIndex	= VulkanHelper::GetMemoryTypeFromRequirements(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memRequirements, GAPI._VulkanUploader._MemoryProperties);
-
-		//allocating and associate the memory to our image.
-		VK_CALL_PRINT(vkAllocateMemory(GAPI._VulkanDevice, &allocInfo, nullptr, &_RayImageMemory));
-
-		vkDestroyImage(GAPI._VulkanDevice, _RayWriteImage[0], nullptr);
-	}
-
+	CreateFrameBuffer(GAPI._VulkanUploader, _RayFramebuffer, _CopyPipelineOutput, 0, VK_FORMAT_R16G16B16A16_SFLOAT);
 
 	/*===== CREATING & LINKING RESOURCES ======*/
 
@@ -1153,44 +1104,9 @@ void RaytraceGPU::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t w
 		//make our framebuffer linked to the swapchain back buffers
 		VulkanHelper::SetFrameBuffer(GAPI._VulkanUploader, _CopyPipelineOutput, &GAPI._VulkanBackColourBuffers[i], i);
 
-		//create the image that will be used to write from texture to screen frame buffer
-		VulkanHelper::CreateImage(GAPI._VulkanUploader, _RayWriteImage[i], _RayImageMemory, _CopyPipelineOutput._OutputScissor.extent.width, _CopyPipelineOutput._OutputScissor.extent.height, 1,
-			VK_IMAGE_TYPE_2D, VK_FORMAT_R32G32B32A32_SFLOAT, VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, imageOffset * i, false);
-
-		// changing the image to allow read from shader
-		VkImageMemoryBarrier barrier{};
-		barrier.sType						= VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		barrier.oldLayout					= VK_IMAGE_LAYOUT_UNDEFINED;//from nothing
-		barrier.newLayout					= VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;//to shader read dest (will be change to storage afterwards)
-		barrier.srcQueueFamilyIndex			= VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
-		barrier.dstQueueFamilyIndex			= VK_QUEUE_FAMILY_IGNORED;//could use copy queues in the future
-		barrier.image						= _RayWriteImage[i];
-		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		barrier.subresourceRange.baseMipLevel = 0;
-		barrier.subresourceRange.levelCount = 1;
-		barrier.subresourceRange.baseArrayLayer = 0;
-		barrier.subresourceRange.layerCount = 1;
-		barrier.srcAccessMask = 0;// making the image accessible for ...
-		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT; // shaders
-
-		//layout should change when we go from pipeline doing transfer to frament stage. here it does not really matter because there is pipeline attached.
-		vkCmdPipelineBarrier(GAPI._VulkanUploader._CopyBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
-
-		//create an image view associated with the GPU local Image to make it available in shader
-		VkImageViewCreateInfo viewCreateInfo{};
-		viewCreateInfo.sType						= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		viewCreateInfo.subresourceRange.aspectMask	= VK_IMAGE_ASPECT_COLOR_BIT;
-		viewCreateInfo.format						= VK_FORMAT_R32G32B32A32_SFLOAT;
-		viewCreateInfo.image						= _RayWriteImage[i];
-		viewCreateInfo.subresourceRange.layerCount	= 1;
-		viewCreateInfo.subresourceRange.levelCount	= 1;
-		viewCreateInfo.viewType						= VK_IMAGE_VIEW_TYPE_2D;
-
-		VK_CALL_PRINT(vkCreateImageView(GAPI._VulkanDevice, &viewCreateInfo, nullptr, &_RayWriteImageView[i]));
-
 		//wrinting our newly created imatge view in descriptor.
 		//sampler is immutable so no need to send it.
-		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _CopyDescriptors, _RayWriteImageView[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, i);
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _CopyDescriptors, _RayFramebuffer._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 0, i);
 	}
 }
 
@@ -1281,7 +1197,7 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 	memcpy(_RayUniformBuffer._CPUMemoryHandle[GAPIHandle._vk_current_frame], (void*)&_RayBuffer, sizeof(UniformBuffer));
 
 	// changing the back buffer to be able to being written by pipeline
-	VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayWriteImage[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT,
+	VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayFramebuffer._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT,
 		VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _RayPipeline);
@@ -1292,7 +1208,7 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 	VK_CALL_KHR(GAPIHandle._VulkanDevice, vkCmdTraceRaysKHR, commandBuffer, &_RayShaderBindingTable._RayGenRegion, &_RayShaderBindingTable._MissRegion, &_RayShaderBindingTable._HitRegion, &_RayShaderBindingTable._CallableRegion, _CopyPipelineOutput._OutputScissor.extent.width, _CopyPipelineOutput._OutputScissor.extent.height, 1);
 
 	//allowing copy from write iamge to framebuffer
-	VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayWriteImage[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
+	VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayFramebuffer._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
 		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL);
 
 	//begin render pass onto whole screen
@@ -1377,7 +1293,6 @@ void RaytraceGPU::Close(class GraphicsAPIManager& GAPI)
 	for (uint32_t i = 0; i < 3; i++)
 	{
 		ClearStaticBufferHandle(GAPI._VulkanDevice, _RaySphereAABBBuffer[i]);
-
 	}
 
 	//clear shader resources
@@ -1388,10 +1303,7 @@ void RaytraceGPU::Close(class GraphicsAPIManager& GAPI)
 
 	//clear the fullscreen images buffer
 	VulkanHelper::ClearPipelineOutput(GAPI._VulkanDevice, _CopyPipelineOutput);
-	VK_CLEAR_ARRAY(_RayWriteImageView, GAPI._nb_vk_frames, vkDestroyImageView, GAPI._VulkanDevice);
-	VK_CLEAR_ARRAY(_RayWriteImage, GAPI._nb_vk_frames, vkDestroyImage, GAPI._VulkanDevice);
-	//free the allocated memory for the fullscreen images
-	vkFreeMemory(GAPI._VulkanDevice, _RayImageMemory, nullptr);
+	ClearFrameBuffer(GAPI._VulkanDevice, _RayFramebuffer);
 
 	//release pipeline objects
 	vkDestroyPipelineLayout(GAPI._VulkanDevice, _RayLayout, nullptr);

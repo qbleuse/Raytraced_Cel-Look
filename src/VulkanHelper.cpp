@@ -1650,6 +1650,98 @@ void VulkanHelper::ClearPipelineOutput(const VkDevice& VulkanDevice, PipelineOut
 }
 
 
+
+bool VulkanHelper::CreateFrameBuffer(Uploader& VulkanUploader, FrameBuffer& Framebuffer, const PipelineOutput& Output, uint32_t associatedAttechementIndex, VkFormat overrideFormat)
+{
+	//if an error happens...
+	VkResult result = VK_SUCCESS;
+
+	const VkAttachmentDescription& associatedAttachement = Output._OutputColorAttachement[associatedAttechementIndex];
+
+	//allocate the same number of images and render target than there is framebuffers
+	uint32_t framebufferNb = Output._OuputFrameBuffer.Nb();
+	Framebuffer._Images.Alloc(framebufferNb);
+	Framebuffer._ImageViews.Alloc(framebufferNb);
+	
+	// creating the template image object with data given in parameters
+	VkImageCreateInfo imageInfo{};
+	imageInfo.sType			= VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	imageInfo.imageType		= VK_IMAGE_TYPE_2D;//this helper is only for 2D images
+	imageInfo.format		= overrideFormat != VK_FORMAT_UNDEFINED ? overrideFormat : associatedAttachement.format;//choose a format between both
+	imageInfo.extent.width	= Output._OutputScissor.extent.width;//we get width and height from the scissors 
+	imageInfo.extent.height = Output._OutputScissor.extent.height;// (we may want to change the size to save memory, but for now this is easier)
+	imageInfo.extent.depth	= 1;
+	imageInfo.mipLevels		= 1u;
+	imageInfo.arrayLayers	= 1u;
+	imageInfo.tiling		= VK_IMAGE_TILING_OPTIMAL;//will only load images from buffers, so no need to change this
+	imageInfo.initialLayout = associatedAttachement.initialLayout;//initial layout will be the same as attachement
+	imageInfo.usage			= VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;//in the definition of framebuffer in this helper, we need this
+	imageInfo.sharingMode	= VK_SHARING_MODE_EXCLUSIVE;//we have two command queues : one for the app, one for the UI. the UI shouldn't use iamge we create.
+	imageInfo.samples		= associatedAttachement.samples;//getting from attachement (but should be always one)
+	imageInfo.flags			= 0; // Optional
+
+
+	// we have the same memory for all our images, this is the size (or offset) needed to go from one to another
+	VkDeviceSize imageOffset = 0;
+
+	//allocating the memory on the GPU
+	{
+
+		VK_CALL_PRINT(vkCreateImage(VulkanUploader._VulkanDevice, &imageInfo, nullptr, &Framebuffer._Images[0]));
+
+		//getting the necessary requirements to create our image
+		VkMemoryRequirements memRequirements;
+		vkGetImageMemoryRequirements(VulkanUploader._VulkanDevice, Framebuffer._Images[0], &memRequirements);
+		imageOffset = AlignUp(memRequirements.size, memRequirements.alignment);
+
+		//trying to find a matching memory type between what the app wants and the device's limitation.
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType				= VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize	= imageOffset * framebufferNb;//we want multiple frames
+		allocInfo.memoryTypeIndex	= VulkanHelper::GetMemoryTypeFromRequirements(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memRequirements, VulkanUploader._MemoryProperties);
+
+		//allocating and associate the memory to our image.
+		VK_CALL_PRINT(vkAllocateMemory(VulkanUploader._VulkanDevice, &allocInfo, nullptr, &Framebuffer._ImagesMemory));
+
+		vkDestroyImage(VulkanUploader._VulkanDevice, Framebuffer._Images[0], nullptr);
+	}
+
+	for (uint32_t i = 0; i < framebufferNb; i++)
+	{
+		//create the image object from the template ...
+		VK_CALL_PRINT(vkCreateImage(VulkanUploader._VulkanDevice, &imageInfo, nullptr, &Framebuffer._Images[i]));
+		//then associate with the allocated memory
+		VK_CALL_PRINT(vkBindImageMemory(VulkanUploader._VulkanDevice, Framebuffer._Images[i], Framebuffer._ImagesMemory, imageOffset * i))
+
+		//make it immediately available to bind to shader
+		ImageMemoryBarrier(VulkanUploader._CopyBuffer, Framebuffer._Images[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
+			VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_NONE, associatedAttachement.initialLayout);
+
+		//create an image view associated with the GPU local Image to make it available in shader
+		VkImageViewCreateInfo viewCreateInfo{};
+		viewCreateInfo.sType= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewCreateInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;//framebuffer is only for colorbuffer for now...
+		viewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;//framebuffer only supports 2D texture for now...
+		viewCreateInfo.format = imageInfo.format;//get format from attachement info
+		viewCreateInfo.image = Framebuffer._Images[i];
+		viewCreateInfo.subresourceRange.layerCount = 1;
+		viewCreateInfo.subresourceRange.levelCount = 1;
+
+		VK_CALL_PRINT(vkCreateImageView(VulkanUploader._VulkanDevice, &viewCreateInfo, nullptr, &Framebuffer._ImageViews[i]));
+	}
+
+	return result == VK_SUCCESS;
+}
+
+void VulkanHelper::ClearFrameBuffer(const VkDevice& VulkanDevice, FrameBuffer& Framebuffer)
+{
+	VK_CLEAR_ARRAY(Framebuffer._ImageViews, Framebuffer._Images.Nb(), vkDestroyImageView, VulkanDevice);
+	VK_CLEAR_ARRAY(Framebuffer._Images, Framebuffer._Images.Nb(), vkDestroyImage, VulkanDevice);
+	vkFreeMemory(VulkanDevice, Framebuffer._ImagesMemory, nullptr);
+	Framebuffer._ImagesMemory = VK_NULL_HANDLE;
+}
+
+
 /* Acceleration Structures */
 
 bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index, uint32_t customInstanceIndex, uint32_t shaderOffset)
