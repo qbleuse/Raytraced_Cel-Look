@@ -22,6 +22,8 @@
 #include "RasterObject.h"
 #include "RaytraceCPU.h"
 #include "RaytraceGPU.h"
+#include "DefferedRendering.h"
+
 
 #include <cstdio>
 #include <time.h>
@@ -237,11 +239,13 @@ int main(){
 		//resources for main loop
 		AppWideContext AppContext;
 		AppContext.threadPool.MakeThreads(std::thread::hardware_concurrency() - 1);
-		ScopedLoopArray<Scene*> scenes(4);
+		ScopedLoopArray<Scene*> scenes(5);
 		scenes[0] = new RasterTriangle();
 		scenes[1] = new RasterObject();
 		scenes[2] = new RaytraceCPU();
 		scenes[3] = new RaytraceGPU();
+		scenes[4] = new DefferedRendering();
+
 
 		InitAppWideContext(GAPI, AppContext);
 

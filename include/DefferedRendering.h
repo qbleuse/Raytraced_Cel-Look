@@ -28,6 +28,8 @@ private:
 
 	//the model/scene to render for this scene
 	VulkanHelper::Model	_Model;
+	//the descriptor needed for the scene's model
+	VulkanHelper::PipelineDescriptors	_ModelDescriptors;
 
 	/* G BUFFER */
 
@@ -79,6 +81,11 @@ private:
 	void PrepareVulkanProps(class GraphicsAPIManager& GAPI);
 
 	/*
+	* Creates a model render Pipeline object using the Shaders and pipeline layout given in parameter.
+	*/
+	void CreateModelRenderPipeline(class GraphicsAPIManager& GAPI, VkPipeline& Pipeline, const VkPipelineLayout& PipelineLayout, const VulkanHelper::PipelineOutput& PipelineOutput, const List<VulkanHelper::ShaderScripts>& Shaders);
+
+	/*
 	* Creates a fullscreen Pipeline object using the Shaders and pipeline layout given in parameter.
 	*/
 	void CreateFullscreenCopyPipeline(class GraphicsAPIManager& GAPI, VkPipeline& Pipeline, const VkPipelineLayout& PipelineLayout, const VulkanHelper::PipelineOutput& PipelineOutput, const List<VulkanHelper::ShaderScripts>& Shaders);
@@ -98,6 +105,12 @@ private:
 	*/
 	void ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames);
 
+
+	/*
+	* starts render pass, and binds the necessary resources to the pipeline
+	*/
+	static void BindPass(GAPIHandle& GAPIHandle, const VkPipeline& Pipeline,
+		const VulkanHelper::PipelineOutput& PipelineOutput);
 
 	/* DirectX */
 
@@ -125,7 +138,7 @@ public:
 	/*
 	* The name of this scene. This can be hardcoded or a member, but it should never fail.
 	*/
-	__forceinline virtual const char* Name()const noexcept override { return "Raytrace GPU"; }
+	__forceinline virtual const char* Name()const noexcept override { return "Deffered Rendering"; }
 
 	/*
 	* called once per frame.

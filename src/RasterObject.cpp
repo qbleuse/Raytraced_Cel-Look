@@ -123,7 +123,7 @@ void RasterObject::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& 
 
 	/*===== FRAMEBUFFER BLEND ======*/
 
-	//description of colour bkending and writing configuration : here we write every component of the output, but don;t do alpha blending or other stuff
+	//description of colour bkending and writing configuration : here we write every component of the output, but don't do alpha blending or other stuff
 	VkPipelineColorBlendAttachmentState colorBlendAttachment{};
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 	colorBlendAttachment.blendEnable	= VK_FALSE;

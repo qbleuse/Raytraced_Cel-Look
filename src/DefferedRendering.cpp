@@ -13,6 +13,61 @@ void DefferedRendering::PrepareVulkanProps(GraphicsAPIManager& GAPI)
 {
 	VkResult result = VK_SUCCESS;
 
+	/*===== Model Loading =====*/
+	{
+		//load vertex buffer and textures
+		VulkanHelper::LoadGLTFFile(GAPI._VulkanUploader, "../../../media/Duck/Duck.gltf", _Model);
+
+		{
+			/*===== GPU Buffer INPUT ======*/
+
+			//the uniform buffers for the models
+			VkDescriptorSetLayoutBinding uniformBindings[1] =
+			{
+				{0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr}
+			};
+
+			VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _GBufferDescriptors, uniformBindings, 1);
+
+			//the sampler and image to sample texture
+			VkDescriptorSetLayoutBinding modelBindings[1] =
+			{
+				{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}
+			};
+
+			VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _ModelDescriptors, modelBindings, 1);
+
+
+			//the pipeline layout from the descriptor layout
+			VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+			pipelineLayoutInfo.sType		= VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+			VkDescriptorSetLayout layouts[2] = { _GBufferDescriptors._DescriptorLayout , _ModelDescriptors._DescriptorLayout };
+			pipelineLayoutInfo.pSetLayouts	= layouts;
+			pipelineLayoutInfo.setLayoutCount = 2;
+
+			VK_CALL_PRINT(vkCreatePipelineLayout(GAPI._VulkanDevice, &pipelineLayoutInfo, nullptr, &_GBUfferLayout));
+		}
+
+		VulkanHelper::AllocateDescriptor(GAPI._VulkanUploader, _ModelDescriptors, _Model._Textures.Nb());
+
+		for (uint32_t i = 0; i < _Model._Materials.Nb(); i++)
+		{
+			//the order of the textures in the material need to be ALBEDO, METAL-ROUGH, then NORMAL to actually work...
+			for (uint32_t j = 0; j < _Model._Materials[i]._Textures.Nb(); j++)
+			{
+				//describing our combined sampler
+				VkDescriptorImageInfo samplerInfo{};
+				samplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				samplerInfo.imageView	= _Model._Materials[i]._Textures[j]._ImageView;
+				samplerInfo.sampler		= _Model._Materials[i]._Textures[j]._Sampler;
+
+				VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _ModelDescriptors, _Model._Materials[i]._Textures[j]._ImageView, _Model._Materials[i]._Textures[j]._Sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, j, i);
+
+			}
+			_Model._Materials[i]._TextureDescriptors = _ModelDescriptors._DescriptorSets[i];
+		}
+	}
+
 	{
 		/*===== GBuffer OUTPUT ======*/
 	
@@ -20,12 +75,29 @@ void DefferedRendering::PrepareVulkanProps(GraphicsAPIManager& GAPI)
 		VkAttachmentDescription attachements[3] =
 		{
 			//flags, format, samples, loadOp, storeOp, stencilLoadOp, stencilStoreOp, inialLayout, finalLayout
-			{0, VK_FORMAT_R16G16B16A16_SFLOAT,  VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
-			{0, VK_FORMAT_R16G16B16A16_SFLOAT,  VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
-			{0, VK_FORMAT_R16G16B16A16_SFLOAT,  VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_DONT_CARE, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL}
+			{0, VK_FORMAT_R8G8B8A8_UNORM,  VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+			{0, VK_FORMAT_R16G16B16A16_SFLOAT,  VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+			{0, VK_FORMAT_R16G16B16A16_SFLOAT,  VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}
 		};
 
-		VulkanHelper::CreatePipelineOutput(GAPI._VulkanUploader, _DefferedPipelineOutput, attachements, 3, {});
+		/*===== DEPTH BUFFER CONFIG =====*/
+
+		//describing the format of the depthbuffer
+		VkAttachmentDescription depthBufferAttachment{};
+		depthBufferAttachment.format			= VK_FORMAT_D32_SFLOAT;
+		depthBufferAttachment.samples			= VK_SAMPLE_COUNT_1_BIT;//one pixel will have exactly one calculation done
+		depthBufferAttachment.loadOp			= VK_ATTACHMENT_LOAD_OP_CLEAR;//we'll make the pipeline clear the depth buffer
+		depthBufferAttachment.storeOp			= VK_ATTACHMENT_STORE_OP_DONT_CARE;//we just want the rasterizer to use it
+		depthBufferAttachment.stencilLoadOp		= VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		depthBufferAttachment.stencilStoreOp	= VK_ATTACHMENT_STORE_OP_DONT_CARE;
+		depthBufferAttachment.initialLayout		= VK_IMAGE_LAYOUT_UNDEFINED;//we write onto the entire vewport so it will be completely replaced, what was before does not interests us
+		depthBufferAttachment.finalLayout		= VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;//we just want to use it as depth buffer.
+
+		VulkanHelper::CreatePipelineOutput(GAPI._VulkanUploader, _GBUfferPipelineOutput, attachements, 3, depthBufferAttachment);
+
+		//depth stencil clear value
+		VulkanHelper::SetClearValue(_GBUfferPipelineOutput, {0.2f,0.2f,0.2f,1.0f }, 0);
+		VulkanHelper::SetClearValue(_GBUfferPipelineOutput, { 1.0f, 0 }, 3);
 	}
 	{
 		/*===== Deffered OUTPUT ======*/
@@ -43,27 +115,6 @@ void DefferedRendering::PrepareVulkanProps(GraphicsAPIManager& GAPI)
 	/*===== SUBPASS ATTACHEMENT ======*/
 
 	{
-		/*===== GPU Buffer INPUT ======*/
-
-		//the sampler and image to sample texture
-		VkDescriptorSetLayoutBinding layoutBindings[1] =
-		{
-			{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}
-		};
-
-		VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _GBufferDescriptors, layoutBindings, 1);
-
-
-		//the pipeline layout from the descriptor layout
-		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-		pipelineLayoutInfo.sType		= VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		pipelineLayoutInfo.pSetLayouts	= &_GBufferDescriptors._DescriptorLayout;
-		pipelineLayoutInfo.setLayoutCount = 1;
-
-		VK_CALL_PRINT(vkCreatePipelineLayout(GAPI._VulkanDevice, &pipelineLayoutInfo, nullptr, &_GBUfferLayout));
-	}
-
-	{
 		/*===== Deffered INPUT ======*/
 
 		// a very basic sampler will be fine
@@ -74,6 +125,7 @@ void DefferedRendering::PrepareVulkanProps(GraphicsAPIManager& GAPI)
 		//the GPU Buffer images
 		VkDescriptorSetLayoutBinding layoutBindings[4] =
 		{
+			//binding, descriptorType, descriptorCount, stageFlags, immutableSampler
 			{0, VK_DESCRIPTOR_TYPE_SAMPLER , 1, VK_SHADER_STAGE_FRAGMENT_BIT, &_DefferedSampler},
 			{1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
 			{2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},
@@ -91,10 +143,142 @@ void DefferedRendering::PrepareVulkanProps(GraphicsAPIManager& GAPI)
 		VK_CALL_PRINT(vkCreatePipelineLayout(GAPI._VulkanDevice, &pipelineLayoutInfo, nullptr, &_DefferedLayout));
 	}
 
+	/* Pipeline Creation */
 
-	CreateFullscreenCopyPipeline(GAPI, _GBufferPipeline, _GBUfferLayout, _GBUfferPipelineOutput._OutputRenderPass, _GBufferShaders);
-	CreateFullscreenCopyPipeline(GAPI, _DefferedPipeline, _DefferedLayout, _DefferedPipelineOutput._OutputRenderPass, _DefferedShaders);
+	CreateModelRenderPipeline(GAPI, _GBufferPipeline, _GBUfferLayout, _GBUfferPipelineOutput, _GBufferShaders);
+	CreateFullscreenCopyPipeline(GAPI, _DefferedPipeline, _DefferedLayout, _DefferedPipelineOutput, _DefferedShaders);
 
+}
+
+void DefferedRendering::CreateModelRenderPipeline(class GraphicsAPIManager& GAPI, VkPipeline& Pipeline, const VkPipelineLayout& PipelineLayout, const VulkanHelper::PipelineOutput& PipelineOutput, const List<VulkanHelper::ShaderScripts>& Shaders)
+{
+	VkResult result = VK_SUCCESS;
+
+	/*===== SHADER ======*/
+
+	//the shader stages we'll give to the pipeline
+	MultipleScopedMemory<VkPipelineShaderStageCreateInfo> shaderStages;
+	VulkanHelper::MakePipelineShaderFromScripts(shaderStages, Shaders);
+
+	/*===== VERTEX INPUT ======*/
+
+	VkVertexInputBindingDescription inputBindings[3] =
+	{
+		//binding, stride, inputrate
+		{0, sizeof(vec3), VK_VERTEX_INPUT_RATE_VERTEX},//pos
+		{1, sizeof(vec2), VK_VERTEX_INPUT_RATE_VERTEX},//texcoords
+		{2, sizeof(vec3), VK_VERTEX_INPUT_RATE_VERTEX}//normals
+	};
+
+	VkVertexInputAttributeDescription inputAttribute[3] =
+	{
+		//location, binding, format, offset
+		{0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0},//pos ; vec3
+		{1, 1, VK_FORMAT_R32G32_SFLOAT, 0},//texcoords ; vec2
+		{2, 2, VK_FORMAT_R32G32B32_SFLOAT, 0}//normals ; vec3
+	};
+
+
+	//the vertex input for the input assembly stage.
+	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexInputInfo.vertexBindingDescriptionCount	= 3;
+	vertexInputInfo.pVertexBindingDescriptions		= inputBindings;
+	vertexInputInfo.vertexAttributeDescriptionCount = 3;
+	vertexInputInfo.pVertexAttributeDescriptions	= inputAttribute;
+
+	//the description of the input assembly stage. by the fact we won't have any vertex, the input assembly will basically only give the indices (basically 0,1,2 if we ask for a draw command of three vertices)
+	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+	inputAssembly.sType		= VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	inputAssembly.topology	= VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+	/*===== VIEWPORT/SCISSORS  =====*/
+
+	//as window can be resized, I set viewport and scissors as dynamic so it is always the size of the output window
+	VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
+	dynamicStateInfo.sType				= VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	dynamicStateInfo.dynamicStateCount	= 2;
+	VkDynamicState viewportState[2]		= { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+	dynamicStateInfo.pDynamicStates		= viewportState;
+
+	//setting our starting viewport
+	VkPipelineViewportStateCreateInfo viewportStateInfo{};
+	viewportStateInfo.sType			= VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewportStateInfo.viewportCount = 1;
+	viewportStateInfo.pViewports	= &PipelineOutput._OutputViewport;
+	viewportStateInfo.scissorCount	= 1;
+	viewportStateInfo.pScissors		= &PipelineOutput._OutputScissor;
+
+	/*==== RASTERIZER =====*/
+
+	//the description of our rasterizer : a very simple one, that will just fill up polygon (in this case one)
+	VkPipelineRasterizationStateCreateInfo rasterizer{};
+	rasterizer.sType			= VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizer.depthClampEnable = VK_FALSE;
+	rasterizer.polygonMode		= VK_POLYGON_MODE_FILL;
+	rasterizer.cullMode			= VK_CULL_MODE_BACK_BIT;
+	rasterizer.frontFace		= VK_FRONT_FACE_CLOCKWISE;
+	rasterizer.lineWidth		= 1.0f;
+
+	/*===== MSAA =====*/
+
+	//MSAA would be way overkill for what we are doing, so just disabling it
+	VkPipelineMultisampleStateCreateInfo multisampling{};
+	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisampling.sampleShadingEnable = VK_FALSE;
+	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+	/*===== FRAMEBUFFER BLEND ======*/
+
+	//description of colour blending and writing configuration : here we write every component of the output, but don't do alpha blending or other stuff
+	VkPipelineColorBlendAttachmentState colorBlendAttachment [3] 
+	{
+		//blendEnable, srcColorBlendFactor, dstColorBlendFactor, colorBlendOp, srcAlphaBlendFactor, dstAlphaBlendFactor, alphaBlendOp, colorWriteMask
+		{VK_FALSE, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT},//colorBuffer
+		{VK_FALSE, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT},//posBuffer
+		{VK_FALSE, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT}//normalBuffer
+
+	};											
+
+	//description of colour blending :  here it is a simple write and discard old.
+	VkPipelineColorBlendStateCreateInfo colorBlending{};
+	colorBlending.sType				= VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	colorBlending.logicOpEnable		= VK_FALSE;
+	colorBlending.attachmentCount	= PipelineOutput._OutputColorAttachement.Nb();
+	colorBlending.pAttachments		= colorBlendAttachment;
+
+	/*===== DEPTH TEST ======*/
+	VkPipelineDepthStencilStateCreateInfo depthStencil{};
+	depthStencil.sType				= VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depthStencil.depthTestEnable	= VK_TRUE;
+	depthStencil.depthWriteEnable	= VK_TRUE;
+	depthStencil.depthCompareOp		= VK_COMPARE_OP_LESS;
+
+	/*===== PIPELINE ======*/
+
+	//finally creating our pipeline
+	VkGraphicsPipelineCreateInfo pipelineInfo{};
+	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+
+	//fill up the pipeline description
+	pipelineInfo.pVertexInputState		= &vertexInputInfo;
+	pipelineInfo.pInputAssemblyState	= &inputAssembly;
+	pipelineInfo.pViewportState			= &viewportStateInfo;
+	pipelineInfo.pRasterizationState	= &rasterizer;
+	pipelineInfo.pMultisampleState		= &multisampling;
+	pipelineInfo.pDepthStencilState		= &depthStencil;
+	pipelineInfo.pColorBlendState		= &colorBlending;
+	pipelineInfo.pDynamicState			= &dynamicStateInfo;
+	pipelineInfo.pStages				= *shaderStages;
+	pipelineInfo.stageCount				= Shaders.Nb();
+	pipelineInfo.layout					= PipelineLayout;
+	pipelineInfo.renderPass				= PipelineOutput._OutputRenderPass;
+	pipelineInfo.subpass				= 0;
+	pipelineInfo.basePipelineHandle		= VK_NULL_HANDLE;
+	pipelineInfo.basePipelineIndex		= -1;
+
+	VK_CALL_PRINT(vkCreateGraphicsPipelines(GAPI._VulkanDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &Pipeline));
 }
 
 void DefferedRendering::CreateFullscreenCopyPipeline(class GraphicsAPIManager& GAPI, VkPipeline& Pipeline, const VkPipelineLayout& PipelineLayout, const VulkanHelper::PipelineOutput& PipelineOutput, const List<VulkanHelper::ShaderScripts>& Shaders)
@@ -112,33 +296,33 @@ void DefferedRendering::CreateFullscreenCopyPipeline(class GraphicsAPIManager& G
 	//to do a full screen, you actually do not need any vertex
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 0;
-	vertexInputInfo.pVertexBindingDescriptions = nullptr; // Optional
+	vertexInputInfo.vertexBindingDescriptionCount	= 0;
+	vertexInputInfo.pVertexBindingDescriptions		= nullptr; // Optional
 	vertexInputInfo.vertexAttributeDescriptionCount = 0;
-	vertexInputInfo.pVertexAttributeDescriptions = nullptr; // Optional
+	vertexInputInfo.pVertexAttributeDescriptions	= nullptr; // Optional
 
 	//the description of the input assembly stage. by the fact we won't have any vertex, the input assembly will basically only give the indices (basically 0,1,2 if we ask for a draw command of three vertices)
 	VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-	inputAssembly.primitiveRestartEnable = VK_FALSE;
+	inputAssembly.sType						= VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	inputAssembly.topology					= VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+	inputAssembly.primitiveRestartEnable	= VK_FALSE;
 
 	/*===== VIEWPORT/SCISSORS  =====*/
 
 	//as window can be resized, I set viewport and scissors as dynamic so it is always the size of the output window
 	VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
-	dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-	dynamicStateInfo.dynamicStateCount = 2;
-	VkDynamicState viewportState[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-	dynamicStateInfo.pDynamicStates = viewportState;
+	dynamicStateInfo.sType				= VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+	dynamicStateInfo.dynamicStateCount	= 2;
+	VkDynamicState viewportState[2]		= { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+	dynamicStateInfo.pDynamicStates		= viewportState;
 
 	//setting our starting viewport
 	VkPipelineViewportStateCreateInfo viewportStateInfo{};
 	viewportStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
 	viewportStateInfo.viewportCount = 1;
-	viewportStateInfo.pViewports = &PipelineOutput._OutputViewport;
-	viewportStateInfo.scissorCount = 1;
-	viewportStateInfo.pScissors = &PipelineOutput._OutputScissor;
+	viewportStateInfo.pViewports	= &PipelineOutput._OutputViewport;
+	viewportStateInfo.scissorCount	= 1;
+	viewportStateInfo.pScissors		= &PipelineOutput._OutputScissor;
 
 
 	/*==== RASTERIZER =====*/
@@ -146,20 +330,20 @@ void DefferedRendering::CreateFullscreenCopyPipeline(class GraphicsAPIManager& G
 	//Here, our rasterizer actually does the conversion from the vertex created inthe vertex shader and pixel coordinates\
 	//it is the same as always, and frankly does not do much 
 	VkPipelineRasterizationStateCreateInfo rasterizer{};
-	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizer.sType			= VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 	rasterizer.depthClampEnable = VK_FALSE;
-	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-	rasterizer.cullMode = VK_CULL_MODE_NONE;
-	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
-	rasterizer.lineWidth = 1.0f;
+	rasterizer.polygonMode		= VK_POLYGON_MODE_FILL;
+	rasterizer.cullMode			= VK_CULL_MODE_NONE;
+	rasterizer.frontFace		= VK_FRONT_FACE_CLOCKWISE;
+	rasterizer.lineWidth		= 1.0f;
 
 	/*===== MSAA =====*/
 
 	//MSAA would be way overkill for what wee are doing, so just disabling it
 	VkPipelineMultisampleStateCreateInfo multisampling{};
-	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-	multisampling.sampleShadingEnable = VK_FALSE;
-	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	multisampling.sType					= VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisampling.sampleShadingEnable	= VK_FALSE;
+	multisampling.rasterizationSamples	= VK_SAMPLE_COUNT_1_BIT;
 
 	/*===== FRAMEBUFFER BLEND ======*/
 
@@ -173,10 +357,10 @@ void DefferedRendering::CreateFullscreenCopyPipeline(class GraphicsAPIManager& G
 
 	//nothing crazy in colour blending, as we just want to show our CPU texture
 	VkPipelineColorBlendStateCreateInfo colorBlending{};
-	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-	colorBlending.logicOpEnable = VK_FALSE;
-	colorBlending.attachmentCount = 1;
-	colorBlending.pAttachments = &colorBlendAttachment;
+	colorBlending.sType				= VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	colorBlending.logicOpEnable		= VK_FALSE;
+	colorBlending.attachmentCount	= 1;
+	colorBlending.pAttachments		= &colorBlendAttachment;
 
 	/*===== PIPELINE ======*/
 
@@ -185,21 +369,21 @@ void DefferedRendering::CreateFullscreenCopyPipeline(class GraphicsAPIManager& G
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 
 	//fill up the pipeline description
-	pipelineInfo.pVertexInputState = &vertexInputInfo;
-	pipelineInfo.pInputAssemblyState = &inputAssembly;
-	pipelineInfo.pViewportState = &viewportStateInfo;
-	pipelineInfo.pRasterizationState = &rasterizer;
-	pipelineInfo.pMultisampleState = &multisampling;
-	pipelineInfo.pDepthStencilState = nullptr;
-	pipelineInfo.pColorBlendState = &colorBlending;
-	pipelineInfo.pDynamicState = &dynamicStateInfo;
-	pipelineInfo.pStages = *shaderStages;
-	pipelineInfo.stageCount = Shaders.Nb();
-	pipelineInfo.layout = PipelineLayout;
-	pipelineInfo.renderPass = PipelineOutput._OutputRenderPass;
-	pipelineInfo.subpass = 0;
-	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-	pipelineInfo.basePipelineIndex = -1;
+	pipelineInfo.pVertexInputState		= &vertexInputInfo;
+	pipelineInfo.pInputAssemblyState	= &inputAssembly;
+	pipelineInfo.pViewportState			= &viewportStateInfo;
+	pipelineInfo.pRasterizationState	= &rasterizer;
+	pipelineInfo.pMultisampleState		= &multisampling;
+	pipelineInfo.pDepthStencilState		= nullptr;
+	pipelineInfo.pColorBlendState		= &colorBlending;
+	pipelineInfo.pDynamicState			= &dynamicStateInfo;
+	pipelineInfo.pStages				= *shaderStages;
+	pipelineInfo.stageCount				= Shaders.Nb();
+	pipelineInfo.layout					= PipelineLayout;
+	pipelineInfo.renderPass				= PipelineOutput._OutputRenderPass;
+	pipelineInfo.subpass				= 0;
+	pipelineInfo.basePipelineHandle		= VK_NULL_HANDLE;
+	pipelineInfo.basePipelineIndex		= -1;
 
 	VK_CALL_PRINT(vkCreateGraphicsPipelines(GAPI._VulkanDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &Pipeline));
 }
@@ -207,7 +391,60 @@ void DefferedRendering::CreateFullscreenCopyPipeline(class GraphicsAPIManager& G
 void DefferedRendering::PrepareVulkanScripts(GraphicsAPIManager& GAPI)
 {
 	//define vertex shader
-	const char* vertex_shader =
+	const char* g_buffer_vertex_shader =
+		R"(#version 450
+
+			layout(location = 0) in vec3 positions;
+			layout(location = 1) in vec2 inTexCoord;
+			layout(location = 2) in vec3 inNormal;
+
+
+			layout(binding = 0) uniform Transform
+			{
+				mat4 model;
+				mat4 view;
+				mat4 proj;
+			};
+
+			layout(location = 0) out vec3 vertPos;
+			layout(location = 1) out vec2 outTexCoord;
+			layout(location = 2) out vec3 outNormal;
+
+			void main()
+			{
+				gl_Position =  proj * view * model * vec4(positions, 1.0);
+				vertPos = (view * model * vec4(positions, 1.0)).xyz;
+				outTexCoord = inTexCoord;
+				outNormal = normalize(( model * vec4(inNormal,0.0)).xyz);
+
+			})";
+
+	const char* g_buffer_fragment_shader =
+		R"(#version 450
+		layout(location = 0) in vec3 vertPos;
+		layout(location = 1) in vec2 outTexCoord;
+		layout(location = 2) in vec3 outNormal;
+
+		layout(location = 0) out vec4 colorBuffer;
+		layout(location = 1) out vec4 posBuffer;
+		layout(location = 2) out vec4 normalBuffer;
+
+
+		layout(set = 1, binding = 0) uniform sampler2D albedo;
+		//layout(binding = 1, set = 1) uniform sampler2D pbr;
+		//layout(binding = 1, set = 2) uniform sampler2D normal;
+
+
+		void main()
+		{
+			colorBuffer = vec4(texture(albedo,outTexCoord).rgb,1.0);
+			posBuffer = vec4(vertPos,1.0);
+			normalBuffer = vec4(outNormal,1.0);
+		}
+		)";
+
+	//define vertex shader
+	const char* deffered_vertex_shader =
 		R"(#version 450
 			layout(location = 0) out vec2 uv;
 
@@ -218,17 +455,39 @@ void DefferedRendering::PrepareVulkanScripts(GraphicsAPIManager& GAPI)
 
 			})";
 
-	const char* fragment_shader =
+	const char* deffered_fragment_shader =
 		R"(#version 450
 		layout(location = 0) in vec2 uv;
 		layout(location = 0) out vec4 outColor;
 
-		layout(set = 0, binding = 0) uniform sampler2D fullscreenTex;
-
+		layout(set = 0, binding = 0) uniform sampler pointSampler;
+		layout(set = 0, binding = 1) uniform texture2D colorBuffer;
+		layout(set = 0, binding = 2) uniform texture2D posBuffer;
+		layout(set = 0, binding = 3) uniform texture2D normalBuffer;
 
 		void main()
 		{
-			outColor = vec4(texture(fullscreenTex,uv).rgb,1.0);
+			const vec3 pos = texture(sampler2D(posBuffer,pointSampler),uv).rgb;
+			const vec3 normal = texture(sampler2D(normalBuffer,pointSampler),uv).rgb;
+			const vec3 color = texture(sampler2D(colorBuffer,pointSampler),uv).rgb;
+
+			if (dot(normal,normal) == 0.0)
+			{
+				outColor = vec4(color,1.0);
+				return;
+			}
+				
+
+			vec3 lightDir = normalize(vec3(1.0,-1.0,1.0));
+			vec3 viewDir = normalize(-pos);
+
+			vec3 halfDir	= normalize(viewDir+lightDir);
+			float specAngle = max(dot(halfDir,normal), 0.0);
+			float specular	= pow(specAngle,16.0);
+			float diffuse	= max(dot(lightDir, normal),0.0);
+
+
+			outColor = vec4((specular + diffuse) * color,1.0);
 		}
 		)";
 
@@ -237,12 +496,20 @@ void DefferedRendering::PrepareVulkanScripts(GraphicsAPIManager& GAPI)
 		VulkanHelper::ShaderScripts Script;
 
 		//add vertex shader
-		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_VERTEX_BIT, vertex_shader, "Raytrace Fullscreen Vertex"))
-			_CopyShaders.Add(Script);
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_VERTEX_BIT, g_buffer_vertex_shader, "GBuffer Pass Vertex"))
+			_GBufferShaders.Add(Script);
 
 		//add fragment shader
-		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_FRAGMENT_BIT, fragment_shader, "Raytrace Fullscreen Frag"))
-			_CopyShaders.Add(Script);
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_FRAGMENT_BIT, g_buffer_fragment_shader, "GBuffer Pass Frag"))
+			_GBufferShaders.Add(Script);
+
+		//add vertex shader
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_VERTEX_BIT, deffered_vertex_shader, "Deffered Pass Vertex"))
+			_DefferedShaders.Add(Script);
+
+		//add fragment shader
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_FRAGMENT_BIT, deffered_fragment_shader, "Deffered Pass Frag"))
+			_DefferedShaders.Add(Script);
 	}
 }
 
@@ -274,14 +541,16 @@ void DefferedRendering::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int
 	/*===== CLEAR RESOURCES ======*/
 
 	//clear the fullscreen images buffer
-	ClearFrameBuffer(GAPI._VulkanDevice, _GBuffers[0]);
-	ClearFrameBuffer(GAPI._VulkanDevice, _GBuffers[1]);
-	ClearFrameBuffer(GAPI._VulkanDevice, _GBuffers[2]);
-	_GBuffers.Clear();
+	if (_GBuffers != nullptr)
+	{
+		ClearFrameBuffer(GAPI._VulkanDevice, _GBuffers[0]);
+		ClearFrameBuffer(GAPI._VulkanDevice, _GBuffers[1]);
+		ClearFrameBuffer(GAPI._VulkanDevice, _GBuffers[2]);
+		_GBuffers.Clear();
+	}
 
 	VulkanHelper::ReleaseFrameBuffer(GAPI._VulkanDevice, _GBUfferPipelineOutput);
 	VulkanHelper::ReleaseFrameBuffer(GAPI._VulkanDevice, _DefferedPipelineOutput);
-	VulkanHelper::ReleaseDescriptor(GAPI._VulkanDevice, _GBufferDescriptors);
 	VulkanHelper::ReleaseDescriptor(GAPI._VulkanDevice, _DefferedDescriptors);
 
 	/*===== CPU SIDE IMAGE BUFFERS ======*/
@@ -292,8 +561,13 @@ void DefferedRendering::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int
 
 	/*===== DESCRIPTORS ======*/
 
-	VulkanHelper::AllocateDescriptor(GAPI._VulkanUploader, _GBufferDescriptors, GAPI._nb_vk_frames);
 	VulkanHelper::AllocateDescriptor(GAPI._VulkanUploader, _DefferedDescriptors, GAPI._nb_vk_frames);
+	VulkanHelper::AllocateDescriptor(GAPI._VulkanUploader, _GBufferDescriptors, GAPI._nb_vk_frames);
+
+	/*===== UNIFORM BUFFERS ======*/
+
+	//recreate the uniform buffer
+	CreateUniformBufferHandle(GAPI._VulkanUploader, _GBUfferUniformBuffer, GAPI._nb_vk_frames, sizeof(UniformBuffer));
 
 	/*===== GPU SIDE IMAGE BUFFERS ======*/
 	
@@ -308,7 +582,7 @@ void DefferedRendering::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int
 	{
 
 		//make our gbuffer linked to the framebuffers
-		VkImageView g_buffers[3] = { _GBuffers[0]._ImageViews[i], _GBuffers[1]._ImageViews[i], _GBuffers[2]._ImageViews[i] };
+		VkImageView g_buffers[4] = { _GBuffers[0]._ImageViews[i], _GBuffers[1]._ImageViews[i], _GBuffers[2]._ImageViews[i], GAPI._VulkanDepthBufferViews[i]};
 		VulkanHelper::SetFrameBuffer(GAPI._VulkanUploader, _GBUfferPipelineOutput, g_buffers, i);
 
 		//make our framebuffer linked to the swapchain back buffers
@@ -319,7 +593,9 @@ void DefferedRendering::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _DefferedDescriptors, _GBuffers[0]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 1, i);
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _DefferedDescriptors, _GBuffers[1]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, i);
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _DefferedDescriptors, _GBuffers[2]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 3, i);
-	
+
+		//set out uniform buffer for our gbuffer pass
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _GBufferDescriptors, _GBUfferUniformBuffer._GPUBuffer[i], 0, sizeof(UniformBuffer), 0, i);
 	}
 }
 
@@ -338,11 +614,9 @@ void DefferedRendering::Act(struct AppWideContext& AppContext)
 	//it will change every frame
 	{
 		_UniformBuffer._proj = perspective_proj(_GBUfferPipelineOutput._OutputScissor.extent.width, _GBUfferPipelineOutput._OutputScissor.extent.height, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
-		_UniformBuffer._view = transpose(AppContext.view_mat);
-		_UniformBuffer._view.x.w = 0.0f;
-		_UniformBuffer._view.y.w = 0.0f;
-		_UniformBuffer._view.z.w = 0.0f;
-		_UniformBuffer._view.w.xyz = AppContext.camera_pos;
+		_UniformBuffer._view = AppContext.view_mat;
+		_UniformBuffer._model = scale(_ObjData.scale.x, _ObjData.scale.y, _ObjData.scale.z) * intrinsic_rot(_ObjData.euler_angles.x, _ObjData.euler_angles.y, _ObjData.euler_angles.z) * translate(_ObjData.pos);
+
 	}
 
 
@@ -359,6 +633,31 @@ void DefferedRendering::Act(struct AppWideContext& AppContext)
 }
 
 /*===== Show =====*/
+
+
+void DefferedRendering::BindPass(GAPIHandle& GAPIHandle, const VkPipeline& Pipeline,
+	const VulkanHelper::PipelineOutput& PipelineOutput)
+{
+	const VkCommandBuffer& commandBuffer = GAPIHandle.GetCurrentVulkanCommand();
+
+	//begin render pass onto whole screen
+	{
+		//Set output and output settings for this render pass.
+		VkRenderPassBeginInfo info = {};
+		info.sType			= VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		info.renderPass		= PipelineOutput._OutputRenderPass;
+		info.framebuffer	= PipelineOutput._OuputFrameBuffer[GAPIHandle._vk_frame_index];
+		info.renderArea		= PipelineOutput._OutputScissor;
+		info.clearValueCount = PipelineOutput._OutputClearValue.Nb();
+		info.pClearValues	= *PipelineOutput._OutputClearValue;
+		vkCmdBeginRenderPass(commandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
+	}
+
+	//bind pipeline, descriptor, viewport and scissors ...
+	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, Pipeline);
+	vkCmdSetViewport(commandBuffer, 0, 1, &PipelineOutput._OutputViewport);
+	vkCmdSetScissor(commandBuffer, 0, 1, &PipelineOutput._OutputScissor);
+}
 
 void DefferedRendering::Show(GAPIHandle& GAPIHandle)
 {
@@ -383,28 +682,50 @@ void DefferedRendering::Show(GAPIHandle& GAPIHandle)
 
 	}
 
-	//begin render pass onto whole screen
-	{
-		//Set output and output settings for this render pass.
-		VkRenderPassBeginInfo info = {};
-		info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		info.renderPass = _CopyPipelineOutput._OutputRenderPass;
-		info.framebuffer = _CopyPipelineOutput._OuputFrameBuffer[GAPIHandle._vk_frame_index];
-		info.renderArea = _CopyPipelineOutput._OutputScissor;
-		info.clearValueCount = 1;
 
-		//clear our output (grey for backbuffer)
-		VkClearValue clearValue{};
-		clearValue.color = { 0.2f, 0.2f, 0.2f, 1.0f };
-		info.pClearValues = &clearValue;
-		vkCmdBeginRenderPass(commandBuffer, &info, VK_SUBPASS_CONTENTS_INLINE);
+	for (uint32_t i = 0; i < 3; i++)
+	{
+		VulkanHelper::ImageMemoryBarrier(commandBuffer, _GBuffers[i]._Images[GAPIHandle._vk_frame_index], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	}
 
-	//bind pipeline, descriptor, viewport and scissors ...
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _CopyPipeline);
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _CopyLayout, 0, 1, &_CopyDescriptors._DescriptorSets[GAPIHandle._vk_current_frame], 0, nullptr);
-	vkCmdSetViewport(commandBuffer, 0, 1, &_CopyPipelineOutput._OutputViewport);
-	vkCmdSetScissor(commandBuffer, 0, 1, &_CopyPipelineOutput._OutputScissor);
+	BindPass(GAPIHandle, _GBufferPipeline, _GBUfferPipelineOutput);
+
+	//the buffer will change every frame as the object rotates every frame
+	memcpy(_GBUfferUniformBuffer._CPUMemoryHandle[GAPIHandle._vk_current_frame], (void*)&_UniformBuffer, sizeof(UniformBuffer));
+	//binding an available uniform buffer (current frame and frame index may be different, as we can ask for redraw multiple times while the frame is not presenting)
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _GBUfferLayout, 0, 1, &_GBufferDescriptors._DescriptorSets[GAPIHandle._vk_current_frame], 0, nullptr);
+
+	//draw all meshes, as model may be composed of multiple meshes
+	for (uint32_t i = 0; i < _Model._Meshes.Nb(); i++)
+	{
+		//first bind the "material", basically the three compibined sampler descriptors ...
+		if (_Model._Materials.Nb() > 0)
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _GBUfferLayout, 1, 1, &_ModelDescriptors._DescriptorSets[i], 0, nullptr);
+
+		//... then bind the vertex buffer as described in the input layout of the pipeline ...
+		vkCmdBindVertexBuffers(commandBuffer, 0, 3, _Model._Meshes[i]._VertexBuffers, (VkDeviceSize*)_Model._Meshes[i]._vertex_offsets);
+		//... and the index buffers associated with the vertex buffers ...
+		vkCmdBindIndexBuffer(commandBuffer, _Model._Meshes[i]._Indices, 0, _Model._Meshes[i]._indices_type);
+		//... before finally drawing, following the index buffer.
+		vkCmdDrawIndexed(commandBuffer, _Model._Meshes[i]._indices_nb, 1, _Model._Meshes[i]._indices_offset, 0, 0);
+	}
+
+	//end G buffer pass
+	vkCmdEndRenderPass(commandBuffer);
+	//start deffered pass
+	BindPass(GAPIHandle, _DefferedPipeline, _DefferedPipelineOutput);
+
+	//for (uint32_t i = 0; i < 3; i++)
+	//{
+	//	VulkanHelper::ImageMemoryBarrier(commandBuffer, _GBuffers[i]._Images[GAPIHandle._vk_frame_index], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
+	//		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+	//		VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	//}
+
+	//bind all the buffers
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _DefferedLayout, 0, 1, &_DefferedDescriptors._DescriptorSets[GAPIHandle._vk_frame_index], 0, nullptr);
 
 	// ... then draw !
 	vkCmdDraw(commandBuffer, 3, 1, 0, 0);
@@ -438,48 +759,33 @@ void DefferedRendering::Show(GAPIHandle& GAPIHandle)
 
 void DefferedRendering::Close(class GraphicsAPIManager& GAPI)
 {
-	//the memory allocated by the Vulkan Helper is volatile : it must be explecitly freed !
+	//clear model resrouces
+	VulkanHelper::ClearModel(GAPI._VulkanDevice,_Model);
+	VulkanHelper::ClearPipelineDescriptor(GAPI._VulkanDevice, _ModelDescriptors);
+	VulkanHelper::ClearUniformBufferHandle(GAPI._VulkanDevice, _GBUfferUniformBuffer);
 
-	//Clear geometry data
-	ClearMesh(GAPI._VulkanDevice, _RayModel._Meshes[0]);
-	VulkanHelper::ClearSceneBuffer(GAPI._VulkanDevice, _RaySceneBuffer);
+	//Clear Shaders
+	CLEAR_LIST(_GBufferShaders, _GBufferShaders.Nb(), VulkanHelper::ClearVulkanShader, GAPI._VulkanDevice);
+	CLEAR_LIST(_DefferedShaders, _DefferedShaders.Nb(), VulkanHelper::ClearVulkanShader, GAPI._VulkanDevice);
 
-	//clear Acceleration Structures
-	VulkanHelper::ClearRaytracedGeometry(GAPI._VulkanDevice, _RayBottomAS);
-	VulkanHelper::ClearRaytracedGeometry(GAPI._VulkanDevice, _RaySphereBottomAS);
-	VulkanHelper::ClearRaytracedGroup(GAPI._VulkanDevice, _RayTopAS);
+	//clear descriptors
+	vkDestroySampler(GAPI._VulkanDevice, _DefferedSampler, nullptr);
+	VulkanHelper::ClearPipelineDescriptor(GAPI._VulkanDevice, _GBufferDescriptors);
+	VulkanHelper::ClearPipelineDescriptor(GAPI._VulkanDevice, _DefferedDescriptors);
 
-	//release descriptors
-
-	ClearPipelineDescriptor(GAPI._VulkanDevice, _CopyDescriptors);
-	ClearPipelineDescriptor(GAPI._VulkanDevice, _RayPipelineStaticDescriptor);
-	ClearPipelineDescriptor(GAPI._VulkanDevice, _RayPipelineDynamicDescriptor);
-	vkDestroySampler(GAPI._VulkanDevice, _CopySampler, nullptr);
-
-
-	//clear buffers
-	VulkanHelper::ClearUniformBufferHandle(GAPI._VulkanDevice, _RayUniformBuffer);
-	ClearStaticBufferHandle(GAPI._VulkanDevice, _RaySphereBuffer);
-	ClearStaticBufferHandle(GAPI._VulkanDevice, _RaySphereColour);
-	ClearStaticBufferHandle(GAPI._VulkanDevice, _RaySphereOffsets);
-	for (uint32_t i = 0; i < 3; i++)
+	//clear framebuffers
+	VulkanHelper::ClearPipelineOutput(GAPI._VulkanDevice, _GBUfferPipelineOutput);
+	VulkanHelper::ClearPipelineOutput(GAPI._VulkanDevice, _DefferedPipelineOutput);
+	for (uint32_t i = 0; i < GAPI._nb_vk_frames; i++)
 	{
-		ClearStaticBufferHandle(GAPI._VulkanDevice, _RaySphereAABBBuffer[i]);
+		ClearFrameBuffer(GAPI._VulkanDevice, _GBuffers[i]);
 	}
 
-	//clear shader resources
-	ClearShaderBindingTable(GAPI._VulkanDevice, _RayShaderBindingTable);
-	CLEAR_LIST(_RayShaders, _RayShaders.Nb(), VulkanHelper::ClearVulkanShader, GAPI._VulkanDevice);
-	CLEAR_LIST(_CopyShaders, _CopyShaders.Nb(), VulkanHelper::ClearVulkanShader, GAPI._VulkanDevice);
+	/* DEFFERED COMPOSITING */
 
-
-	//clear the fullscreen images buffer
-	VulkanHelper::ClearPipelineOutput(GAPI._VulkanDevice, _CopyPipelineOutput);
-	ClearFrameBuffer(GAPI._VulkanDevice, _RayFramebuffer);
-
-	//release pipeline objects
-	vkDestroyPipelineLayout(GAPI._VulkanDevice, _RayLayout, nullptr);
-	vkDestroyPipeline(GAPI._VulkanDevice, _RayPipeline, nullptr);
-	vkDestroyPipelineLayout(GAPI._VulkanDevice, _CopyLayout, nullptr);
-	vkDestroyPipeline(GAPI._VulkanDevice, _CopyPipeline, nullptr);
+	//destroy pipeline resources
+	vkDestroyPipelineLayout(GAPI._VulkanDevice, _GBUfferLayout, nullptr);
+	vkDestroyPipeline(GAPI._VulkanDevice, _GBufferPipeline, nullptr);
+	vkDestroyPipelineLayout(GAPI._VulkanDevice, _DefferedLayout, nullptr);
+	vkDestroyPipeline(GAPI._VulkanDevice, _DefferedPipeline, nullptr);
 }

@@ -1680,7 +1680,6 @@ bool VulkanHelper::CreateFrameBuffer(Uploader& VulkanUploader, FrameBuffer& Fram
 	imageInfo.samples		= associatedAttachement.samples;//getting from attachement (but should be always one)
 	imageInfo.flags			= 0; // Optional
 
-
 	// we have the same memory for all our images, this is the size (or offset) needed to go from one to another
 	VkDeviceSize imageOffset = 0;
 
@@ -1737,7 +1736,8 @@ void VulkanHelper::ClearFrameBuffer(const VkDevice& VulkanDevice, FrameBuffer& F
 {
 	VK_CLEAR_ARRAY(Framebuffer._ImageViews, Framebuffer._Images.Nb(), vkDestroyImageView, VulkanDevice);
 	VK_CLEAR_ARRAY(Framebuffer._Images, Framebuffer._Images.Nb(), vkDestroyImage, VulkanDevice);
-	vkFreeMemory(VulkanDevice, Framebuffer._ImagesMemory, nullptr);
+	if (Framebuffer._ImagesMemory)
+		vkFreeMemory(VulkanDevice, Framebuffer._ImagesMemory, nullptr);
 	Framebuffer._ImagesMemory = VK_NULL_HANDLE;
 }
 
