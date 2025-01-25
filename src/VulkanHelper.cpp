@@ -1364,7 +1364,7 @@ bool VulkanHelper::AllocateDescriptor(Uploader& VulkanUploader, PipelineDescript
 		for (uint32_t i = 0; i < PipelineDescriptor._DescriptorBindings.Nb(); i++)
 		{
 			PoolInfo[i].type			= PipelineDescriptor._DescriptorBindings[i].descriptorType;
-			PoolInfo[i].descriptorCount = PipelineDescriptor._DescriptorBindings[i].descriptorCount;
+			PoolInfo[i].descriptorCount = PipelineDescriptor._DescriptorBindings[i].descriptorCount * DescriptorSetNb;
 
 		}
 

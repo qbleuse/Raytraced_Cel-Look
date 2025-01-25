@@ -5,6 +5,7 @@
 
 #include "VulkanHelper.h"
 #include "Utilities.h"
+#include "vulkan/vulkan_core.h"
 
 
 struct GAPIHandle
@@ -78,37 +79,37 @@ public:
 		MultipleScopedMemory<struct VkExtensionProperties> _VkExtensions;
 		//an helper object to upload resources to GPU
 		VulkanHelper::Uploader _VulkanUploader;
-		
+
 		/**
 		* Finds if raytracing extensions is supported by the Vulkan on the specified Physical Device.
 		* /!\ this will change the value of the above flags accordingly as if there is a device that handles raytracing, it should be choosed over any other device.
 		* - returns : whether or not raytracing is supported by this physical device.
 		*/
 		bool FindVulkanRTSupported(const MultipleVolatileMemory<struct VkExtensionProperties>& PhysicalDeviceExtensionProperties, uint32_t physicalExtensionNb);
-		
+
 		/* DirectX*/
-		
+
 		//whether this machine supports DirectX 12
 		bool _DX12_supported = false;
 		//whether this machine supports hardware accelerated Raytracing through DirectX Raytracing
 		bool _DXR_supported = false;
-		
+
 		/* Metal */
-		
+
 		//whether this machine supports Metal
 		bool _metal_supported = false;
-		//whether this machine supports hardware accelerated Raytracing through Metal Raytracing 
+		//whether this machine supports hardware accelerated Raytracing through Metal Raytracing
 		//(for this at least a M3 machine would be necessary so not sure if this will really be implemented or not)
 		bool _metal_rt_supported = false;
-		
+
 		/* Agnostic */
-		
+
 		/**
 		* Find which Graphics API is supported by the machine. will change the value of the above flags accordingly to be used freely outside this class.
 		* - returns : whether or not at least one graphics API is supported.
 		*/
 		bool FindAPISupported();
-		
+
 		/**
 		* Finds if raytracing extensions is supported by the Graphics API on the machine. will change the value of the above flags accordingly to be used freely outside this class.
 		* - returns : whether or not at least one graphics API is supported.
@@ -136,7 +137,9 @@ public:
 		VkSwapchainKHR		_VulkanSwapchain{ VK_NULL_HANDLE };
 		//The chosen format of the framebuffers
 		VkSurfaceFormatKHR	_VulkanSurfaceFormat{};
-		
+		//the chosen present mode of the swapchain
+		VkPresentModeKHR    _VulkanPresentMode{};
+
 		//The actual frames of the swapchain. this is an array containing a number of VkImage (with a minimum of 3)
 		MultipleScopedMemory<VkImage>		_VulkanBackBuffers;
 		//The actual frames buffers of the swapchain. this is an array containing a number of VkImageViews equal to the number of frames.

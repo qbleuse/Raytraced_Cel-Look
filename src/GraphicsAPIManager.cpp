@@ -1,4 +1,5 @@
 #include "GraphicsAPIManager.h"
+#include <cstddef>
 
 //glfw include
 #define GLFW_INCLUDE_VULKAN
@@ -127,7 +128,7 @@ bool GraphicsAPIManager::CreateVulkanInterface()
 	appInfo.pEngineName			= "No Engine";
 	appInfo.engineVersion		= VK_MAKE_VERSION(1, 0, 0);
 	appInfo.apiVersion			= VK_HEADER_VERSION_COMPLETE;
-	
+
 	//the struct that will be given to create our VkInstance
 	VkInstanceCreateInfo createInfo{};
 	createInfo.sType			= VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -319,39 +320,41 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 			(VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT | VK_QUEUE_TRANSFER_BIT))
 			break;
 	}
-	
+
 	//create the queues associated with the device
 	VkDeviceQueueCreateInfo queueCreateInfo{};
 	queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 	queueCreateInfo.queueFamilyIndex = _vk_queue_family = queueFamilyNb == 0 ? 0 : _vk_queue_family;
 	float queuePriorities[2] = { 0.0f, 1.0f };
 	queueCreateInfo.pQueuePriorities = queuePriorities;
-	queueCreateInfo.queueCount = 2;
+    queueCreateInfo.queueCount = 2 > queueFamilyProperties[queueCreateInfo.queueFamilyIndex].queueCount ? queueFamilyProperties[queueCreateInfo.queueFamilyIndex].queueCount : 2;
 
 	//create the device with the proper extension
 	VkDeviceCreateInfo deviceCreateInfo{};
 	deviceCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 	deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
 	deviceCreateInfo.queueCreateInfoCount = 1;
-	
 
-	//if we can do raytracing, we need to activate the feature
-	VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracingFeatures{};
-	raytracingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
-	raytracingFeatures.rayTracingPipeline = _vulkan_rt_supported;
+    if (_vulkan_rt_supported)
+    {
+        //if we can do raytracing, we need to activate the feature
+        VkPhysicalDeviceRayTracingPipelineFeaturesKHR raytracingFeatures{};
+        raytracingFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+        raytracingFeatures.rayTracingPipeline = _vulkan_rt_supported;
 
-	VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{};
-	accelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
-	accelerationStructureFeatures.accelerationStructure = _vulkan_rt_supported;
-	accelerationStructureFeatures.pNext = &raytracingFeatures;
+        VkPhysicalDeviceAccelerationStructureFeaturesKHR accelerationStructureFeatures{};
+        accelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+        accelerationStructureFeatures.accelerationStructure = _vulkan_rt_supported;
+        accelerationStructureFeatures.pNext = &raytracingFeatures;
 
-	//raytracing means we are on vulan1.3 (as GPU raytracing was introduced in 1.3), so 1.2 is given. still activating basic feature needed for raytracing.
-	VkPhysicalDeviceVulkan12Features vulkan12Features{};
-	vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-	vulkan12Features.bufferDeviceAddress = _vulkan_rt_supported;
-	vulkan12Features.pNext = &accelerationStructureFeatures;
+        //raytracing means we are on vulan1.3 (as GPU raytracing was introduced in 1.3), so 1.2 is given. still activating basic feature needed for raytracing.
+        VkPhysicalDeviceVulkan12Features vulkan12Features{};
+        vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+        vulkan12Features.bufferDeviceAddress = _vulkan_rt_supported;
+        vulkan12Features.pNext = &accelerationStructureFeatures;
 
-	deviceCreateInfo.pNext = &vulkan12Features;
+        deviceCreateInfo.pNext = &vulkan12Features;
+    }
 
 
 
@@ -394,7 +397,7 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	vkGetDeviceQueue2(_VulkanDevice, &QueueInfo, &_RuntimeHandle._VulkanQueues[0]);
 
 	//getting back the second queue
-	QueueInfo.queueIndex = 1;
+	QueueInfo.queueIndex = queueCreateInfo.queueCount > 1 ? 1 : 0;
 	vkGetDeviceQueue2(_VulkanDevice, &QueueInfo, &_RuntimeHandle._VulkanQueues[1]);
 
 	{
@@ -451,20 +454,50 @@ bool GraphicsAPIManager::MakeWindows()
 		VkResult result = VK_SUCCESS;
 		VK_CALL_PRINT(glfwCreateWindowSurface(_VulkanInterface, _VulkanWindow, nullptr, &_VulkanSurface));
 
-		uint32_t formatCount{0};
-		vkGetPhysicalDeviceSurfaceFormatsKHR(_VulkanGPU, _VulkanSurface, &formatCount, nullptr);
+        //choose format
+        {
+            uint32_t formatCount{0};
+            vkGetPhysicalDeviceSurfaceFormatsKHR(_VulkanGPU, _VulkanSurface, &formatCount, nullptr);
 
-		//there shouldn't be that much format, put it on stack
-		MultipleVolatileMemory<VkSurfaceFormatKHR> formats{ (VkSurfaceFormatKHR*)alloca(sizeof(VkSurfaceFormatKHR) * formatCount) };
-		vkGetPhysicalDeviceSurfaceFormatsKHR(_VulkanGPU, _VulkanSurface, &formatCount, *formats);
-		for (uint32_t i = 0; i < formatCount; i++)
-		{
-			if (formats[i].format == VK_FORMAT_R8G8B8A8_SRGB || formats[i].format == VK_FORMAT_B8G8R8A8_SRGB)
-			{
-				_VulkanSurfaceFormat = formats[i];
-				break;
-			}
-		}
+            //there shouldn't be that much format, put it on stack
+            MultipleVolatileMemory<VkSurfaceFormatKHR> formats{ (VkSurfaceFormatKHR*)alloca(sizeof(VkSurfaceFormatKHR) * formatCount) };
+            vkGetPhysicalDeviceSurfaceFormatsKHR(_VulkanGPU, _VulkanSurface, &formatCount, *formats);
+            for (uint32_t i = 0; i < formatCount; i++)
+            {
+                if (formats[i].format == VK_FORMAT_R8G8B8A8_SRGB || formats[i].format == VK_FORMAT_B8G8R8A8_SRGB)
+                {
+                    _VulkanSurfaceFormat = formats[i];
+                    break;
+                }
+            }
+        }
+
+        //choose present mode
+        {
+
+            uint32_t presentModeCount{0};
+            vkGetPhysicalDeviceSurfacePresentModesKHR(_VulkanGPU, _VulkanSurface, &presentModeCount, nullptr);
+
+            //there shouldn't be that much format, put it on stack
+            MultipleVolatileMemory<VkPresentModeKHR> presentModes{ (VkPresentModeKHR*)alloca(sizeof(VkPresentModeKHR) * presentModeCount) };
+            vkGetPhysicalDeviceSurfacePresentModesKHR(_VulkanGPU, _VulkanSurface, &presentModeCount, *presentModes);
+
+            //we at least set a working present mode
+            _VulkanPresentMode = presentModes[0];
+            for (uint32_t i = 1; i < presentModeCount; i++)
+            {
+                //we want mailbox most
+                if (presentModes[i] == VK_PRESENT_MODE_MAILBOX_KHR && _VulkanPresentMode != VK_PRESENT_MODE_MAILBOX_KHR)
+                {
+                    _VulkanPresentMode = presentModes[i];
+                    break;
+                }//second is fifo relaxed
+                else if (presentModes[i] == VK_PRESENT_MODE_FIFO_RELAXED_KHR && _VulkanPresentMode != VK_PRESENT_MODE_MAILBOX_KHR)
+                {
+                    _VulkanPresentMode = presentModes[i];
+                }
+            }
+        }
 
 		glfwGetFramebufferSize(_VulkanWindow, &_vk_width, &_vk_height);
 		ResizeVulkanSwapChain(_vk_width, _vk_height);
@@ -560,7 +593,7 @@ bool GraphicsAPIManager::ResizeVulkanSwapChain(int32_t width, int32_t height)
 		createinfo.compositeAlpha			= VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 		createinfo.imageSharingMode			= VK_SHARING_MODE_EXCLUSIVE;
 		createinfo.clipped					= VK_TRUE;
-		createinfo.presentMode				= VK_PRESENT_MODE_MAILBOX_KHR;//upload as soon as available
+		createinfo.presentMode				= _VulkanPresentMode;
 		createinfo.oldSwapchain				= tempSwapchain;
 		createinfo.preTransform				= VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 
@@ -611,7 +644,7 @@ bool GraphicsAPIManager::ResizeVulkanSwapChain(int32_t width, int32_t height)
 
 		VkImageCreateInfo depthBufferInfo{};
 		depthBufferInfo.sType			= VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		depthBufferInfo.imageType		= VK_IMAGE_TYPE_2D;//can be 2D 
+		depthBufferInfo.imageType		= VK_IMAGE_TYPE_2D;//can be 2D
 		depthBufferInfo.format			= VK_FORMAT_D32_SFLOAT;//for now we'll just do depth without stencil
 		depthBufferInfo.extent.width	= width;
 		depthBufferInfo.extent.height	= height;

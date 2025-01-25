@@ -36,6 +36,8 @@ public:
 	/*===== Constructor =====*/
 
 	HeapMemory() = default;
+    HeapMemory(const HeapMemory&) = default;
+    HeapMemory(HeapMemory&&) = default;
 
 	HeapMemory(T* raw_data) :
 		_raw_data{ raw_data }
@@ -489,6 +491,21 @@ class Queue
 public:
 	struct QueueNode
 	{
+        
+        QueueNode()noexcept = default;
+        QueueNode(const QueueNode&)noexcept = default;
+        QueueNode(QueueNode&&)noexcept = default;
+        __forceinline QueueNode(const T& data_, uint32_t offset_, uint32_t nb_)noexcept:
+        data{data_},
+        offset{offset_},
+        nb{nb_}
+        {
+        }
+        
+        
+        QueueNode& operator=(const QueueNode&)noexcept = default;
+        QueueNode& operator=(QueueNode&&)noexcept = default;
+        
 		T data{ nullptr };
 
 		uint32_t offset{ 0 };

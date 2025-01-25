@@ -268,7 +268,7 @@ void RasterTriangle::Prepare(GraphicsAPIManager& GAPI)
 
 /*===== Resize =====*/
 
-void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t old_width, int32_t old_height, uint32_t old_nb_frames)
+void RasterTriangle::ResizeVulkanResource(GraphicsAPIManager& GAPI, int32_t old_width, int32_t old_height, uint32_t old_nb_frames)
 {
 	VkResult result = VK_SUCCESS;
 
@@ -298,7 +298,7 @@ void RasterTriangle::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_
 		//describing how many descriptor at a time should be allocated
 		VkDescriptorPoolSize poolSize{};
 		poolSize.type				= VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		poolSize.descriptorCount	= 2;//we need two : one for vertices, one for colours
+		poolSize.descriptorCount	= 2 * GAPI._nb_vk_frames;//we need two : one for vertices, one for colours
 
 		//creating our descriptor pool to allocate sets for each frame
 		VkDescriptorPoolCreateInfo poolInfo{};
