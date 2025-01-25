@@ -1269,7 +1269,8 @@ void RaytraceGPU::Close(class GraphicsAPIManager& GAPI)
 	//the memory allocated by the Vulkan Helper is volatile : it must be explecitly freed !
 
 	//Clear geometry data
-	ClearMesh(GAPI._VulkanDevice, _RayModel._Meshes[0]);
+    if (_RayModel._Meshes != nullptr)
+        ClearMesh(GAPI._VulkanDevice, _RayModel._Meshes[0]);
 	VulkanHelper::ClearSceneBuffer(GAPI._VulkanDevice, _RaySceneBuffer);
 
 	//clear Acceleration Structures
@@ -1290,10 +1291,13 @@ void RaytraceGPU::Close(class GraphicsAPIManager& GAPI)
 	ClearStaticBufferHandle(GAPI._VulkanDevice, _RaySphereBuffer);
 	ClearStaticBufferHandle(GAPI._VulkanDevice, _RaySphereColour);
 	ClearStaticBufferHandle(GAPI._VulkanDevice, _RaySphereOffsets);
-	for (uint32_t i = 0; i < 3; i++)
-	{
-		ClearStaticBufferHandle(GAPI._VulkanDevice, _RaySphereAABBBuffer[i]);
-	}
+    if (_RaySphereAABBBuffer != nullptr)
+    {
+        for (uint32_t i = 0; i < 3; i++)
+        {
+            ClearStaticBufferHandle(GAPI._VulkanDevice, _RaySphereAABBBuffer[i]);
+        }
+    }
 
 	//clear shader resources
 	ClearShaderBindingTable(GAPI._VulkanDevice, _RayShaderBindingTable);

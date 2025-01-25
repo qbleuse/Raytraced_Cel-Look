@@ -285,15 +285,15 @@ void RasterObject::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& 
 	/*===== MODEL LOADING =====*/
 
 	//load vertex buffer and textures
-	VulkanHelper::LoadGLTFFile(GAPI._VulkanUploader, "../../../media/Duck/Duck.gltf",_ObjModel);
+	VulkanHelper::LoadGLTFFile(GAPI._VulkanUploader, "../../media/Duck/Duck.gltf",_ObjModel);
 
 	/*===== MODEL DESCRIPTORS ======*/
 
 	{
 		//describing how many descriptor at a time should be allocated
 		VkDescriptorPoolSize poolSamplerSize{};
-		poolSamplerSize.type			= VK_DESCRIPTOR_TYPE_SAMPLER;
-		poolSamplerSize.descriptorCount = 3;//we only support PBR with albedo, metal-rough and normal texture
+		poolSamplerSize.type			= VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		poolSamplerSize.descriptorCount = 3 * _ObjModel._Materials.Nb();//we only support PBR with albedo, metal-rough and normal texture
 
 
 		//creating our descriptor pool to allocate sets for each textures, as we chose to have combined samplers
@@ -466,7 +466,7 @@ void RasterObject::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t 
 		//describing how many descriptor at a time should be allocated
 		VkDescriptorPoolSize poolUniformSize{};
 		poolUniformSize.type			= VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		poolUniformSize.descriptorCount = 1;
+		poolUniformSize.descriptorCount = GAPI._nb_vk_frames;
 
 		//creating our descriptor pool to allocate sets for each frame
 		VkDescriptorPoolCreateInfo poolInfo{};

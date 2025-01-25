@@ -335,6 +335,14 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	deviceCreateInfo.pQueueCreateInfos = &queueCreateInfo;
 	deviceCreateInfo.queueCreateInfoCount = 1;
 
+    //raytracing means we are on vulan1.3 (as GPU raytracing was introduced in 1.3), so 1.2 is given. still activating basic feature needed for raytracing.
+    VkPhysicalDeviceVulkan12Features vulkan12Features{};
+    vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+    vulkan12Features.bufferDeviceAddress = true;
+
+    deviceCreateInfo.pNext = &vulkan12Features;
+
+    
     if (_vulkan_rt_supported)
     {
         //if we can do raytracing, we need to activate the feature
@@ -346,16 +354,11 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
         accelerationStructureFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
         accelerationStructureFeatures.accelerationStructure = _vulkan_rt_supported;
         accelerationStructureFeatures.pNext = &raytracingFeatures;
-
-        //raytracing means we are on vulan1.3 (as GPU raytracing was introduced in 1.3), so 1.2 is given. still activating basic feature needed for raytracing.
-        VkPhysicalDeviceVulkan12Features vulkan12Features{};
-        vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
-        vulkan12Features.bufferDeviceAddress = _vulkan_rt_supported;
+        
         vulkan12Features.pNext = &accelerationStructureFeatures;
 
-        deviceCreateInfo.pNext = &vulkan12Features;
-    }
-
+        }
+    
 
 
 #ifdef __APPLE__

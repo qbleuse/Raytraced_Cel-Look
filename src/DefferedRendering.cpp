@@ -16,7 +16,7 @@ void DefferedRendering::PrepareVulkanProps(GraphicsAPIManager& GAPI)
 	/*===== Model Loading =====*/
 	{
 		//load vertex buffer and textures
-		VulkanHelper::LoadGLTFFile(GAPI._VulkanUploader, "../../../media/Duck/Duck.gltf", _Model);
+		VulkanHelper::LoadGLTFFile(GAPI._VulkanUploader, "../../media/Duck/Duck.gltf", _Model);
 
 		{
 			/*===== GPU Buffer INPUT ======*/
@@ -70,7 +70,7 @@ void DefferedRendering::PrepareVulkanProps(GraphicsAPIManager& GAPI)
 
 	{
 		/*===== GBuffer OUTPUT ======*/
-	
+
 		//describing the format of the output (our framebuffers)
 		VkAttachmentDescription attachements[3] =
 		{
@@ -232,14 +232,14 @@ void DefferedRendering::CreateModelRenderPipeline(class GraphicsAPIManager& GAPI
 	/*===== FRAMEBUFFER BLEND ======*/
 
 	//description of colour blending and writing configuration : here we write every component of the output, but don't do alpha blending or other stuff
-	VkPipelineColorBlendAttachmentState colorBlendAttachment [3] 
+	VkPipelineColorBlendAttachmentState colorBlendAttachment [3]
 	{
 		//blendEnable, srcColorBlendFactor, dstColorBlendFactor, colorBlendOp, srcAlphaBlendFactor, dstAlphaBlendFactor, alphaBlendOp, colorWriteMask
 		{VK_FALSE, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT},//colorBuffer
 		{VK_FALSE, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT},//posBuffer
 		{VK_FALSE, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_BLEND_FACTOR_ZERO, VK_BLEND_FACTOR_ZERO, VK_BLEND_OP_ADD, VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT}//normalBuffer
 
-	};											
+	};
 
 	//description of colour blending :  here it is a simple write and discard old.
 	VkPipelineColorBlendStateCreateInfo colorBlending{};
@@ -328,7 +328,7 @@ void DefferedRendering::CreateFullscreenCopyPipeline(class GraphicsAPIManager& G
 	/*==== RASTERIZER =====*/
 
 	//Here, our rasterizer actually does the conversion from the vertex created inthe vertex shader and pixel coordinates\
-	//it is the same as always, and frankly does not do much 
+	//it is the same as always, and frankly does not do much
 	VkPipelineRasterizationStateCreateInfo rasterizer{};
 	rasterizer.sType			= VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 	rasterizer.depthClampEnable = VK_FALSE;
@@ -450,7 +450,7 @@ void DefferedRendering::PrepareVulkanScripts(GraphicsAPIManager& GAPI)
 
 			void main()
 			{
-				uv = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);				
+				uv = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
 				gl_Position =  vec4(uv * 2.0f + -1.0f, 0.0f, 1.0f);
 
 			})";
@@ -476,7 +476,7 @@ void DefferedRendering::PrepareVulkanScripts(GraphicsAPIManager& GAPI)
 				outColor = vec4(color,1.0);
 				return;
 			}
-				
+
 
 			vec3 lightDir = normalize(vec3(1.0,-1.0,1.0));
 			vec3 viewDir = normalize(-pos);
@@ -570,7 +570,7 @@ void DefferedRendering::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int
 	CreateUniformBufferHandle(GAPI._VulkanUploader, _GBUfferUniformBuffer, GAPI._nb_vk_frames, sizeof(UniformBuffer));
 
 	/*===== GPU SIDE IMAGE BUFFERS ======*/
-	
+
 	_GBuffers.Alloc(3);
 	CreateFrameBuffer(GAPI._VulkanUploader, _GBuffers[0], _GBUfferPipelineOutput, 0);
 	CreateFrameBuffer(GAPI._VulkanUploader, _GBuffers[1], _GBUfferPipelineOutput, 1);
@@ -736,7 +736,7 @@ void DefferedRendering::Show(GAPIHandle& GAPIHandle)
 		//the pipeline stage at which the GPU should waait for the semaphore to signal itself
 		VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;//VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR
 
-		//we submit our commands, while setting the necesssary fences (semaphores on GPU), 
+		//we submit our commands, while setting the necesssary fences (semaphores on GPU),
 		//to schedule work properly
 		VkSubmitInfo info = {};
 		info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -776,10 +776,13 @@ void DefferedRendering::Close(class GraphicsAPIManager& GAPI)
 	//clear framebuffers
 	VulkanHelper::ClearPipelineOutput(GAPI._VulkanDevice, _GBUfferPipelineOutput);
 	VulkanHelper::ClearPipelineOutput(GAPI._VulkanDevice, _DefferedPipelineOutput);
-	for (uint32_t i = 0; i < GAPI._nb_vk_frames; i++)
-	{
-		ClearFrameBuffer(GAPI._VulkanDevice, _GBuffers[i]);
-	}
+    if (_GBuffers != nullptr)
+    {
+        for (uint32_t i = 0; i < GAPI._nb_vk_frames; i++)
+        {
+            ClearFrameBuffer(GAPI._VulkanDevice, _GBuffers[i]);
+        }
+    }
 
 	/* DEFFERED COMPOSITING */
 

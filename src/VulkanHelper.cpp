@@ -804,7 +804,7 @@ bool LoadGLTFBuffersInGPU(Uploader& VulkanUploader, const tinygltf::Model& loade
 
 		model._BuffersHandle[i] = tmpBufferHandle._StaticGPUMemoryHandle;
 
-		vkDestroyBuffer(VulkanUploader._VulkanDevice, tmpBufferHandle._StaticGPUBuffer, nullptr);
+        VulkanUploader._ToFreeBuffers.Add(tmpBufferHandle._StaticGPUBuffer);
 	}
 
 	return noError;
