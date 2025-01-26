@@ -107,6 +107,7 @@ bool ResetImGuiResource(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiReso
 
 	if (ImGuiResource._ImGuiCommandBuffer != nullptr)
 		vkFreeCommandBuffers(GAPI._VulkanDevice, GAPI._VulkanCommandPool[1], GAPI._nb_vk_frames, *ImGuiResource._ImGuiCommandBuffer);
+	ImGuiResource._ImGuiCommandBuffer.Clear();
 
 	VK_CLEAR_ARRAY(ImGuiResource._VulkanHasDrawnUI, GAPI._nb_vk_frames, vkDestroySemaphore, GAPI._VulkanDevice);
 
@@ -141,7 +142,7 @@ bool ResetImGuiResource(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiReso
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocInfo.commandBufferCount = GAPI._nb_vk_frames;
 
-		ImGuiResource._ImGuiCommandBuffer = (VkCommandBuffer*)malloc(sizeof(VkCommandBuffer) * GAPI._nb_vk_frames);
+		ImGuiResource._ImGuiCommandBuffer.Alloc(GAPI._nb_vk_frames);
 		VK_CALL_PRINT(vkAllocateCommandBuffers(GAPI._VulkanDevice, &allocInfo, *ImGuiResource._ImGuiCommandBuffer));
 	}
 

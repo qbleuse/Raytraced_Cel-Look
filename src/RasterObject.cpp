@@ -285,7 +285,7 @@ void RasterObject::PrepareVulkanProps(GraphicsAPIManager& GAPI, VkShaderModule& 
 	/*===== MODEL LOADING =====*/
 
 	//load vertex buffer and textures
-	VulkanHelper::LoadGLTFFile(GAPI._VulkanUploader, "../../media/Duck/Duck.gltf",_ObjModel);
+	VulkanHelper::LoadGLTFFile(GAPI._VulkanUploader, "../../../media/Duck/Duck.gltf",_ObjModel);
 
 	/*===== MODEL DESCRIPTORS ======*/
 

@@ -9,7 +9,8 @@ set (SRC_FILES
 	"${CMAKE_CURRENT_SOURCE_DIR}/ImGuiHelper.cpp" 
 	"${CMAKE_CURRENT_SOURCE_DIR}/RaytraceCPU.cpp" 
 	"${CMAKE_CURRENT_SOURCE_DIR}/RaytraceGPU.cpp" 
-	"${CMAKE_CURRENT_SOURCE_DIR}/DefferedRendering.cpp")
+	"${CMAKE_CURRENT_SOURCE_DIR}/DefferedRendering.cpp"
+	"${CMAKE_CURRENT_SOURCE_DIR}/RaytracedCel.cpp")
 
 # add to executable
 target_sources(VulkanLearning PUBLIC ${SRC_FILES})

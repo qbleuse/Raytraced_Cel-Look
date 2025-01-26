@@ -185,7 +185,8 @@ void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppCo
 
 }
 
-int main(){
+int main()
+{
 	//set error callback and init window manager lib
 	glfwSetErrorCallback(glfw_error_callback);
 	if (!glfwInit())
@@ -269,7 +270,22 @@ int main(){
 			//try getting the next back buffer to draw in the swap chain
 			if (!GAPI.GetNextFrame())
 			{
-				GAPI.ResizeSwapChain(scenes);
+				int32_t old_width	= GAPI._vk_width;
+				int32_t old_height	= GAPI._vk_height;
+				uint32_t oldNbFrames = GAPI._nb_vk_frames;
+
+				if (GAPI.ResizeSwapChain())
+				{
+
+					//We use a temporary uploader struct in order to avoid leaks and destroy all temporary data on GPU at once
+					GAPI.PrepareForUpload();
+
+					//we only resize scenes if we succeeded in resizing the window
+					scenes[sceneIndex]->Resize(GAPI, old_width, old_height, oldNbFrames);
+
+					//submit all the resize work to GPU
+					GAPI.SubmitUpload();
+				}
 				ResetImGuiResource(GAPI, imguiResource);
 				InitAppWideContext(GAPI, AppContext);
 				continue;
@@ -311,6 +327,9 @@ int main(){
 		}
 
 		vkDeviceWaitIdle(GAPI._VulkanDevice);
+
+		AppContext.threadPool.Clear();
+
 		//check_vk_result(err);
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplGlfw_Shutdown();

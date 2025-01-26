@@ -233,6 +233,9 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 	VkPhysicalDeviceType currentType = VkPhysicalDeviceType::VK_PHYSICAL_DEVICE_TYPE_MAX_ENUM;
 	bool currentRaytracingSupported = false;
 	bool canPresent = true;
+	//the device's features (geometry shader support, raytracing support, etc...)
+	VkPhysicalDeviceFeatures2 finaldeviceFeature{};
+	finaldeviceFeature.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
 	//we'll sort what GPU we want here
 	for (uint32_t i = 0; i < deviceCount; i++)
 	{
@@ -252,7 +255,10 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 
 		//for the first GPU, we'll put it as our base line
 		if (i == 0)
+		{
 			currentType = deviceProperty.properties.deviceType;
+			finaldeviceFeature = deviceFeature;
+		}
 
 		//the number of devices extensions
 		uint32_t deviceExtensionNb = 0;
@@ -275,6 +281,7 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 				{
 					currentDeviceID = i;
 					canPresent = true;
+					finaldeviceFeature = deviceFeature;
 				}
 				break;
 			}
@@ -286,13 +293,17 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
 		{
 			currentDeviceID = i;
 			currentRaytracingSupported = true;
+			finaldeviceFeature = deviceFeature;
 		}
 
 		// 3 - discrete GPU > everything else.
 		if (swapchainsupport && raytracingSupported
 			&& deviceProperty.properties.deviceType == VkPhysicalDeviceType::VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU
 			&& currentType != VkPhysicalDeviceType::VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+		{
 			currentDeviceID = i;
+			finaldeviceFeature = deviceFeature;
+		}
 	}
 
 	_VulkanGPU = devices[currentDeviceID];
@@ -340,6 +351,8 @@ bool GraphicsAPIManager::CreateVulkanHardwareInterface()
     vulkan12Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
     vulkan12Features.bufferDeviceAddress = true;
 
+	//enabled all the features of this GPU (we actually don't need to enable all of it, but we still need at least sampler anisotropy for ImGUI)
+	deviceCreateInfo.pEnabledFeatures = &finaldeviceFeature.features;
     deviceCreateInfo.pNext = &vulkan12Features;
 
     
@@ -746,7 +759,7 @@ bool GraphicsAPIManager::ResizeVulkanSwapChain(int32_t width, int32_t height)
 	return result == VK_SUCCESS;
 }
 
-bool GraphicsAPIManager::ResizeSwapChain(ScopedLoopArray<Scene*>& SceneToChange)
+bool GraphicsAPIManager::ResizeSwapChain()
 {
 	/* Vulkan Support */
 
@@ -761,21 +774,8 @@ bool GraphicsAPIManager::ResizeSwapChain(ScopedLoopArray<Scene*>& SceneToChange)
 		//gettign the new size of window (it may not have changed)
 		glfwGetFramebufferSize(_VulkanWindow, &_vk_width, &_vk_height);
 
-		//first we resize window and get all back buffers
-		bool toReturn = ResizeVulkanSwapChain(_vk_width, _vk_height);
-
-		//We use a temporary uploader struct in order to avoid leaks and destroy all temporary data on GPU at once
-		PrepareForUpload();
-
-		//we only resize scenes if we succeeded in resizing the window
-		if (toReturn)
-			for (uint32_t i = 0; i < SceneToChange.Nb(); i++)
-				SceneToChange[i]->Resize(*this, old_width, old_height, oldNbFrames);
-
-		//submit all the resize work to GPU
-		SubmitUpload();
-
-		return toReturn;
+		//we resize window and get all back buffers
+		return ResizeVulkanSwapChain(_vk_width, _vk_height);
 
 	}
 

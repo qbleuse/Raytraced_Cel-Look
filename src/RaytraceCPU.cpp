@@ -263,6 +263,7 @@ void RaytraceCPU::Prepare(GraphicsAPIManager& GAPI)
 
 	//Allocate for teh materil of a random scene (we are overallocating here as dieletrics will always have the same material)
 	_Materials.Alloc(29);
+	ZERO_SET(_Materials, 29 * sizeof(material*));
 	_Materials[0] = new diffuse( vec4{ 0.5f,0.5f,0.5f, 1.0f} );//the ground material
 	_Materials[1] = new diffuse( vec4{ 0.4f, 0.2f, 0.1f, 1.0f });//a lambertian diffuse example
     _Materials[2] = new dieletrics( vec4{ 1.0f,1.0f,1.0f,1.0f }, 1.50f);//a dieletric example (this is a glass sphere)
@@ -270,6 +271,7 @@ void RaytraceCPU::Prepare(GraphicsAPIManager& GAPI)
 
 	//Allocate for a random scene (all the space allocated will be used)
 	_Scene.Alloc(29);
+	ZERO_SET(_Scene, 29 * sizeof(hittable*));
 	_Scene[0] = new sphere(vec3{ 0.0f, -1000.0f, 0.0f }, 1000.0f, _Materials[0]);//the ground
 	_Scene[1] = new sphere(vec3{ 0.0f, 5.0f, 0.0f }, 5.0f, _Materials[1]);//a lambertian diffuse example
 	_Scene[2] = new sphere(vec3{ -10.0f, 5.0f, 0.0f }, 5.0f, _Materials[2]);//a dieletric example (this is a glass sphere)
@@ -328,6 +330,7 @@ void RaytraceCPU::ResizeVulkanResource(GraphicsAPIManager& GAPI, int32_t width, 
 	vkFreeMemory(GAPI._VulkanDevice, _GPULocalImageMemory, nullptr);
 	vkFreeMemory(GAPI._VulkanDevice, _ImageCopyMemory, nullptr);
 	vkDestroyDescriptorPool(GAPI._VulkanDevice, _GPUImageDescriptorPool, nullptr);
+	_GPUImageDescriptorSets.Clear();
 
 
 	/*===== VIEWPORT AND SCISSORS ======*/
@@ -523,6 +526,8 @@ void RaytraceCPU::ResizeVulkanResource(GraphicsAPIManager& GAPI, int32_t width, 
 void RaytraceCPU::Resize(GraphicsAPIManager& GAPI, int32_t old_width, int32_t old_height, uint32_t old_nb_frames)
 {
 	ResizeVulkanResource(GAPI, old_width, old_height, old_nb_frames);
+	_ComputeBatch.Clear();
+	_ComputeHeap.Clear();
 	_ComputeHeap = MultipleSharedMemory<ray_compute>(_FullScreenScissors.extent.width * _FullScreenScissors.extent.height + _FullScreenScissors.extent.width * _FullScreenScissors.extent.height * _pixel_sample_nb);
 	_need_refresh = true;
 }
@@ -625,7 +630,11 @@ void RaytraceCPU::Act(AppWideContext& AppContext)
 		_need_refresh |= ImGui::ColorPicker4("Background Gradient Bottom", _background_gradient_bottom.scalar);
 
 		if (SampleNbChange && _need_refresh)
+		{
+			_ComputeBatch.Clear();
+			_ComputeHeap.Clear();
 			_ComputeHeap = MultipleSharedMemory<ray_compute>(_FullScreenScissors.extent.width * _FullScreenScissors.extent.height + _FullScreenScissors.extent.width * _FullScreenScissors.extent.height * _pixel_sample_nb);
+		}
 	}
 	
 	_is_moving = AppContext.in_camera_mode;
@@ -805,6 +814,22 @@ void RaytraceCPU::Close(GraphicsAPIManager& GAPI)
 	VK_CLEAR_ARRAY(_FullScreenOutput, GAPI._nb_vk_frames, vkDestroyFramebuffer, GAPI._VulkanDevice);
 	_MappedCPUImage.Clear();
 	_RaytracedImage.Clear();
+	_ComputeBatch.Clear();
+	_ComputeHeap.Clear();
+
+	for (uint32_t i = 0; i < _Scene.Nb(); i++)
+	{
+		if (_Scene[i] != nullptr)
+			delete _Scene[i];
+	}
+	_Scene.Clear();
+
+	for (uint32_t i = 0; i < _Materials.Nb(); i++)
+	{
+		if (_Materials[i] != nullptr)
+			delete _Materials[i];
+	}
+	_Materials.Clear();
 
 	//free the allocated memory for the fullscreen images
 	vkFreeMemory(GAPI._VulkanDevice, _GPULocalImageMemory, nullptr);
@@ -814,6 +839,7 @@ void RaytraceCPU::Close(GraphicsAPIManager& GAPI)
 	vkDestroyDescriptorPool(GAPI._VulkanDevice, _GPUImageDescriptorPool, nullptr);
 	vkDestroyDescriptorSetLayout(GAPI._VulkanDevice, _GPUImageDescriptorLayout, nullptr);
 	vkDestroySampler(GAPI._VulkanDevice, _FullScreenSampler, nullptr);
+	_GPUImageDescriptorSets.Clear();
 
 	//destroy piupeline and associated objects
 	vkDestroyPipelineLayout(GAPI._VulkanDevice, _FullScreenLayout, nullptr);

@@ -21,7 +21,7 @@ class DefferedRendering : public Scene
 {
 
 #pragma region GRAPHICS API
-private:
+protected:
 	/*===== Graphics API =====*/
 
 	/* Vulkan */
@@ -68,6 +68,11 @@ private:
 	VulkanHelper::PipelineOutput		_DefferedPipelineOutput;
 	//the descriptor needed for the copy pipeline (such as the sampler)
 	VulkanHelper::PipelineDescriptors	_DefferedDescriptors;
+	//the descriptor needed to composite the final image (such as lights or debug infos)
+	VulkanHelper::PipelineDescriptors	_DefferedCompositingDescriptors;
+
+	//the Deffered pass's uniform buffer for the light compositing
+	VulkanHelper::UniformBufferHandle	_DefferedUniformBuffer;
 
 	/*
 	* Creates the necessary resources for deffered rendering of a scene.
@@ -78,22 +83,30 @@ private:
 	* - Pipeline Object
 	* - DescriptorSets Objects for the model's samplers (using Descriptor Pool)
 	*/
-	void PrepareVulkanProps(class GraphicsAPIManager& GAPI);
+	virtual void PrepareVulkanProps(class GraphicsAPIManager& GAPI);
 
+	//Creates the model and the other necessary resources 
+	virtual void PrepareModelProps(class GraphicsAPIManager& GAPI);
+
+	//Creates the GPU BUffer necessary resources 
+	virtual void PrepareGPUBufferProps(class GraphicsAPIManager& GAPI);
+
+	//Creates the GPU BUffer necessary resources 
+	virtual void PrepareDefferedPassProps(class GraphicsAPIManager& GAPI);
 	/*
 	* Creates a model render Pipeline object using the Shaders and pipeline layout given in parameter.
 	*/
-	void CreateModelRenderPipeline(class GraphicsAPIManager& GAPI, VkPipeline& Pipeline, const VkPipelineLayout& PipelineLayout, const VulkanHelper::PipelineOutput& PipelineOutput, const List<VulkanHelper::ShaderScripts>& Shaders);
+	static void CreateModelRenderPipeline(class GraphicsAPIManager& GAPI, VkPipeline& Pipeline, const VkPipelineLayout& PipelineLayout, const VulkanHelper::PipelineOutput& PipelineOutput, const List<VulkanHelper::ShaderScripts>& Shaders);
 
 	/*
 	* Creates a fullscreen Pipeline object using the Shaders and pipeline layout given in parameter.
 	*/
-	void CreateFullscreenCopyPipeline(class GraphicsAPIManager& GAPI, VkPipeline& Pipeline, const VkPipelineLayout& PipelineLayout, const VulkanHelper::PipelineOutput& PipelineOutput, const List<VulkanHelper::ShaderScripts>& Shaders);
+	static void CreateFullscreenCopyPipeline(class GraphicsAPIManager& GAPI, VkPipeline& Pipeline, const VkPipelineLayout& PipelineLayout, const VulkanHelper::PipelineOutput& PipelineOutput, const List<VulkanHelper::ShaderScripts>& Shaders);
 
 	/*
 	* Compiles the shaders to use in the Copy Pipeline Object creation
 	*/
-	void PrepareVulkanScripts(class GraphicsAPIManager& GAPI);
+	virtual void PrepareVulkanScripts(class GraphicsAPIManager& GAPI);
 
 	/*
 	* Deallocate previously allocated resources, then recreate resources using the window's new properties.
@@ -103,7 +116,7 @@ private:
 	* - Framebuffers
 	* - Descriptor sets for out put raytracing output images as asampled image
 	*/
-	void ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames);
+	virtual void ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames);
 
 
 	/*
@@ -111,6 +124,9 @@ private:
 	*/
 	static void BindPass(GAPIHandle& GAPIHandle, const VkPipeline& Pipeline,
 		const VulkanHelper::PipelineOutput& PipelineOutput);
+
+	virtual void DrawGPUBuffer(GAPIHandle& GAPIHandle);
+	virtual void DrawCompositingPass(GAPIHandle& GAPIHandle);
 
 	/* DirectX */
 
@@ -168,6 +184,7 @@ public:
 	//a struct to group the data that can be changed by user
 	ObjectData _ObjData;
 	bool changedFlag = false;
+	float _ObjRotSpeed = 20.0f;
 
 	struct UniformBuffer
 	{
@@ -177,6 +194,28 @@ public:
 	};
 	//a buffer to allow sending the data changed by user at once
 	UniformBuffer _UniformBuffer;
+
+	struct CompositingBuffer
+	{
+		//the position of the camera for the light
+		vec3	_cameraPos;
+		//an index allowing to change the output to debug frames
+		uint32_t _debugIndex{ 0 };
+		//directionnal Light direction
+		vec3	_directionalDir{ 1.0f, -1.0f, 1.0f };
+		//specular Glossiness
+		float	_specGlossiness{4.0f};
+		//the color of the directional light
+		vec3	_directionnalColor{1.0f,1.0f,1.0f};
+		//the ambient occlusion
+		float	_ambientOcclusion{0.2f};
+		//cel Shading Diffuse Step
+		vec2	_celDiffuseStep{0.0f, 0.01f};
+		//cel shading spec Step
+		vec2	_celSpecStep{0.005f, 0.01f};
+	};
+	//a buffer to allow sending the data changed by user at once
+	CompositingBuffer _CompositingBuffer;
 
 
 	/*===== END Scene Interface =====*/
