@@ -448,7 +448,7 @@ bool VulkanHelper::CreateVulkanBufferAndMemory(const Uploader& VulkanUploader, V
 	//now that we have created our buffer object, we need to allocate GPU memory associated with it
 	if (allocate_memory)
 		CreateVulkanBufferMemory(VulkanUploader, properties, buffer, bufferMemory, flags);
-
+	
 	//then link together the buffer "interface" object, and the allcated memory
 	VK_CALL_PRINT(vkBindBufferMemory(VulkanUploader._VulkanDevice, buffer, bufferMemory, offset));
 
@@ -703,7 +703,7 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* file_name, 
 		// set the number of _Indices to allow drawing of mesh
 		meshes[i]._indices_nb = indexNb;
 		//set the offest in the _Indices buffer to draw the mesh
-		meshes[i]._indices_offset = indexOffset;
+		meshes[i]._indices_offset = indexOffset * sizeof(uint32_t);
 		meshes[i]._indices_type = VK_INDEX_TYPE_UINT32;
 
 		//sets the nb of vertices in the buffers
@@ -798,7 +798,7 @@ bool LoadGLTFBuffersInGPU(Uploader& VulkanUploader, const tinygltf::Model& loade
 
 		//we're using a static because it is easier to upload with, but we actually only want to allocate and send data to device memory
 		StaticBufferHandle tmpBufferHandle;
-		noError &= CreateVulkanBufferAndMemory(VulkanUploader, buffer.data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT,
+		noError &= CreateVulkanBufferAndMemory(VulkanUploader, buffer.data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tmpBufferHandle._StaticGPUBuffer, tmpBufferHandle._StaticGPUMemoryHandle, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 		noError &= UploadStaticBufferHandle(VulkanUploader, tmpBufferHandle, buffer.data.data(), buffer.data.size());
 
@@ -1027,11 +1027,11 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 				tinygltf::Accessor&	accessor		= loadedModel.accessors[jPrimitive.indices];
 				tinygltf::BufferView& bufferView	= loadedModel.bufferViews[accessor.bufferView];
 
-				CreateVulkanBufferAndMemory(VulkanUploader, (bufferView.byteLength - accessor.byteOffset), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-					model._Meshes[meshIndex]._Indices, model._BuffersHandle[bufferView.buffer], (bufferView.byteOffset + accessor.byteOffset), false);
+				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+					model._Meshes[meshIndex]._Indices, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._indices_nb = accessor.count;
-				model._Meshes[meshIndex]._indices_offset = 0;
+				model._Meshes[meshIndex]._indices_offset = bufferView.byteOffset + accessor.byteOffset;
 				switch (accessor.componentType)
 				{
 				case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
@@ -1052,7 +1052,7 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 				tinygltf::Accessor& accessor		= loadedModel.accessors[jPrimitive.attributes["POSITION"]];
 				tinygltf::BufferView& bufferView	= loadedModel.bufferViews[accessor.bufferView];
 
-				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Positions, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._pos_offset = accessor.byteOffset + bufferView.byteOffset;
@@ -1066,7 +1066,7 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 				tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["TEXCOORD_0"]];
 				tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
 
-				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Uvs, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._uv_offset = bufferView.byteOffset + accessor.byteOffset;
@@ -1080,7 +1080,7 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 				tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["NORMAL"]];
 				tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
 
-				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Normals, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._normal_offset = bufferView.byteOffset + accessor.byteOffset;
@@ -1094,7 +1094,7 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 				tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["TANGENT"]];
 				tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
 
-				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Tangents, model._BuffersHandle[bufferView.buffer], 0, false);
 
 				model._Meshes[meshIndex]._tangent_offset = bufferView.byteOffset + accessor.byteOffset;
@@ -1732,6 +1732,67 @@ bool VulkanHelper::CreateFrameBuffer(Uploader& VulkanUploader, FrameBuffer& Fram
 	return result == VK_SUCCESS;
 }
 
+bool VulkanHelper::CreateFrameBuffer(Uploader& VulkanUploader, FrameBuffer& Framebuffer, const VkImageCreateInfo& imageInfo, uint32_t frameBufferNb)
+{
+	//if an error happens...
+	VkResult result = VK_SUCCESS;
+
+
+	//allocate the same number of images and render target than there is framebuffers
+	Framebuffer._Images.Alloc(frameBufferNb);
+	Framebuffer._ImageViews.Alloc(frameBufferNb);
+
+	// we have the same memory for all our images, this is the size (or offset) needed to go from one to another
+	VkDeviceSize imageOffset = 0;
+
+	//allocating the memory on the GPU
+	{
+		VK_CALL_PRINT(vkCreateImage(VulkanUploader._VulkanDevice, &imageInfo, nullptr, &Framebuffer._Images[0]));
+
+		//getting the necessary requirements to create our image
+		VkMemoryRequirements memRequirements;
+		vkGetImageMemoryRequirements(VulkanUploader._VulkanDevice, Framebuffer._Images[0], &memRequirements);
+		imageOffset = AlignUp(memRequirements.size, memRequirements.alignment);
+
+		//trying to find a matching memory type between what the app wants and the device's limitation.
+		VkMemoryAllocateInfo allocInfo{};
+		allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		allocInfo.allocationSize = imageOffset * frameBufferNb;//we want multiple frames
+		allocInfo.memoryTypeIndex = VulkanHelper::GetMemoryTypeFromRequirements(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, memRequirements, VulkanUploader._MemoryProperties);
+
+		//allocating and associate the memory to our image.
+		VK_CALL_PRINT(vkAllocateMemory(VulkanUploader._VulkanDevice, &allocInfo, nullptr, &Framebuffer._ImagesMemory));
+
+		vkDestroyImage(VulkanUploader._VulkanDevice, Framebuffer._Images[0], nullptr);
+	}
+
+	for (uint32_t i = 0; i < frameBufferNb; i++)
+	{
+		//create the image object from the template ...
+		VK_CALL_PRINT(vkCreateImage(VulkanUploader._VulkanDevice, &imageInfo, nullptr, &Framebuffer._Images[i]));
+		//then associate with the allocated memory
+		VK_CALL_PRINT(vkBindImageMemory(VulkanUploader._VulkanDevice, Framebuffer._Images[i], Framebuffer._ImagesMemory, imageOffset * i))
+
+			//make it immediately available to bind to shader
+			ImageMemoryBarrier(VulkanUploader._CopyBuffer, Framebuffer._Images[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
+				VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_NONE, imageInfo.initialLayout);
+
+		//create an image view associated with the GPU local Image to make it available in shader
+		VkImageViewCreateInfo viewCreateInfo{};
+		viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		viewCreateInfo.subresourceRange.aspectMask	= VK_IMAGE_ASPECT_COLOR_BIT;//framebuffer is only for colorbuffer for now...
+		viewCreateInfo.viewType						= VK_IMAGE_VIEW_TYPE_2D;//framebuffer only supports 2D texture for now...
+		viewCreateInfo.format						= imageInfo.format;//get format from image info
+		viewCreateInfo.image						= Framebuffer._Images[i];
+		viewCreateInfo.subresourceRange.layerCount = 1;
+		viewCreateInfo.subresourceRange.levelCount = 1;
+
+		VK_CALL_PRINT(vkCreateImageView(VulkanUploader._VulkanDevice, &viewCreateInfo, nullptr, &Framebuffer._ImageViews[i]));
+	}
+
+	return result == VK_SUCCESS;
+}
+
 void VulkanHelper::ClearFrameBuffer(const VkDevice& VulkanDevice, FrameBuffer& Framebuffer)
 {
 	VK_CLEAR_ARRAY(Framebuffer._ImageViews, Framebuffer._Images.Nb(), vkDestroyImageView, VulkanDevice);
@@ -1871,7 +1932,7 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 		//setting the bounds of our mesh (as when loading from models, the buffer for multiple geometry may have been the same)
 		VkAccelerationStructureBuildRangeInfoKHR& meshASRange = bottomLevelMeshASRangeInfo[i];
 		meshASRange.firstVertex		= iMesh._pos_offset;
-		meshASRange.primitiveOffset = iMesh._indices_type == VK_INDEX_TYPE_UINT16 ? iMesh._indices_offset * sizeof(uint16_t) : iMesh._indices_offset * sizeof(uint32_t);
+		meshASRange.primitiveOffset = iMesh._indices_offset;
 		meshASRange.primitiveCount	= iMesh._indices_nb / 3;
 		meshASRange.transformOffset = usesOffset ? transformOffset[i] : 0;
 		bottomLevelMeshASRangeInfoPtr[i] = &meshASRange;
@@ -2210,6 +2271,9 @@ bool VulkanHelper::CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBu
 		uint32_t totalUVNb = 0;
 		uint32_t totalNormalNb = 0;
 
+		//this is a naive method and should be improved, but for now, hoping that no model with both short and long index will be used
+		uint32_t indexSize = mesh[0]._indices_type == VK_INDEX_TYPE_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t);
+
 		//filling the offset buffer and the total count
 		for (uint32_t i = 1; i <= mesh.Nb(); i++)
 		{
@@ -2227,8 +2291,9 @@ bool VulkanHelper::CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBu
 			offsetBuffer[i * 3 + 2] = totalNormalNb;
 		}
 
+
 		//we can determine the final size of each buffer
-		sceneBuffer._IndexBufferSize	= totalIndexNb * sizeof(uint32_t);
+		sceneBuffer._IndexBufferSize	= totalIndexNb * indexSize;
 		sceneBuffer._UVsBufferSize		= totalUVNb * sizeof(vec2);
 		sceneBuffer._NormalBufferSize	= totalNormalNb * sizeof(vec3);
 
@@ -2243,19 +2308,19 @@ bool VulkanHelper::CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBu
 			const Mesh& indexedMesh = mesh[i];
 
 			VkBufferCopy region;
-			region.srcOffset = indexedMesh._indices_offset * sizeof(uint32_t);
-			region.dstOffset = offsetBuffer[i * 3] * sizeof(uint32_t);
-			region.size		= indexedMesh._indices_nb * sizeof(uint32_t);
+			region.srcOffset = indexedMesh._indices_offset;//this is already the offset in bytes for the indices
+			region.dstOffset = offsetBuffer[i * 3] * indexSize;
+			region.size		= indexedMesh._indices_nb * indexSize;
 			vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Indices, sceneBuffer._IndexBuffer._StaticGPUBuffer, 1, &region);
 
 
-			region.srcOffset = indexedMesh._uv_offset * sizeof(vec2);
+			region.srcOffset = indexedMesh._uv_offset;//this is already the offset in bytes for the uvs
 			region.dstOffset = offsetBuffer[i * 3 + 1] * sizeof(vec2);
 			region.size = indexedMesh._uv_nb * sizeof(vec2);
 			vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Uvs, sceneBuffer._UVsBuffer._StaticGPUBuffer, 1, &region);
 
 
-			region.srcOffset = indexedMesh._normal_offset * sizeof(vec3);
+			region.srcOffset = indexedMesh._normal_offset;//this is already the offset in bytes for the uvs
 			region.dstOffset = offsetBuffer[i*3 + 2] * sizeof(vec3);
 			region.size = indexedMesh._normal_nb * sizeof(vec3);
 			vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Normals, sceneBuffer._NormalBuffer._StaticGPUBuffer, 1, &region);

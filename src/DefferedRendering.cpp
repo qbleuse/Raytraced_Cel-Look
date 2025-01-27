@@ -12,7 +12,7 @@
 void DefferedRendering::PrepareVulkanProps(GraphicsAPIManager& GAPI)
 {
 	PrepareModelProps(GAPI);
-	PrepareGPUBufferProps(GAPI);
+	PrepareGBufferProps(GAPI);
 	PrepareDefferedPassProps(GAPI);
 }
 
@@ -59,7 +59,7 @@ void DefferedRendering::PrepareModelProps(class GraphicsAPIManager& GAPI)
 }
 
 //Creates the GPU BUffer necessary resources 
-void DefferedRendering::PrepareGPUBufferProps(class GraphicsAPIManager& GAPI)
+void DefferedRendering::PrepareGBufferProps(class GraphicsAPIManager& GAPI)
 {
 	VkResult result = VK_SUCCESS;
 
@@ -73,14 +73,6 @@ void DefferedRendering::PrepareGPUBufferProps(class GraphicsAPIManager& GAPI)
 		};
 
 		VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _GBufferDescriptors, uniformBindings, 1);
-
-		//the sampler and image to sample texture
-		VkDescriptorSetLayoutBinding modelBindings[1] =
-		{
-			{0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}
-		};
-
-		VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _ModelDescriptors, modelBindings, 1);
 
 
 		//the pipeline layout from the descriptor layout
@@ -124,26 +116,12 @@ void DefferedRendering::PrepareGPUBufferProps(class GraphicsAPIManager& GAPI)
 		VulkanHelper::SetClearValue(_GBUfferPipelineOutput, { 0.2f,0.2f,0.2f,1.0f }, 0);
 		VulkanHelper::SetClearValue(_GBUfferPipelineOutput, { 1.0f, 0 }, 3);
 	}
-	{
-		/*===== Deffered OUTPUT ======*/
-
-		//describing the format of the output (our framebuffers)
-		VkAttachmentDescription attachements[1] =
-		{
-			//flags, format, samples, loadOp, storeOp, stencilLoadOp, stencilStoreOp, inialLayout, finalLayout
-			{0, GAPI._VulkanSurfaceFormat.format,  VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR}
-		};
-
-		VulkanHelper::CreatePipelineOutput(GAPI._VulkanUploader, _DefferedPipelineOutput, attachements, 1, {});
-	}
-
 
 	/* Pipeline Creation */
 
 	CreateModelRenderPipeline(GAPI, _GBufferPipeline, _GBUfferLayout, _GBUfferPipelineOutput, _GBufferShaders);
 }
 
-//Creates the GPU BUffer necessary resources 
 void DefferedRendering::PrepareDefferedPassProps(class GraphicsAPIManager& GAPI)
 {
 	VkResult result = VK_SUCCESS;
@@ -445,7 +423,8 @@ void DefferedRendering::CreateFullscreenCopyPipeline(class GraphicsAPIManager& G
 	VK_CALL_PRINT(vkCreateGraphicsPipelines(GAPI._VulkanDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &Pipeline));
 }
 
-void DefferedRendering::PrepareVulkanScripts(GraphicsAPIManager& GAPI)
+
+void DefferedRendering::PrepareGBufferScripts(GraphicsAPIManager& GAPI)
 {
 	//define vertex shader
 	const char* g_buffer_vertex_shader =
@@ -500,6 +479,21 @@ void DefferedRendering::PrepareVulkanScripts(GraphicsAPIManager& GAPI)
 		}
 		)";
 
+	{
+		VulkanHelper::ShaderScripts Script;
+
+		//add vertex shader
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_VERTEX_BIT, g_buffer_vertex_shader, "GBuffer Pass Vertex"))
+			_GBufferShaders.Add(Script);
+
+		//add fragment shader
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_FRAGMENT_BIT, g_buffer_fragment_shader, "GBuffer Pass Frag"))
+			_GBufferShaders.Add(Script);
+	}
+}
+
+void DefferedRendering::PrepareCompositingScripts(GraphicsAPIManager& GAPI)
+{
 	//define vertex shader
 	const char* deffered_vertex_shader =
 		R"(#version 450
@@ -634,25 +628,23 @@ void DefferedRendering::PrepareVulkanScripts(GraphicsAPIManager& GAPI)
 		)";
 
 
-	{
-		VulkanHelper::ShaderScripts Script;
+		{
+			VulkanHelper::ShaderScripts Script;
 
-		//add vertex shader
-		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_VERTEX_BIT, g_buffer_vertex_shader, "GBuffer Pass Vertex"))
-			_GBufferShaders.Add(Script);
+			//add vertex shader
+			if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_VERTEX_BIT, deffered_vertex_shader, "Deffered Pass Vertex"))
+				_DefferedShaders.Add(Script);
 
-		//add fragment shader
-		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_FRAGMENT_BIT, g_buffer_fragment_shader, "GBuffer Pass Frag"))
-			_GBufferShaders.Add(Script);
+			//add fragment shader
+			if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_FRAGMENT_BIT, deffered_fragment_shader, "Deffered Pass Frag"))
+				_DefferedShaders.Add(Script);
+		}
+}
 
-		//add vertex shader
-		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_VERTEX_BIT, deffered_vertex_shader, "Deffered Pass Vertex"))
-			_DefferedShaders.Add(Script);
-
-		//add fragment shader
-		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_FRAGMENT_BIT, deffered_fragment_shader, "Deffered Pass Frag"))
-			_DefferedShaders.Add(Script);
-	}
+void DefferedRendering::PrepareVulkanScripts(GraphicsAPIManager& GAPI)
+{
+	PrepareGBufferScripts(GAPI);
+	PrepareCompositingScripts(GAPI);
 }
 
 void DefferedRendering::Prepare(class GraphicsAPIManager& GAPI)
@@ -675,9 +667,9 @@ void DefferedRendering::Prepare(class GraphicsAPIManager& GAPI)
 
 /*===== Resize =====*/
 
-void DefferedRendering::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames)
-{
 
+void DefferedRendering::ResizeGBufferResources(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames)
+{
 	VkResult result = VK_SUCCESS;
 
 	/*===== CLEAR RESOURCES ======*/
@@ -692,27 +684,20 @@ void DefferedRendering::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int
 	}
 
 	VulkanHelper::ReleaseFrameBuffer(GAPI._VulkanDevice, _GBUfferPipelineOutput);
-	VulkanHelper::ReleaseFrameBuffer(GAPI._VulkanDevice, _DefferedPipelineOutput);
-	VulkanHelper::ReleaseDescriptor(GAPI._VulkanDevice, _DefferedDescriptors);
-	VulkanHelper::ReleaseDescriptor(GAPI._VulkanDevice, _DefferedCompositingDescriptors);
 
-	/*===== CPU SIDE IMAGE BUFFERS ======*/
+	/*===== Pipeline OUTPUT ======*/
 
 	//reallocate the fullscreen GBuffer and present iamges render target with the new number of available images
 	VulkanHelper::AllocateFrameBuffer(_GBUfferPipelineOutput, GAPI._vk_width, GAPI._vk_height, GAPI._nb_vk_frames);
-	VulkanHelper::AllocateFrameBuffer(_DefferedPipelineOutput, GAPI._vk_width, GAPI._vk_height, GAPI._nb_vk_frames);
 
 	/*===== DESCRIPTORS ======*/
 
-	VulkanHelper::AllocateDescriptor(GAPI._VulkanUploader, _DefferedCompositingDescriptors, GAPI._nb_vk_frames);
-	VulkanHelper::AllocateDescriptor(GAPI._VulkanUploader, _DefferedDescriptors, GAPI._nb_vk_frames);
 	VulkanHelper::AllocateDescriptor(GAPI._VulkanUploader, _GBufferDescriptors, GAPI._nb_vk_frames);
 
 	/*===== UNIFORM BUFFERS ======*/
 
 	//recreate the uniform buffer
 	CreateUniformBufferHandle(GAPI._VulkanUploader, _GBUfferUniformBuffer, GAPI._nb_vk_frames, sizeof(UniformBuffer));
-	CreateUniformBufferHandle(GAPI._VulkanUploader, _DefferedUniformBuffer, GAPI._nb_vk_frames, sizeof(CompositingBuffer));
 
 	/*===== GPU SIDE IMAGE BUFFERS ======*/
 
@@ -727,9 +712,43 @@ void DefferedRendering::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int
 	{
 
 		//make our gbuffer linked to the framebuffers
-		VkImageView g_buffers[4] = { _GBuffers[0]._ImageViews[i], _GBuffers[1]._ImageViews[i], _GBuffers[2]._ImageViews[i], GAPI._VulkanDepthBufferViews[i]};
+		VkImageView g_buffers[4] = { _GBuffers[0]._ImageViews[i], _GBuffers[1]._ImageViews[i], _GBuffers[2]._ImageViews[i], GAPI._VulkanDepthBufferViews[i] };
 		VulkanHelper::SetFrameBuffer(GAPI._VulkanUploader, _GBUfferPipelineOutput, g_buffers, i);
 
+		//set our uniform buffer for our gbuffer pass
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _GBufferDescriptors, _GBUfferUniformBuffer._GPUBuffer[i], 0, sizeof(UniformBuffer), 0, i);
+	}
+}
+
+void DefferedRendering::ResizeDefferedPassResources(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames)
+{
+	VkResult result = VK_SUCCESS;
+
+	/*===== CLEAR RESOURCES ======*/
+
+	VulkanHelper::ReleaseFrameBuffer(GAPI._VulkanDevice, _DefferedPipelineOutput);
+	VulkanHelper::ReleaseDescriptor(GAPI._VulkanDevice, _DefferedDescriptors);
+	VulkanHelper::ReleaseDescriptor(GAPI._VulkanDevice, _DefferedCompositingDescriptors);
+
+	/*===== Pipeline OUTPUT ======*/
+
+	//reallocate the fullscreen GBuffer and present iamges render target with the new number of available images
+	VulkanHelper::AllocateFrameBuffer(_DefferedPipelineOutput, GAPI._vk_width, GAPI._vk_height, GAPI._nb_vk_frames);
+
+	/*===== DESCRIPTORS ======*/
+
+	VulkanHelper::AllocateDescriptor(GAPI._VulkanUploader, _DefferedCompositingDescriptors, GAPI._nb_vk_frames);
+	VulkanHelper::AllocateDescriptor(GAPI._VulkanUploader, _DefferedDescriptors, GAPI._nb_vk_frames);
+	
+	/*===== UNIFORM BUFFERS ======*/
+
+	//recreate the uniform buffer
+	CreateUniformBufferHandle(GAPI._VulkanUploader, _DefferedUniformBuffer, GAPI._nb_vk_frames, sizeof(CompositingBuffer));
+
+	/*===== CREATING & LINKING RESOURCES ======*/
+
+	for (uint32_t i = 0; i < GAPI._nb_vk_frames; i++)
+	{
 		//make our framebuffer linked to the swapchain back buffers
 		VulkanHelper::SetFrameBuffer(GAPI._VulkanUploader, _DefferedPipelineOutput, &GAPI._VulkanBackColourBuffers[i], i);
 
@@ -739,11 +758,15 @@ void DefferedRendering::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _DefferedDescriptors, _GBuffers[1]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 2, i);
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _DefferedDescriptors, _GBuffers[2]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 3, i);
 
-		//set our uniform buffer for our gbuffer pass
-		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _GBufferDescriptors, _GBUfferUniformBuffer._GPUBuffer[i], 0, sizeof(UniformBuffer), 0, i);
 		//also set our uniform buffer for our deffered/compositing pass
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _DefferedCompositingDescriptors, _DefferedUniformBuffer._GPUBuffer[i], 0, sizeof(CompositingBuffer), 0, i);
 	}
+}
+
+void DefferedRendering::ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames)
+{
+	ResizeGBufferResources(GAPI, width, height, old_nb_frames);
+	ResizeDefferedPassResources(GAPI, width, height, old_nb_frames);
 }
 
 
@@ -841,9 +864,9 @@ void DefferedRendering::DrawGPUBuffer(GAPIHandle& GAPIHandle)
 		//... then bind the vertex buffer as described in the input layout of the pipeline ...
 		vkCmdBindVertexBuffers(commandBuffer, 0, 3, _Model._Meshes[i]._VertexBuffers, (VkDeviceSize*)_Model._Meshes[i]._vertex_offsets);
 		//... and the index buffers associated with the vertex buffers ...
-		vkCmdBindIndexBuffer(commandBuffer, _Model._Meshes[i]._Indices, 0, _Model._Meshes[i]._indices_type);
+		vkCmdBindIndexBuffer(commandBuffer, _Model._Meshes[i]._Indices, _Model._Meshes[i]._indices_offset, _Model._Meshes[i]._indices_type);
 		//... before finally drawing, following the index buffer.
-		vkCmdDrawIndexed(commandBuffer, _Model._Meshes[i]._indices_nb, 1, _Model._Meshes[i]._indices_offset, 0, 0);
+		vkCmdDrawIndexed(commandBuffer, _Model._Meshes[i]._indices_nb, 1, 0, 0, 0);
 	}
 
 	//end G buffer pass

@@ -88,10 +88,10 @@ protected:
 	//Creates the model and the other necessary resources 
 	virtual void PrepareModelProps(class GraphicsAPIManager& GAPI);
 
-	//Creates the GPU BUffer necessary resources 
-	virtual void PrepareGPUBufferProps(class GraphicsAPIManager& GAPI);
+	//Creates the G BUffer necessary resources 
+	virtual void PrepareGBufferProps(class GraphicsAPIManager& GAPI);
 
-	//Creates the GPU BUffer necessary resources 
+	//Creates the deffered compositing pass necessary resources 
 	virtual void PrepareDefferedPassProps(class GraphicsAPIManager& GAPI);
 	/*
 	* Creates a model render Pipeline object using the Shaders and pipeline layout given in parameter.
@@ -104,9 +104,15 @@ protected:
 	static void CreateFullscreenCopyPipeline(class GraphicsAPIManager& GAPI, VkPipeline& Pipeline, const VkPipelineLayout& PipelineLayout, const VulkanHelper::PipelineOutput& PipelineOutput, const List<VulkanHelper::ShaderScripts>& Shaders);
 
 	/*
-	* Compiles the shaders to use in the Copy Pipeline Object creation
+	* Compiles all the shaders to use each pass
 	*/
 	virtual void PrepareVulkanScripts(class GraphicsAPIManager& GAPI);
+
+	//compile the shaders for the G Buffer pass
+	virtual void PrepareGBufferScripts(class GraphicsAPIManager& GAPI);
+
+	//compile the shaders for the deffered compositing pass
+	virtual void PrepareCompositingScripts(class GraphicsAPIManager& GAPI);
 
 	/*
 	* Deallocate previously allocated resources, then recreate resources using the window's new properties.
@@ -117,6 +123,12 @@ protected:
 	* - Descriptor sets for out put raytracing output images as asampled image
 	*/
 	virtual void ResizeVulkanResource(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames);
+
+	//Resize the GPU BUffer necessary resources 
+	virtual void ResizeGBufferResources(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames);
+
+	//Resize the deffered pass necessary resources 
+	virtual void ResizeDefferedPassResources(class GraphicsAPIManager& GAPI, int32_t width, int32_t height, int32_t old_nb_frames);
 
 
 	/*

@@ -540,6 +540,8 @@ namespace VulkanHelper
 
 	//fills up the framebuffer struct depending on the content of the pipeline output (PipelineOutput's framebuffer must be allocated beforehand)
 	bool CreateFrameBuffer(Uploader& VulkanUploader, FrameBuffer& Framebuffer, const PipelineOutput& Output, uint32_t associatedAttechementIndex, VkFormat overrideFormat = VK_FORMAT_UNDEFINED);
+	//fills up the framebuffer struct using the functions, parameter (meant to be used for compute or raytracing pipline, where there is no need for a pipeline output, but need for framebuffers)
+	bool CreateFrameBuffer(Uploader& VulkanUploader, FrameBuffer& Framebuffer, const VkImageCreateInfo& imageInfo, uint32_t frameBufferNb);
 	//Clears all the memory allocated by the Framebuffer
 	void ClearFrameBuffer(const VkDevice& VulkanDevice, FrameBuffer& Framebuffer);
 

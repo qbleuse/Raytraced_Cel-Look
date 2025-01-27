@@ -61,11 +61,17 @@ private:
 	*/
 	void PrepareVulkanRaytracingProps(class GraphicsAPIManager& GAPI);
 
+
+	//Creates the deffered compositing pass necessary resources 
+	virtual void PrepareDefferedPassProps(class GraphicsAPIManager& GAPI)override;
+
 	/*
 	* Compiles the shaders to use in the Raytracing Pipeline Object creation
 	*/
 	void PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI);
 
+	//compiles the shader for a deffered compositing pass using the raytraced light framebuffer
+	virtual void PrepareCompositingScripts(class GraphicsAPIManager& GAPI)override;
 
 	/*
 	* Deallocate previously allocated raytracing resources, then recreate resources using the window's new properties.

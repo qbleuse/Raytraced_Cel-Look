@@ -22,8 +22,8 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 
 		VulkanHelper::CreateSceneBufferFromMeshes(GAPI._VulkanUploader, _RaySceneBuffer, _Model._Meshes);
 
-		VulkanHelper::RaytracedGeometry* bottomAS[2] = { &_RayBottomAS };
-		VulkanHelper::CreateRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RayTopAS, identity(), bottomAS, 2);
+		VulkanHelper::RaytracedGeometry* bottomAS[1] = { &_RayBottomAS };
+		VulkanHelper::CreateRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RayTopAS, identity(), bottomAS, 1);
 
 	}
 	/*===== DESCRIBE SHADER STAGE AND GROUPS =====*/
@@ -33,8 +33,8 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 	VulkanHelper::MakePipelineShaderFromScripts(shaderStages, _RayShaders);
 
 
-	MultipleVolatileMemory<VkRayTracingShaderGroupCreateInfoKHR> shaderGroups{ static_cast<VkRayTracingShaderGroupCreateInfoKHR*>(alloca(sizeof(VkRayTracingShaderGroupCreateInfoKHR) * 7)) };
-	memset(*shaderGroups, 0, sizeof(VkRayTracingShaderGroupCreateInfoKHR) * 7);
+	MultipleVolatileMemory<VkRayTracingShaderGroupCreateInfoKHR> shaderGroups{ static_cast<VkRayTracingShaderGroupCreateInfoKHR*>(alloca(sizeof(VkRayTracingShaderGroupCreateInfoKHR) * 6)) };
+	memset(*shaderGroups, 0, sizeof(VkRayTracingShaderGroupCreateInfoKHR) * 6);
 
 	//describing our raygen group, it only includes the first shader of our pipeline
 	shaderGroups[0].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
@@ -53,14 +53,6 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 	shaderGroups[1].intersectionShader = VK_SHADER_UNUSED_KHR;
 
 	//describing our hit group, it only includes the third shader of our pipeline, as we have not described multiple hits
-	shaderGroups[3].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
-	shaderGroups[3].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_PROCEDURAL_HIT_GROUP_KHR;
-	shaderGroups[3].generalShader = VK_SHADER_UNUSED_KHR;
-	shaderGroups[3].closestHitShader = 3;
-	shaderGroups[3].anyHitShader = VK_SHADER_UNUSED_KHR;
-	shaderGroups[3].intersectionShader = 4;
-
-	//describing our hit group, it only includes the third shader of our pipeline, as we have not described multiple hits
 	shaderGroups[2].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 	shaderGroups[2].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_TRIANGLES_HIT_GROUP_KHR;
 	shaderGroups[2].generalShader = VK_SHADER_UNUSED_KHR;
@@ -69,33 +61,33 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 	shaderGroups[2].intersectionShader = VK_SHADER_UNUSED_KHR;
 
 	//describing our callable diffuse group
+	shaderGroups[3].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
+	shaderGroups[3].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
+	shaderGroups[3].generalShader = 3;
+	shaderGroups[3].closestHitShader = VK_SHADER_UNUSED_KHR;
+	shaderGroups[3].anyHitShader = VK_SHADER_UNUSED_KHR;
+	shaderGroups[3].intersectionShader = VK_SHADER_UNUSED_KHR;
+
+	//describing our callable metal group
 	shaderGroups[4].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 	shaderGroups[4].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
-	shaderGroups[4].generalShader = 5;
+	shaderGroups[4].generalShader = 4;
 	shaderGroups[4].closestHitShader = VK_SHADER_UNUSED_KHR;
 	shaderGroups[4].anyHitShader = VK_SHADER_UNUSED_KHR;
 	shaderGroups[4].intersectionShader = VK_SHADER_UNUSED_KHR;
 
-	//describing our callable metal group
+	//describing our callable dieletrics group
 	shaderGroups[5].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
 	shaderGroups[5].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
-	shaderGroups[5].generalShader = 6;
+	shaderGroups[5].generalShader = 5;
 	shaderGroups[5].closestHitShader = VK_SHADER_UNUSED_KHR;
 	shaderGroups[5].anyHitShader = VK_SHADER_UNUSED_KHR;
 	shaderGroups[5].intersectionShader = VK_SHADER_UNUSED_KHR;
 
-	//describing our callable metal group
-	shaderGroups[6].sType = VK_STRUCTURE_TYPE_RAY_TRACING_SHADER_GROUP_CREATE_INFO_KHR;
-	shaderGroups[6].type = VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR;
-	shaderGroups[6].generalShader = 7;
-	shaderGroups[6].closestHitShader = VK_SHADER_UNUSED_KHR;
-	shaderGroups[6].anyHitShader = VK_SHADER_UNUSED_KHR;
-	shaderGroups[6].intersectionShader = VK_SHADER_UNUSED_KHR;
-
 	/*===== PIPELINE ATTACHEMENT =====*/
 
 	{
-		VkDescriptorSetLayoutBinding layoutStaticBinding[8] =
+		VkDescriptorSetLayoutBinding layoutStaticBinding[5] =
 		{
 			//binding , descriptor type, descriptor count, shader stage
 			{ 0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//acceleration structure
@@ -105,16 +97,19 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 			{ 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR}//scene buffer normals
 		};
 
-		VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, layoutStaticBinding, 8);
+		VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, layoutStaticBinding, 5);
 
-		VkDescriptorSetLayoutBinding layoutDynamicBinding[2] =
+		VkDescriptorSetLayoutBinding layoutDynamicBinding[5] =
 		{
 			//binding , descriptor type, descriptor count, shader stage
-			{ 0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//framebuffer
-			{ 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR},//uniform global buffer
+			{ 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR},//uniform global buffer
+			{ 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//direct light framebuffer
+			{ 2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//indirect light framebuffer
+			{ 3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//g buffer position
+			{ 4, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR}//g buffer normal
 		};
 
-		VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, layoutDynamicBinding, 2);
+		VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, layoutDynamicBinding, 5);
 	}
 
 	{
@@ -150,18 +145,18 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 
 	//our raytracing pipeline
 	VkRayTracingPipelineCreateInfoKHR pipelineInfo{};
-	pipelineInfo.sType = VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
-	pipelineInfo.stageCount = _RayShaders.Nb();
-	pipelineInfo.pStages = *shaderStages;
-	pipelineInfo.groupCount = 7;
-	pipelineInfo.pGroups = *shaderGroups;
-	pipelineInfo.maxPipelineRayRecursionDepth = 1;//for the moment we'll hardcode the value, we'll see if we'll make it editable
-	pipelineInfo.layout = _RayLayout;//describe the attachement
+	pipelineInfo.sType							= VK_STRUCTURE_TYPE_RAY_TRACING_PIPELINE_CREATE_INFO_KHR;
+	pipelineInfo.stageCount						= _RayShaders.Nb();
+	pipelineInfo.pStages						= *shaderStages;
+	pipelineInfo.groupCount						= 6;
+	pipelineInfo.pGroups						= *shaderGroups;
+	pipelineInfo.maxPipelineRayRecursionDepth	= 1;//for the moment we'll hardcode the value, we'll see if we'll make it editable
+	pipelineInfo.layout							= _RayLayout;//describe the attachement
 
 	VK_CALL_KHR(GAPI._VulkanDevice, vkCreateRayTracingPipelinesKHR, GAPI._VulkanDevice, VK_NULL_HANDLE, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &_RayPipeline);
 
 
-	VulkanHelper::GetShaderBindingTable(GAPI._VulkanUploader, _RayPipeline, _RayShaderBindingTable, 1, 2, 3);
+	VulkanHelper::GetShaderBindingTable(GAPI._VulkanUploader, _RayPipeline, _RayShaderBindingTable, 1, 1, 3);
 }
 
 void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI)
@@ -181,6 +176,16 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				
 			};
 			layout(location = 0) rayPayloadEXT HitRecord payload;
+
+			struct RayDispatch
+			{
+				vec3	direction;// the original directio of the hit 
+				vec3	normal;// the normal got from contact with the object
+				float	matInfo;
+				uint	RandomSeed;
+				
+			};
+			layout(location = 1) callableDataEXT RayDispatch callablePayload;
 
 			uint RandomInt(inout uint seed)
 			{
@@ -204,9 +209,8 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				return (float(RandomInt(seed) & 0x00FFFFFF) / float(0x01000000));
 			}
 
-			layout(binding = 0) uniform accelerationStructureEXT topLevelAS;
-			layout(set = 1, binding = 0, rgba32f) uniform image2D image;
-			layout(set = 1, binding = 1) uniform UniformBuffer
+			layout(set = 0, binding = 0) uniform accelerationStructureEXT topLevelAS;
+			layout(set = 1, binding = 0) uniform UniformBuffer
 			{
 				mat4 view;
 				mat4 proj;
@@ -217,6 +221,11 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				uint nb_frame;
 				float random;
 			};
+			layout(set = 1, binding = 1, rgba32f) uniform image2D directLightBuffer;
+			layout(set = 1, binding = 2, rgba32f) uniform image2D indirectLightBuffer;
+			layout(set = 1, binding = 3, rgba32f) uniform readonly image2D posBuffer;
+			layout(set = 1, binding = 4, rgba32f) uniform readonly image2D normalBuffer;
+
 
 			void main()
 			{
@@ -233,15 +242,17 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 					//finding the pixel we are computing from the ray launch arguments
 					const vec2 inUV = (pixelCenter) / vec2(gl_LaunchSizeEXT.xy);
 
-					vec2 d = inUV * 2.0 - 1.0;
+					//technically the first rebound but we already have it so let's use it
+					vec4 origin = imageLoad(posBuffer, ivec2(pixelCenter));
+					vec4 normal = imageLoad(normalBuffer, ivec2(pixelCenter));
 
-					vec4 origin = -view[3];
-					//the targets are on a viewport ahead of us by 3
-					vec4 target = proj * vec4(d,1.0,1.0);
-					target = target/target.w;
-
+					
+					callablePayload.direction = origin.xyz - view[3].xyz;
+					callablePayload.normal = normal.xyz;
+					callablePayload.RandomSeed = payload.RandomSeed;
 					//creating a direction for our ray
-					vec4 direction = view * vec4(normalize(target.xyz),0.0);
+					executeCallableEXT(0, 1);//for the moment just diffuse
+					vec4 direction = vec4(callablePayload.normal,0.0);
 
 					//zero init
 					payload.bHit		= 0;
@@ -271,9 +282,12 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 						if (payload.hitDistance < 0.0 || payload.bHit == 0.0)
 							break;
 
-
+						callablePayload.direction = direction.xyz;
+						callablePayload.normal = payload.hitNormal;
+						callablePayload.RandomSeed = payload.RandomSeed;
+						executeCallableEXT(0, 1);//for the moment just diffuse
 						origin		+= direction * payload.hitDistance;
-						direction	= vec4(payload.hitNormal,0.0);
+						direction	= vec4(callablePayload.normal,0.0);
 					}
 
 					finalColor += fragColor;
@@ -282,7 +296,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				finalColor /= nb_samples;
 				
 				//our recursive call finished, let's write into the image
-				imageStore(image, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor,0.0));
+				imageStore(directLightBuffer, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor,0.0));
 
 			})";
 
@@ -302,7 +316,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 			};
 			layout(location = 0) rayPayloadInEXT HitRecord payload;
 
-			layout(set = 1, binding = 1) uniform UniformBuffer
+			layout(set = 1, binding = 0) uniform UniformBuffer
 			{
 				mat4 view;
 				mat4 proj;
@@ -324,57 +338,6 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				payload.hitNormal = vec3(0.0);
 			})";
 
-	//define closest hit shader
-	const char* closest_hit_shader =
-		R"(#version 460
-			#extension GL_EXT_ray_tracing : enable
-
-
-			struct HitRecord 
-			{
-				float	bHit;//a float that acts as a boolean to know if it hit or missed, also used for padding
-				vec3	hitColor;// the color of the hit object
-				float	hitDistance;// the distance from the ray's origin the hit was recorded
-				vec3	hitNormal;// the normal got from contact with the object
-				uint	RandomSeed;
-				
-			};
-			layout(location = 0) rayPayloadInEXT HitRecord payload;
-			struct RayDispatch
-			{
-				vec3	direction;// the original directio of the hit 
-				vec3	normal;// the normal got from contact with the object
-				float	matInfo;
-				uint	RandomSeed;
-			};
-			layout(location = 1) callableDataEXT RayDispatch callablePayload;
-
-			layout(binding = 4) readonly buffer SphereArray { vec4[] SphereColour; };
-			layout(binding = 5) readonly buffer SphereOffset{ uint[3] SphereOffsets; };
-			hitAttributeEXT vec4 attribs;
-
-			void main()
-			{
-				const vec3 hitPoint = gl_WorldRayOriginEXT + gl_HitTEXT * gl_WorldRayDirectionEXT;
-				vec3 normal = (hitPoint - attribs.xyz) / attribs.w;
-
-				payload.bHit		= 1.0;
-				vec4 colour			= SphereColour[gl_PrimitiveID + SphereOffsets[gl_InstanceCustomIndexEXT]];
-				payload.hitColor	= colour.rgb;
-				payload.hitDistance = gl_HitTEXT;
-
-				callablePayload.direction	= gl_WorldRayDirectionEXT;
-				callablePayload.normal		= normal;
-				callablePayload.matInfo		= colour.w;
-				callablePayload.RandomSeed	= payload.RandomSeed;
-				executeCallableEXT(gl_InstanceCustomIndexEXT, 1);
-				payload.hitNormal	= callablePayload.normal;
-				payload.RandomSeed	= callablePayload.RandomSeed;
-
-
-
-			})";
-
 	//define traingle closest hit shader
 	const char* trinagle_closest_hit_shader =
 		R"(#version 460
@@ -391,20 +354,11 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				
 			};
 			layout(location = 0) rayPayloadInEXT HitRecord payload;
-			struct RayDispatch
-			{
-				vec3	direction;// the original directio of the hit 
-				vec3	normal;// the normal got from contact with the object
-				float	matInfo;
-				uint	RandomSeed;
-				
-			};
-			layout(location = 1) callableDataEXT RayDispatch callablePayload;
 
-			layout(binding = 6) readonly buffer OffsetBuffer { uint[] Offsets; };
-			layout(binding = 7) readonly buffer IndexBuffer { uint[] Indices; };
-			layout(binding = 8) readonly buffer UVBuffer { vec2[] UVs; };
-			layout(binding = 9) readonly buffer NormalBuffer { float[] Normals; };
+			layout(binding = 1) readonly buffer OffsetBuffer { uint[] Offsets; };
+			layout(binding = 2) readonly buffer IndexBuffer { uint[] Indices; };
+			layout(binding = 3) readonly buffer UVBuffer { vec2[] UVs; };
+			layout(binding = 4) readonly buffer NormalBuffer { float[] Normals; };
 
 			hitAttributeEXT vec2 barycentric;
 
@@ -432,72 +386,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				payload.bHit		= 1.0;
 				payload.hitColor	= vec3(1.0);
 				payload.hitDistance = gl_HitTEXT;
-
-				callablePayload.direction	= gl_WorldRayDirectionEXT;
-				callablePayload.normal		= normal;
-				callablePayload.matInfo		= 0.0;
-				callablePayload.RandomSeed	= payload.RandomSeed;
-				executeCallableEXT(gl_InstanceCustomIndexEXT, 1);
-				payload.hitNormal	= callablePayload.normal;
-				payload.RandomSeed	= callablePayload.RandomSeed;
-
-			})";
-
-	//define intersect shader
-	const char* intersect_shader =
-		R"(#version 460
-			#extension GL_EXT_ray_tracing : enable
-
-			#define HIT_EPSILON 0.01f
-
-			hitAttributeEXT vec4 attribs;
-			layout(binding = 3) readonly buffer SphereArray { vec4[] Spheres; };
-			layout(binding = 5) readonly buffer SphereOffset{ uint[3] SphereOffsets; };
-
-			void main()
-			{
-				const vec4 sphere = Spheres[gl_PrimitiveID + SphereOffsets[gl_InstanceCustomIndexEXT]];
-
-				const vec3 ray_to_center	= sphere.xyz - gl_WorldRayOriginEXT;
-				const vec3 direction		= gl_WorldRayDirectionEXT;
-				const float radius			= sphere.w;
-		
-				//information on how the formula works can be found here : https://en.wikipedia.org/wiki/Line%E2%80%93sphere_intersection
-				//this is a basic quadratic equation.
-				//for the used formula here, it is the simplified one from here : https://raytracing.github.io/books/RayTracingInOneWeekend.html#surfacenormalsandmultipleobjects/simplifyingtheray-sphereintersectioncode
-		
-				//in my case, because ray direction are normalized, a == 1, so I'll move it out
-				float a = dot(direction, direction);
-		
-				//h in geometrical terms is the distance from the ray's origin to the sphere's center
-				//projected onto the ray's direction.
-				float h = dot(direction, ray_to_center);
-		
-				//this is basically the squared distance between the ray's origin and the sphere's center
-				//substracted to the sphere's squared radius.
-				float c = dot(ray_to_center, ray_to_center) - (radius * radius);
-		
-				//a == 1 so it is not h^2 - ac but h^2 - c
-				float discriminant = (h * h) - (a * c);
-		
-				//we're not in a complex plane, so sqrt(-1) is impossible
-				if (discriminant <= 0.0f)
-					return;
-		
-				//finding the roots
-				float sqrt_discriminant = sqrt(discriminant);
-		
-				float root_1 = (h + sqrt_discriminant) / (a);
-				float root_2 = (h - sqrt_discriminant) / (a);
-		
-				if (root_1 < HIT_EPSILON && root_2 < HIT_EPSILON)
-					return;
-		
-				//choosing our closest root
-				float distance		= min(root_1,root_2);
-				distance			= distance < HIT_EPSILON ? max(root_1, root_2) : distance;//avoid considering a collision behind the camera
-				attribs = sphere;
-				reportIntersectionEXT(distance,0);
+				payload.hitNormal	= normal;
 
 			})";
 
@@ -683,10 +572,6 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 		//add hit shaders
 		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, trinagle_closest_hit_shader, "Raytrace GPU Triangle Closest"))
 			_RayShaders.Add(Script);
-		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR, closest_hit_shader, "Raytrace GPU Sphere Closest"))
-			_RayShaders.Add(Script);
-		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_INTERSECTION_BIT_KHR, intersect_shader, "Raytrace GPU Intersect"))
-			_RayShaders.Add(Script);
 
 		//add callable shaders
 		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_CALLABLE_BIT_KHR, diffuse_shader, "Raytrace GPU Diffuse"))
@@ -698,6 +583,215 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 	}
 }
 
+void RaytracedCel::PrepareDefferedPassProps(GraphicsAPIManager& GAPI)
+{
+	VkResult result = VK_SUCCESS;
+
+	{
+		/*===== Deffered OUTPUT ======*/
+
+		//describing the format of the output (our framebuffers)
+		VkAttachmentDescription attachements[1] =
+		{
+			//flags, format, samples, loadOp, storeOp, stencilLoadOp, stencilStoreOp, inialLayout, finalLayout
+			{0, GAPI._VulkanSurfaceFormat.format,  VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR}
+		};
+
+		VulkanHelper::CreatePipelineOutput(GAPI._VulkanUploader, _DefferedPipelineOutput, attachements, 1, {});
+	}
+
+	/*===== SUBPASS ATTACHEMENT ======*/
+
+	{
+		/*===== Deffered INPUT ======*/
+
+		// a very basic sampler will be fine
+		VkSamplerCreateInfo samplerInfo{};
+		samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		vkCreateSampler(GAPI._VulkanDevice, &samplerInfo, nullptr, &_DefferedSampler);
+
+		//the GPU Buffer images
+		VkDescriptorSetLayoutBinding layoutBindings[6] =
+		{
+			//binding, descriptorType, descriptorCount, stageFlags, immutableSampler
+			{0, VK_DESCRIPTOR_TYPE_SAMPLER , 1, VK_SHADER_STAGE_FRAGMENT_BIT, &_DefferedSampler},
+			{1, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},//pos buffer
+			{2, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},//normal buffer
+			{3, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},//color buffer
+			{4, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr},//direct light buffer
+			{5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr}//indirect light buffer
+		};
+
+		VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _DefferedDescriptors, layoutBindings, 6);
+
+		//the GPU Buffer images
+		VkDescriptorSetLayoutBinding compositinglayout =
+		{
+			//binding, descriptorType, descriptorCount, stageFlags, immutableSampler
+			0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER , 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr
+		};
+
+		VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _DefferedCompositingDescriptors, &compositinglayout, 1);
+
+		//the pipeline layout from the descriptor layout
+		VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+		pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+		VkDescriptorSetLayout layouts[2] = { _DefferedDescriptors._DescriptorLayout , _DefferedCompositingDescriptors._DescriptorLayout };
+		pipelineLayoutInfo.pSetLayouts = layouts;
+		pipelineLayoutInfo.setLayoutCount = 2;
+
+		VK_CALL_PRINT(vkCreatePipelineLayout(GAPI._VulkanDevice, &pipelineLayoutInfo, nullptr, &_DefferedLayout));
+	}
+
+	/* Pipeline Creation */
+
+	CreateFullscreenCopyPipeline(GAPI, _DefferedPipeline, _DefferedLayout, _DefferedPipelineOutput, _DefferedShaders);
+}
+
+void RaytracedCel::PrepareCompositingScripts(GraphicsAPIManager& GAPI)
+{
+	//define vertex shader
+	const char* deffered_vertex_shader =
+		R"(#version 450
+			layout(location = 0) out vec2 uv;
+
+			void main()
+			{
+				uv = vec2((gl_VertexIndex << 1) & 2, gl_VertexIndex & 2);
+				gl_Position =  vec4(uv * 2.0f + -1.0f, 0.0f, 1.0f);
+
+			})";
+
+	const char* deffered_fragment_shader =
+		R"(#version 450
+		layout(location = 0) in vec2 uv;
+		layout(location = 0) out vec4 outColor;
+
+		layout(set = 0, binding = 0) uniform sampler pointSampler;
+		layout(set = 0, binding = 1) uniform texture2D colorBuffer;
+		layout(set = 0, binding = 2) uniform texture2D posBuffer;
+		layout(set = 0, binding = 3) uniform texture2D normalBuffer;
+		layout(set = 0, binding = 4) uniform texture2D directLightBuffer;
+		layout(set = 0, binding = 5) uniform texture2D indirectLightBuffer;
+
+
+		layout(set = 1, binding = 0) uniform CompositingBuffer
+		{
+			//the position of the camera for the light
+			vec3	cameraPos;
+			//an index allowing to change the output to debug frames
+			uint	debugIndex;
+			//directionnal Light direction
+			vec3	directionalDir;
+			//specular Glossiness
+			float	specGlossiness;
+			//the color of the directional light
+			vec3	directionnalColor;
+			//the ambient occlusion
+			float	ambientOcclusion;
+			//cel Shading Diffuse Step
+			vec2	celDiffuseStep;
+			//cel shading spec Step
+			vec2	celSpecStep;
+		};
+
+		//gets the "intensity" of the pixel, basically computing the length
+		float intensity(vec3 vec) {
+			return sqrt(dot(vec,vec));
+		}
+
+		//sobel filter coming from the wikipedia definition 
+		float sobel(texture2D textureToSample, vec2 uv)
+		{
+			float x = 0;
+			float y = 0;
+
+			vec2 offset = vec2(1.0,1.0);
+
+			float a  = 1.0f;
+			float b = 2.0f;
+
+			x += intensity(texture(sampler2D(textureToSample,pointSampler), uv + vec2(-offset.x, -offset.y)).rgb) * -a;
+			x += intensity(texture(sampler2D(textureToSample,pointSampler), uv + vec2(-offset.x,         0)).rgb) * -b;
+			x += intensity(texture(sampler2D(textureToSample,pointSampler), uv + vec2(-offset.x,  offset.y)).rgb) * -a;
+								   
+			x += intensity(texture(sampler2D(textureToSample,pointSampler), uv + vec2(offset.x, -offset.y)).rgb)  * a;
+			x += intensity(texture(sampler2D(textureToSample,pointSampler), uv + vec2(offset.x,			0)).rgb)  * b;
+			x += intensity(texture(sampler2D(textureToSample,pointSampler), uv + vec2( offset.x,  offset.y)).rgb) * a;
+								   
+			y += intensity(texture(sampler2D(textureToSample,pointSampler), uv + vec2(-offset.x, -offset.y)).rgb) * -a;
+			y += intensity(texture(sampler2D(textureToSample,pointSampler), uv + vec2(0,		 -offset.y)).rgb) * -b;	   
+			y += intensity(texture(sampler2D(textureToSample,pointSampler), uv + vec2( offset.x, -offset.y)).rgb) * -a;
+								   
+			y += intensity(texture(sampler2D(textureToSample,pointSampler), uv + vec2(-offset.x, offset.y)).rgb ) * a;
+			y += intensity(texture(sampler2D(textureToSample,pointSampler), uv + vec2(0,		 offset.y)).rgb ) * b;
+			y += intensity(texture(sampler2D(textureToSample,pointSampler), uv + vec2( offset.x,  offset.y)).rgb) * a;
+
+			return sqrt(x * x + y * y);
+		}
+
+		void main()
+		{
+			const vec3 pos = texture(sampler2D(posBuffer,pointSampler),uv).rgb;
+			const vec3 normal = texture(sampler2D(normalBuffer,pointSampler),uv).rgb;
+			const vec3 color = texture(sampler2D(colorBuffer,pointSampler),uv).rgb;
+			const vec3 directLight = texture(sampler2D(directLightBuffer,pointSampler),uv).rgb;
+			const vec3 indirectLight = texture(sampler2D(indirectLightBuffer,pointSampler),uv).rgb;
+
+			const float outline = sobel(normalBuffer, uv);
+
+			if (dot(normal,normal) == 0.0)
+			{
+				outColor = vec4(color,1.0);
+				return;
+			}
+
+			//the compositing input
+			if (debugIndex == 0)
+			{
+				//light = specular + diffuse + ambient occlusion
+				outColor = vec4(color * (directLight + indirectLight + ambientOcclusion),1.0);
+			}
+			else if (debugIndex == 1)
+			{
+				outColor = vec4(pos,1.0);
+			}
+			else if (debugIndex == 2)
+			{
+				outColor = vec4(normal*0.5+0.5,1.0);
+			}
+			else if (debugIndex == 3)
+			{
+				outColor = vec4(color,1.0);
+			}
+			else if (debugIndex == 4)
+			{
+				outColor = vec4(directLight,1.0);
+			}
+			else if (debugIndex == 5)
+			{
+				outColor = vec4(indirectLight,1.0);
+			}
+			else if (debugIndex == 6)
+			{
+				outColor = vec4(vec3(outline),1.0);
+			}
+		}
+		)";
+
+
+	{
+		VulkanHelper::ShaderScripts Script;
+
+		//add vertex shader
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_VERTEX_BIT, deffered_vertex_shader, "Raytraced-Cel Compositing Pass Vertex"))
+			_DefferedShaders.Add(Script);
+
+		//add fragment shader
+		if (CreateVulkanShaders(GAPI._VulkanUploader, Script, VK_SHADER_STAGE_FRAGMENT_BIT, deffered_fragment_shader, "Raytraced-Cel Compositing  Pass Frag"))
+			_DefferedShaders.Add(Script);
+	}
+}
 
 
 void RaytracedCel::Prepare(class GraphicsAPIManager& GAPI)
@@ -710,6 +804,10 @@ void RaytracedCel::Prepare(class GraphicsAPIManager& GAPI)
 		//then create the pipeline
 		PrepareVulkanProps(GAPI);
 	}
+
+	//a "zero init" of the transform values
+	_ObjData.scale = vec3{ 1.0f, 1.0f, 1.0f };
+	_ObjData.pos = vec3{ 0.0f, 0.0f, 0.0f };
 
 	//preparing hardware raytracing props
 	{
@@ -743,7 +841,32 @@ void RaytracedCel::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI
 
 	//realloate descriptor sets with the new number of frames
 	VulkanHelper::AllocateDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, GAPI._nb_vk_frames);
-	_RayFramebuffers.Alloc(2);
+
+
+	/*===== FRAMEBUFFERS ======*/
+
+	{
+		_RayFramebuffers.Alloc(2);
+
+		// creating the template lightBuffer object with data given in parameters
+		VkImageCreateInfo imageInfo{};
+		imageInfo.sType			= VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		imageInfo.imageType		= VK_IMAGE_TYPE_2D;//this helper is only for 2D images
+		imageInfo.format		= VK_FORMAT_R16G16B16A16_SFLOAT;//no need for full precision, but still need float
+		imageInfo.extent.width	= _GBUfferPipelineOutput._OutputScissor.extent.width;//we get width and height from the scissors 
+		imageInfo.extent.height = _GBUfferPipelineOutput._OutputScissor.extent.height;// (we may want to change the size to save memory, but for now this is easier)
+		imageInfo.extent.depth	= 1;
+		imageInfo.mipLevels		= 1u;
+		imageInfo.arrayLayers	= 1u;
+		imageInfo.tiling		= VK_IMAGE_TILING_OPTIMAL;//will only load images from buffers, so no need to change this
+		imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;//initial layout is unimportant
+		imageInfo.usage			= VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;//in the definition of framebuffer in this helper, we need this
+		imageInfo.sharingMode	= VK_SHARING_MODE_EXCLUSIVE;//we have two command queues : one for the app, one for the UI. the UI shouldn't use iamge we create.
+		imageInfo.samples		= VK_SAMPLE_COUNT_1_BIT;//still do not know when you would need more than one...
+		imageInfo.flags			= 0; // Optional
+		VulkanHelper::CreateFrameBuffer(GAPI._VulkanUploader, _RayFramebuffers[0], imageInfo, GAPI._nb_vk_frames);
+		VulkanHelper::CreateFrameBuffer(GAPI._VulkanUploader, _RayFramebuffers[1], imageInfo, GAPI._nb_vk_frames);
+	}
 
 	/*===== UNIFORM BUFFERS ======*/
 
@@ -754,11 +877,18 @@ void RaytracedCel::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI
 
 	for (uint32_t i = 0; i < GAPI._nb_vk_frames; i++)
 	{
-		//bind the back buffer to each descriptor
-		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _RayFramebuffer._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, 0, i);
+		//bind the framebuffers to each descriptor
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _RayFramebuffers[0]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, 1, i);
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _RayFramebuffers[1]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, 2, i);
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _GBuffers[0]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 3, i);
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _GBuffers[1]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 4, i);
+
+
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _DefferedDescriptors, _RayFramebuffers[0]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 4, i);
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _DefferedDescriptors, _RayFramebuffers[1]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 5, i);
 
 		//bind uniform buffer to each descriptor
-		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _RayUniformBuffer._GPUBuffer[i], 0, sizeof(UniformBuffer), 1, i);
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _RayUniformBuffer._GPUBuffer[i], 0, sizeof(UniformBuffer), 0, i);
 	}
 }
 
@@ -827,6 +957,18 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 
 	}
 
+	if (changedFlag)
+	{
+		mat4 transform = scale(_ObjData.scale.x, _ObjData.scale.y, _ObjData.scale.z) * intrinsic_rot(_ObjData.euler_angles.x, _ObjData.euler_angles.y, _ObjData.euler_angles.z) * translate(_ObjData.pos);
+	
+		changedFlag = false;
+	
+		VulkanHelper::Uploader tmpUploader;
+		VulkanHelper::StartUploader(GAPIHandle, tmpUploader);
+		VulkanHelper::UpdateTransform(GAPIHandle._VulkanDevice, _RayTopAS, transform, 0, _RayBottomAS._AccelerationStructure.Nb());
+		VulkanHelper::UpdateRaytracedGroup(tmpUploader, _RayTopAS);
+		VulkanHelper::SubmitUploader(tmpUploader);
+	}
 
 	for (uint32_t i = 0; i < 3; i++)
 	{
@@ -836,38 +978,33 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 	}
 
 	DrawGPUBuffer(GAPIHandle);
-
-
-	//if (changedFlag)
-	{
-		mat4 transform = scale(_RayObjData.scale.x, _RayObjData.scale.y, _RayObjData.scale.z) * intrinsic_rot(_RayObjData.euler_angles.x, _RayObjData.euler_angles.y, _RayObjData.euler_angles.z) * translate(_RayObjData.pos);
-
-		changedFlag = false;
-
-		VulkanHelper::Uploader tmpUploader;
-		VulkanHelper::StartUploader(GAPIHandle, tmpUploader);
-		VulkanHelper::UpdateTransform(GAPIHandle._VulkanDevice, _RayTopAS, transform, 0, _RayBottomAS._AccelerationStructure.Nb());
-		VulkanHelper::UpdateRaytracedGroup(tmpUploader, _RayTopAS);
-		VulkanHelper::SubmitUploader(tmpUploader);
-	}
+	
 
 	//the buffer will change every frame as the object rotates every frame
 	memcpy(_RayUniformBuffer._CPUMemoryHandle[GAPIHandle._vk_current_frame], (void*)&_RayBuffer, sizeof(UniformBuffer));
 
-	// changing the back buffer to be able to being written by pipeline
-	VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayFramebuffer._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT,
-		VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	for (char i = 0; i < 2; i++)
+	{
+		// changing the back buffer to be able to being written by pipeline
+		VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayFramebuffers[i]._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT,
+			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	}
+
+	
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _RayPipeline);
 	//binding an available uniform buffer (current frame and frame index may be different, as we can ask for redraw multiple times while the frame is not presenting)
 	VkDescriptorSet currentSet[2] = { _RayPipelineStaticDescriptor._DescriptorSets[0], _RayPipelineDynamicDescriptor._DescriptorSets[GAPIHandle._vk_current_frame] };
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _RayLayout, 0, 2, currentSet, 0, nullptr);
+	
+	VK_CALL_KHR(GAPIHandle._VulkanDevice, vkCmdTraceRaysKHR, commandBuffer, &_RayShaderBindingTable._RayGenRegion, &_RayShaderBindingTable._MissRegion, &_RayShaderBindingTable._HitRegion, &_RayShaderBindingTable._CallableRegion, _GBUfferPipelineOutput._OutputScissor.extent.width, _GBUfferPipelineOutput._OutputScissor.extent.height, 1);
 
-	VK_CALL_KHR(GAPIHandle._VulkanDevice, vkCmdTraceRaysKHR, commandBuffer, &_RayShaderBindingTable._RayGenRegion, &_RayShaderBindingTable._MissRegion, &_RayShaderBindingTable._HitRegion, &_RayShaderBindingTable._CallableRegion, _CopyPipelineOutput._OutputScissor.extent.width, _CopyPipelineOutput._OutputScissor.extent.height, 1);
-
-	//allowing copy from write iamge to framebuffer
-	VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayFramebuffer._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
-		VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL);
+	for (char i = 0; i < 2; i++)
+	{
+		//allowing copy from write iamge to framebuffer
+		VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayFramebuffers[i]._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL);
+	}
 
 
 
@@ -903,10 +1040,6 @@ void RaytracedCel::Close(GraphicsAPIManager& GAPI)
 	//the memory allocated by the Vulkan Helper is volatile : it must be explecitly freed !
 	DefferedRendering::Close(GAPI);
 
-	//Clear geometry data
-	if (_RayModel._Meshes != nullptr)
-		ClearMesh(GAPI._VulkanDevice, _RayModel._Meshes[0]);
-	_RayModel._Meshes.Clear();
 	VulkanHelper::ClearSceneBuffer(GAPI._VulkanDevice, _RaySceneBuffer);
 
 	//clear Acceleration Structures
@@ -926,8 +1059,15 @@ void RaytracedCel::Close(GraphicsAPIManager& GAPI)
 	CLEAR_LIST(_RayShaders, _RayShaders.Nb(), VulkanHelper::ClearVulkanShader, GAPI._VulkanDevice);
 
 
-	//clear the fullscreen images buffer
-	ClearFrameBuffer(GAPI._VulkanDevice, _RayFramebuffer);
+	//clear the light buffers
+	if (_RayFramebuffers != nullptr)
+	{
+		for (char i = 0; i < 1; i++)
+		{
+			ClearFrameBuffer(GAPI._VulkanDevice, _RayFramebuffers[i]);
+		}
+		_RayFramebuffers.Clear();
+	}
 
 	//release pipeline objects
 	vkDestroyPipelineLayout(GAPI._VulkanDevice, _RayLayout, nullptr);
