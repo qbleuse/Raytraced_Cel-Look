@@ -836,6 +836,14 @@ void RaytracedCel::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI
 		ClearFrameBuffer(GAPI._VulkanDevice, _RayFramebuffers[1]);
 		_GBuffers.Clear();
 	}
+	if (_GBufferDrawnSemaphore != nullptr)
+	{
+		for (uint32_t i = 0; i < old_nb_frames; i++)
+		{
+			vkDestroySemaphore(GAPI._VulkanDevice, _GBufferDrawnSemaphore[i], nullptr);
+		}
+		_GBufferDrawnSemaphore.Clear();
+	}
 
 	/*===== DESCRIPTORS ======*/
 
@@ -868,6 +876,17 @@ void RaytracedCel::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI
 		VulkanHelper::CreateFrameBuffer(GAPI._VulkanUploader, _RayFramebuffers[1], imageInfo, GAPI._nb_vk_frames);
 	}
 
+
+	{
+		VkSemaphoreCreateInfo semaphoreInfo{};
+		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+		_GBufferDrawnSemaphore.Alloc(GAPI._nb_vk_frames);
+		for (uint32_t i = 0; i < GAPI._nb_vk_frames; i++)
+		{
+			VK_CALL_PRINT(vkCreateSemaphore(GAPI._VulkanDevice, &semaphoreInfo,nullptr, &_GBufferDrawnSemaphore[i]));
+		}
+	}
+
 	/*===== UNIFORM BUFFERS ======*/
 
 	//recreate the uniform buffer
@@ -880,8 +899,8 @@ void RaytracedCel::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI
 		//bind the framebuffers to each descriptor
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _RayFramebuffers[0]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, 1, i);
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _RayFramebuffers[1]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, 2, i);
-		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _GBuffers[0]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 3, i);
-		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _GBuffers[1]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 4, i);
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _GBuffers[0]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, 3, i);
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _GBuffers[1]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, 4, i);
 
 
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _DefferedDescriptors, _RayFramebuffers[0]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 4, i);
@@ -957,7 +976,7 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 
 	}
 
-	if (changedFlag)
+	//if (changedFlag)
 	{
 		mat4 transform = scale(_ObjData.scale.x, _ObjData.scale.y, _ObjData.scale.z) * intrinsic_rot(_ObjData.euler_angles.x, _ObjData.euler_angles.y, _ObjData.euler_angles.z) * translate(_ObjData.pos);
 	
@@ -978,6 +997,43 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 	}
 
 	DrawGPUBuffer(GAPIHandle);
+
+	{
+		//the pipeline stage at which the GPU should waait for the semaphore to signal itself
+		VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;//VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR
+
+		//we submit our commands, while setting the necesssary fences (semaphores on GPU), 
+		//to schedule work properly
+		VkSubmitInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		info.waitSemaphoreCount = 1;
+		info.pWaitSemaphores = &waitSemaphore;
+		info.pWaitDstStageMask = &wait_stage;
+		info.commandBufferCount = 1;
+		info.pCommandBuffers = &commandBuffer;
+		info.signalSemaphoreCount = 1;
+		info.pSignalSemaphores = &_GBufferDrawnSemaphore[GAPIHandle._vk_current_frame];
+
+		//closing our command record ...
+		VK_CALL_PRINT(vkEndCommandBuffer(commandBuffer));
+		//... and submit it straight away
+		VK_CALL_PRINT(vkQueueSubmit(GAPIHandle._VulkanQueues[0], 1, &info, nullptr));
+		VK_CALL_PRINT(vkQueueWaitIdle(GAPIHandle._VulkanQueues[0]));
+
+	}
+
+	{
+		//first, reset previous records
+		VK_CALL_PRINT(vkResetCommandBuffer(commandBuffer, 0));
+
+		//then open for record
+		VkCommandBufferBeginInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		info.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+		VK_CALL_PRINT(vkBeginCommandBuffer(commandBuffer, &info));
+
+	}
 	
 
 	//the buffer will change every frame as the object rotates every frame
@@ -987,6 +1043,9 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 	{
 		// changing the back buffer to be able to being written by pipeline
 		VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayFramebuffers[i]._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT,
+			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+		VulkanHelper::ImageMemoryBarrier(commandBuffer, _GBuffers[i]._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT,
 			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	}
 
@@ -1004,6 +1063,11 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 		//allowing copy from write iamge to framebuffer
 		VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayFramebuffers[i]._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
 			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL);
+	
+		//allowing copy from write iamge to framebuffer
+		VulkanHelper::ImageMemoryBarrier(commandBuffer, _GBuffers[i]._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL);
+
 	}
 
 
@@ -1019,7 +1083,7 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 		VkSubmitInfo info = {};
 		info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		info.waitSemaphoreCount = 1;
-		info.pWaitSemaphores = &waitSemaphore;
+		info.pWaitSemaphores = &_GBufferDrawnSemaphore[GAPIHandle._vk_current_frame];
 		info.pWaitDstStageMask = &wait_stage;
 		info.commandBufferCount = 1;
 		info.pCommandBuffers = &commandBuffer;
@@ -1067,6 +1131,15 @@ void RaytracedCel::Close(GraphicsAPIManager& GAPI)
 			ClearFrameBuffer(GAPI._VulkanDevice, _RayFramebuffers[i]);
 		}
 		_RayFramebuffers.Clear();
+	}
+
+	if (_GBufferDrawnSemaphore != nullptr)
+	{
+		for (uint32_t i = 0; i < GAPI._nb_vk_frames; i++)
+		{
+			vkDestroySemaphore(GAPI._VulkanDevice, _GBufferDrawnSemaphore[i], nullptr);
+		}
+		_GBufferDrawnSemaphore.Clear();
 	}
 
 	//release pipeline objects

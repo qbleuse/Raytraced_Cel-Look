@@ -23,6 +23,9 @@ private:
 
 	/* Vulkan */
 
+	//the semaphore to synchronize between G Buffer work and raytracing/compositing work
+	MultipleScopedMemory<VkSemaphore>	_GBufferDrawnSemaphore;
+
 	//the layouts and descriptors of this scene that can change in real time
 	VulkanHelper::PipelineDescriptors _RayPipelineDynamicDescriptor;
 	//the layouts and descriptors of this scene that does not change
