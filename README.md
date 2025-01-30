@@ -27,11 +27,11 @@ You will find almost everything I've done from the day I've started working on i
 
  Hereafter is the formal description of my research thesis (I have yet to publish it anywhere so it cannot be called an abstract but it is the idea).
 
- > Though having a weak start, with difficulty to attain accepatable framerate, year after year the number of game titles integrating  
+ > Though having a weak start, with difficulty to attain accepatable framerate, year after year the number of game titles integrating
  real-time raytracing is increasing with last year's "Indiana Jones and the Great Circle" being the first game to have raytracing as the only rendering engine.
- However, in this landscape, most games use real-time raytracing to aim for realistic rendering, while a lot of games prefer sytlized rendering,  
+ However, in this landscape, most games use real-time raytracing to aim for realistic rendering, while a lot of games prefer sytlized rendering,
  and animated movies and their rendering engines such as Pixar's RenderMan or Dreamworks MoonRay,  have developed new stylized rendering techniques with unique artistic expression.
- This research as for purpose an attempt at the implementation of a real-time stylized raytracing renderer for games or other real-time applications,  
+ This research as for purpose an attempt at the implementation of a real-time stylized raytracing renderer for games or other real-time applications,
  and the study of the merits and demerits of raytracing for stylized rendering, using Cel-Look as a study case.
 
 
@@ -71,8 +71,8 @@ Here is a list of the dependencies and resources used by this project
  - [the COLLADA Duck](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Duck) licensed by Sony under [SCEA Shared Source License, Version 1.0](https://spdx.org/licenses/SCEA.html)
  - [the Utah Teapot](https://graphics.cs.utah.edu/teapot/) (supposedly unlicensed)
 
- 
- As the performance is a priority, a graphics API that can use accelerated raytracing cores, that leaves us with : 
+
+ As the performance is a priority, a graphics API that can use accelerated raytracing cores, that leaves us with :
   - DirectX XII (and DirectX Raytracing)
   - Vulkan (and teh Vulkan Raytracing extension)
   - Metal
@@ -83,4 +83,32 @@ You may find all [references](#reference-&-resources) in a section lower, but th
 
 ## Features & Roadmap
 
-For real-time performance, the project is aiming to be a hybrid renderer using Vulkan, but before this, it is also the project where I learnt the tools and the theory behind my subject. 
+For real-time performance, the project is aiming to be a hybrid renderer using Vulkan.
+But before this, it is also the project where I learnt the tools and the theory behind my subject.
+You will find test scenes and features that are irrelevant to my subject.
+You can look at it if you are interested.
+
+Here is a list of available features and of features that are yet to be done, expressed by checkboxes.
+checkboxes marked are features that are available.
+Those that are not are for features that need or that would be nice to have.
+
+- [x] Cross Platform window management (using glfw)
+- [x] Detachable and movable UI window
+- [x] Basic Scene Manager
+- [x] Unified Camera settings and controls in all scenes
+ - [x] A scene with a rasterized triangle (to test basic Graphics API features)
+  - [x] movable triangle vertices by clicking or through UI (to test uniform buffers)
+  - [x] basic vertices color editing through the scene's UI (to test uniform buffers)
+ - [x] A scene with a rasterized gltf object (to test depth buffer, Input Layout and other features needed for model drawing)
+  - [x] The possibility to move the object in the scene through the UI (to test uniform buffers and my own matrices)
+  - [x] The possibility to move the camera in the scene (to test uniform buffers and my own matrices)
+ - [x] a scene implementing a CPU Raytracer based on Peter Shirley's [Raytracing In One Week-end](https://raytracing.github.io/books/RayTracingInOneWeekend.html) (to understand the basic principles of Raytracing)
+  - [x] a UI allowing to change ray rebound depth, nb of sample for depth, and other parameters
+  - [x] an accelerated generation of the frame using a basic theadpool
+  - [x] a "camera mode", using the same controls as any other scene that allows to move into the CPU raytraced scene by disabling multisampling and rebound
+  - [ ] compute optimization and memory optimization for the scene (right now using over 2Go for a 1600x800 pixel image)
+  - [ ] SIMD computation
+ - [x] a scene implementing GPU Raytracing based on Peter Shirley's [Raytracing In One Week-end](https://raytracing.github.io/books/RayTracingInOneWeekend.html) (using the Vulkan Raytracing Extension)
+  - [x] a UI allowing to change ray rebound depth, nb of sample for depth, and other parameters
+  - [x] a movable object in the scene (Utah Teapot) that can be moved in the scene's UI
+ - [x] a scene implementing a deffered renderer with basic Cel-Shading (to test deffered rendering in )
