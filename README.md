@@ -121,7 +121,7 @@ While I developed mostly on Windows, I did not really used clang tools to build 
 If you wish to use Visual Studio as a generator and and msvc as a compiler, you may by simply calling :
 
 ```bash
-cmake.exe -G "[Your Desired Visual Studio Version]" -B out/ -S ."
+cmake.exe -G "[Your Desired Visual Studio Version]" -B out/ -S .
 ```
 I have tested it and it works.
 
@@ -158,21 +158,21 @@ But I highly advise to just use Visual Studio's Cmake and clang Integration to c
 
 Mac build is actually quite straightforward.
 
-You need to install CMake (I used Homebrew for this), but as Apple uses AppleClang as the default compile, it is not difficult to make it work.
+You need to install CMake (I used Homebrew for this), but as Apple uses AppleClang as the default compiler, it is not difficult to make it work.
 
-if you want to use the default MakeFile process just use : 
-
-```bash
-cmake -B out/ -S ."
-```
-
-but I prefer to use XCode to build the project (for this you need to have XCode installed): 
+if you want to use the default Makefile process just use : 
 
 ```bash
-cmake -G="XCode" -B out/ -S ."
+cmake -B out/ -S .
 ```
 
-I find XCode more comfortable for the debugging features that it offers : mostly the gdb and the Metal Frame Debugger ; so you may not need it.
+But I prefer to use XCode to build the project (for this you need to have XCode installed): 
+
+```bash
+cmake -G="XCode" -B out/ -S .
+```
+
+I find XCode better for the debugging features that it offers : mostly for gdb and the Metal Frame Debugger ; so you may not need it.
 
 Then like for on Windows : 
 
@@ -190,19 +190,19 @@ to build from command line, or use XCode "Run" if you used XCode as a generator.
 
 ### Linux
 
-Linux is the only OS I did not test, but I have hope it should not be that different from compiling on Mac.
+Linux is the only OS I did not test, but I have hopes it should not be that different from compiling on Mac.
 
-If you are to compile on a Linux distribution, I think Makefile as a generator will work so as for Mac : 
+If you are to compile on a Linux distribution, I think Makefile as a generator will work, so as for Mac : 
 
 ```bash
-cmake -B out/ -S ."
+cmake -B out/ -S .
 ```
 Should be enough, but there is two things to keep in mind :
  - You need VulkanSDK
  - you need to compile with clang 
  - you may need to add missing dynamic and static libraries
 
-I am pretty certain that the project will not compile on gcc, so it would be better use clang if possible.
+I am pretty certain that the project will not compile on gcc, so it would be better to use clang if possible.
 
 Build after generation, as per usual is :
 
@@ -236,35 +236,35 @@ Here are thoughts I had while doing the project, related or unrelated to the res
 ## Reference & Resources
 
 Research Papers :
-	- [Toon Shading Using Distributed Raytracing](https://www.cs.rpi.edu/~cutler/classes/advancedgraphics/S17/final_projects/amy_toshi.pdf) ; pretty much what I aim to do, though it is more straightforward toon shading than Cel-Look.
-	- [“Non-photorealistic ray tracing with paint and toon shading” by Moon, Reddy and Tychonievich](https://history.siggraph.org/learning/non-photorealistic-ray-tracing-with-paint-and-toon-shading-by-moon-reddy-and-tychonievich/) ; an other instance of talented people already doing what I thought, but still not the Cel-Look I thought.
-	- [Global Illumination-Aware Stylised Shading](https://diglib.eg.org/bitstream/handle/10.1111/cgf14397/v40i7pp011-020.pdf) ; talented people with an incredibly potent raytracer doing stylized shading ; this in real-time would be awesome.
-	- [Hybrid Rendering For Real Time Raytracing](https://link.springer.com/chapter/10.1007/978-1-4842-4427-2_25) ; the inspiration to try to attain reasonable performance.
-	- [Ray-Tracing NPR-style Feature Lines](https://www.sci.utah.edu/~roni/for-roni/NPR-lines/NPR-lines.NPAR09.pdf) ; cel-look usually needs outline. with an hybrid raytracer it seems useless to do it through the raytracer, but still can be useful.
+ - [Toon Shading Using Distributed Raytracing](https://www.cs.rpi.edu/~cutler/classes/advancedgraphics/S17/final_projects/amy_toshi.pdf) ; pretty much what I aim to do, though it is more straightforward toon shading than Cel-Look.
+ - [“Non-photorealistic ray tracing with paint and toon shading” by Moon, Reddy and Tychonievich](https://history.siggraph.org/learning/non-photorealistic-ray-tracing-with-paint-and-toon-shading-by-moon-reddy-and-tychonievich/) ; an other instance of talented people already doing what I thought, but still not the Cel-Look I thought.
+ - [Global Illumination-Aware Stylised Shading](https://diglib.eg.org/bitstream/handle/10.1111/cgf14397/v40i7pp011-020.pdf) ; talented people with an incredibly potent raytracer doing stylized shading ; this in real-time would be awesome.
+ - [Hybrid Rendering For Real Time Raytracing](https://link.springer.com/chapter/10.1007/978-1-4842-4427-2_25) ; the inspiration to try to attain reasonable performance.
+ - [Ray-Tracing NPR-style Feature Lines](https://www.sci.utah.edu/~roni/for-roni/NPR-lines/NPR-lines.NPAR09.pdf) ; cel-look usually needs outline. with an hybrid raytracer it seems useless to do it through the raytracer, but still can be useful.
 
 Resources to learn and implement raytracing :
-	- [Difference between Path-Tracing and Raytracing](https://www.techspot.com/article/2485-path-tracing-vs-ray-tracing/)
-	- [Importance Sampling For Global Illumination](https://diglib.eg.org/server/api/core/bitstreams/0205c190-16aa-4f85-a26f-c7b3220683b9/content)
-	- [ReSTIR Method Paper](https://cdn.pharr.org/ReSTIR.pdf)
-	- [ReSTIR GI Method Paper](https://d1qx31qr3h6wln.cloudfront.net/publications/ReSTIR%20GI.pdf)
-	- [GPSnoopy's Raytracing in Vulkan](https://github.com/GPSnoopy/RayTracingInVulkan) ; cannot be more grateful for this repository to have all the answers I needed in an understandable and readable codebase.
-	- [Raytracing Denoiser](https://alain.xyz/blog/ray-tracing-denoising)
-	- [GPU PseudoRNG](https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/)
-	- [Sascha Willems's Vulkan Samples](https://github.com/SaschaWillems/Vulkan/tree/master)
-	- [The Vulkan Raytracing Tutorial](https://github.com/alelenv/vk_raytracing_tutorial) ; still helpful while I would rather use the Khronos extensions than the NVidia one for compatibility.
-	- [the all so helful vulkan raytracing extension text note](https://github.com/KhronosGroup/GLSL/blob/main/extensions/ext/GLSL_EXT_ray_tracing.txt) ; for glsl raytracing extension's syntax.
+ - [Difference between Path-Tracing and Raytracing](https://www.techspot.com/article/2485-path-tracing-vs-ray-tracing/)
+ - [Importance Sampling For Global Illumination](https://diglib.eg.org/server/api/core/bitstreams/0205c190-16aa-4f85-a26f-c7b3220683b9/content)
+ - [ReSTIR Method Paper](https://cdn.pharr.org/ReSTIR.pdf)
+ - [ReSTIR GI Method Paper](https://d1qx31qr3h6wln.cloudfront.net/publications/ReSTIR%20GI.pdf)
+ - [GPSnoopy's Raytracing in Vulkan](https://github.com/GPSnoopy/RayTracingInVulkan) ; cannot be more grateful for this repository to have all the answers I needed in an understandable and readable codebase.
+ - [Raytracing Denoiser](https://alain.xyz/blog/ray-tracing-denoising)
+ - [GPU PseudoRNG](https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/)
+ - [Sascha Willems's Vulkan Samples](https://github.com/SaschaWillems/Vulkan/tree/master)
+ - [The Vulkan Raytracing Tutorial](https://github.com/alelenv/vk_raytracing_tutorial) ; still helpful while I would rather use the Khronos extensions than the NVidia one for compatibility.
+ - [the all so helful vulkan raytracing extension text note](https://github.com/KhronosGroup/GLSL/blob/main/extensions/ext/GLSL_EXT_ray_tracing.txt) ; for glsl raytracing extension's syntax.
 	
 Resources on stylized shading or cel-look : 
-	- [Locally Controllable Stylised Shading](https://www-ui.is.s.u-tokyo.ac.jp/~takeo/papers/todo_siggraph2007_shading.pdf)
-	- [cel-look pipeline and challenges to take advantage of hand drawn animation](https://a-film-production-technique-seminar.com/fppat/materials/ppi_phones_possibility_celook_pipeline_challenges/index.html)
+ - [Locally Controllable Stylised Shading](https://www-ui.is.s.u-tokyo.ac.jp/~takeo/papers/todo_siggraph2007_shading.pdf)
+ - [cel-look pipeline and challenges to take advantage of hand drawn animation](https://a-film-production-technique-seminar.com/fppat/materials/ppi_phones_possibility_celook_pipeline_challenges/index.html)
 
 Example of what I am looking for :
-	- Difference between the [final cut of Kyoto Ani](https://sakugabooru.com/post/show/259302) and the [Genga](https://sakugabooru.com/post/show/259594) in the latest "Hibike Euphonium" season.
+ - Difference between the [final cut of Kyoto Ani](https://sakugabooru.com/post/show/259302) and the [Genga](https://sakugabooru.com/post/show/259594) in the latest "Hibike Euphonium" season.
 
 
 Example of use of raytracing in cel-look titles
-	- [The Idolmaster: Starlit Season Ray Tracing ON vs OFF 4K RTX 3090](https://youtu.be/Xzn98J44VTU) ; only reflections on the ground...
-	- [Real Toon Shader in DXR | Unity HDRP](https://www.youtube.com/watch?v=7_VEjFL8O1w) ; proof that toon shader is transferable (and transfered), into real-time raytracing engines.
+ - [The Idolmaster: Starlit Season Ray Tracing ON vs OFF 4K RTX 3090](https://youtu.be/Xzn98J44VTU) ; only reflections on the ground...
+ - [Real Toon Shader in DXR | Unity HDRP](https://www.youtube.com/watch?v=7_VEjFL8O1w) ; proof that toon shader is transferable (and transfered), into real-time raytracing engines.
 
 ## License
 
