@@ -13,4 +13,4 @@ set (SRC_FILES
 	"${CMAKE_CURRENT_SOURCE_DIR}/RaytracedCel.cpp")
 
 # add to executable
-target_sources(VulkanLearning PUBLIC ${SRC_FILES})
+target_sources(RaytracedCel PUBLIC ${SRC_FILES})

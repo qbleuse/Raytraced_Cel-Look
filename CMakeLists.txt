@@ -26,10 +26,10 @@ set(INC_DIR "${CMAKE_SOURCE_DIR}/include")
 include_directories("${INC_DIR}/")
 
 # Add source to this project's executable.
-add_executable (VulkanLearning "main.cpp")
+add_executable (RaytracedCel "main.cpp")
 
 #if (CMAKE_VERSION VERSION_GREATER 3.12)
-#    set_property(TARGET VulkanLearning PROPERTY CXX_STANDARD 20)
+#    set_property(TARGET RaytracedCel PROPERTY CXX_STANDARD 20)
 #endif()
 
 # Add sub projects.
@@ -39,15 +39,15 @@ add_subdirectory(${DEPS_DIR})
 find_package(Vulkan REQUIRED COMPONENTS shaderc_combined)
 
 # Add libraries
-target_link_libraries(VulkanLearning PUBLIC "Vulkan::Vulkan")
-target_link_libraries(VulkanLearning PUBLIC "Vulkan::shaderc_combined")
+target_link_libraries(RaytracedCel PUBLIC "Vulkan::Vulkan")
+target_link_libraries(RaytracedCel PUBLIC "Vulkan::shaderc_combined")
 
 
 # Copy Dll
 if (WIN32)
-    add_custom_command(TARGET VulkanLearning POST_BUILD
+    add_custom_command(TARGET RaytracedCel POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E  copy
-            "$<TARGET_RUNTIME_DLLS:VulkanLearning>"
-            "$<TARGET_FILE_DIR:VulkanLearning>"
+            "$<TARGET_RUNTIME_DLLS:RaytracedCel>"
+            "$<TARGET_FILE_DIR:RaytracedCel>"
     COMMAND_EXPAND_LISTS)
 endif()

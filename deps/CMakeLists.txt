@@ -15,12 +15,12 @@ set (DEPS_SRC_FILES
     "${IMGUI_SRC}/imgui_tables.cpp"
     "${IMGUI_SRC}/imgui_widgets.cpp")
 
-target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/")
-target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/imgui/")
-target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/GLFW/")
-target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/tiny/")
-target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/stb/")
-target_include_directories(VulkanLearning PUBLIC "${DEPS_INC}/rapidjson/")
+target_include_directories(RaytracedCel PUBLIC "${DEPS_INC}/")
+target_include_directories(RaytracedCel PUBLIC "${DEPS_INC}/imgui/")
+target_include_directories(RaytracedCel PUBLIC "${DEPS_INC}/GLFW/")
+target_include_directories(RaytracedCel PUBLIC "${DEPS_INC}/tiny/")
+target_include_directories(RaytracedCel PUBLIC "${DEPS_INC}/stb/")
+target_include_directories(RaytracedCel PUBLIC "${DEPS_INC}/rapidjson/")
 
 
 #define lib
@@ -36,7 +36,7 @@ elseif(APPLE)
 endif()
 
 # Add libraries
-target_link_libraries(VulkanLearning PUBLIC "GLFW")
+target_link_libraries(RaytracedCel PUBLIC "GLFW")
 
 
-target_sources(VulkanLearning PUBLIC ${DEPS_SRC_FILES})
+target_sources(RaytracedCel PUBLIC ${DEPS_SRC_FILES})
