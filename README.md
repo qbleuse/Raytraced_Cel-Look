@@ -273,4 +273,4 @@ Example of use of raytracing in cel-look titles
 Everything that is in the [src](src/) and [include](include/) folder are made by me which is licensed under the MIT License, see [LICENSE](LICENSE) for more information.
 
 For everything else, I do not own, and each resource is under their own license.
-You may find more in the [Repository Structure & Explanation](#repository-structure-&-explanation) chapter.
+You may find more in the [Repository Structure & Explanation](#repository-structure--explanation) chapter.
