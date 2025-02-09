@@ -240,7 +240,7 @@ CMakeLists.txtでダイナミックライブラリーは自動で実行ファイ
 
 ## 参考文献
 
-申し訳ないですけど、自分が参考した記事や研究は英語が多いので[英語版の方のREADMEを参照してください](README.md#reference-&-resources)。
+申し訳ないですけど、自分が参考した記事や研究は英語が多いので[英語版の方のREADMEを参照してください](README.md#reference--resources)。
 
 ## ライセンス
 

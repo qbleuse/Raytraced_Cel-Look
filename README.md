@@ -11,7 +11,7 @@ You will find almost everything I've done from the day I've started working on i
 	- [Table Of Contents](#table-of-contents)
 	- [Abstract/Introduction](#abstract-/-introduction)
 	- [Features & Roadmap](#features-&-roadmap)
-	- [Repository Structure & Explanation](#repository-structure-&-explanation)
+	- [Repository Structure & Explanation](#repository-structure--explanation)
 	- [Building](#building)
 		- [Windows](#windows)
 		- [MacOS](#macoS)
