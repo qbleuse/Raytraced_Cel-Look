@@ -9,15 +9,14 @@
 	- [目次](#目次)
 	- [研究紹介](#研究紹介)
 	- [機能と大まかなプラン](#機能と大まかなプラン)
-	- [Repository Structure & Explanation](#repository-structure-&-explanation)
-	- [Building](#building)
+	- [レポジトリー構造と説明](#レポジトリー構造と説明)
+	- [Building](#ビルド)
 		- [Windows](#windows)
 		- [MacOS](#macoS)
 		- [Linux](#linux)
-	- [Running](#running)
-	- [Thoughts](#toughts)
-	- [Reference & Resources](#reference-&-resources)
-	- [License](#license)
+	- [実行](#実行)
+	- [参考文献](#参考文献)
+	- [ライセンス](#ライセンス)
 
  ## 研究紹介
 
@@ -42,233 +41,211 @@
 なので、このレポジトリーでは本研究とは関係ないsceneや機能もあります。
 下記が現段階で実装されているsceneの全てになります。
 
-- ラスタライズされる三角形　(グラフィクスAPIを理解するため)
-- Rasterized gltf object (to test depth buffer, Input Layout and other features needed for model drawing)
-- CPU Raytracer based on Peter Shirley's [Raytracing In One Week-end](https://raytracing.github.io/books/RayTracingInOneWeekend.html) (to understand the basic principles of Raytracing)
-- GPU Raytracing based on Peter Shirley's [Raytracing In One Week-end](https://raytracing.github.io/books/RayTracingInOneWeekend.html) (using the Vulkan Raytracing Extension)
-- Deffered renderer with basic Cel-Shading (to test deffered rendering in Vulkan)
-- Hybrid rasterizer for real-time raytracing performance
+- ラスタライズされる三角形　(VulkanのグラフィクスAPIを馴染めるため)
+- ラスタライズされるgltfモデル　(Zバッファ, インプットレイアウトなどモデルを表示するための必要な機能を馴染めるため)
+- Peter Shirleyの[Raytracing In One Week-end](https://raytracing.github.io/books/RayTracingInOneWeekend.html)を基にCPUでのレートレーサーの作成 (レートレーシングの原則を理解するため)
+- Peter Shirleyの[Raytracing In One Week-end](https://raytracing.github.io/books/RayTracingInOneWeekend.html)を基にGPUでのレートレーサーの作成 (「Vulkan Raytracing」を使用して)
+- 基本的なセルルック（ToonShading）を実装する遅延レンダラー(Vulkanでの遅延レンダリングはどのようにするのかを理解するため)
+- リアルタイム性能を考えてのハイブリッドレートレーサーの実装
 
-Arguably, only the last two have something to do with my research.
+恐らく最後の二つしか本当に研究に関係があります。
 
-Here is a list of available features :
+下記が実装されている機能になります。
 
-- [x] Cross Platform window management (using glfw)
-- [x] Basic scene manager
-- [x] Detachable and movable UI window with control over parameters of each scene
-- [x] Unified camera settings and free camera control in all 3D scenes
+- [x] ｇｌｆｗでのクロスプラットフォームウインドウ管理
+- [x] 基本的なscene管理
+- [x] 着脱と移動可能なUIとsceneごとの操作パラメター
+- [x] まとめられたカメラ設定と3Dsceneでのカメラの自由操作
 
-To compare rasterized cel-shading, and raytraced cel-shading, we would need to:
+ラストライザーセルルックと研究の目標のレートレーサーセルルックを比べるためには、必要なのは：
 
-- [ ] implement a proper cel-shader (a basic version of the popular [NiloToonURP](https://github.com/ColinLeung-NiloCat/UnityURPToonLitShaderExample))
-- [ ] implement a proper hybrid raytracer with all its advantages
-- [ ] study the "cel-look", and integrate this look into the hybrid raytracer
-- [ ] compare the styles
+- [ ] ちゃんとしたセルルックの開発　(多分大人気の[NiloToonURP](https://github.com/ColinLeung-NiloCat/UnityURPToonLitShaderExample)を例にします)
+- [ ] ちゃんとしたハイブリッドレートレーサの開発
+- [ ] 「セルルック」と言ものが何なのかを研究して、それをレートレーサーに組み込む
+- [ ] 最後に比べて、利点と減点を述べる
 
-This is the basic roadmap.
+みたいなプランになります。
 
- ## Repository Structure & Explanation
+ ## レポジトリー構造と説明
 
- The repository is structured as such:
+レポジトリーの構造は下記の通り：
 
-- Root
-	- [deps](deps/) : the folder including all dependencies of this project
-		- [bin](deps/bin/) : the folder including depedencies' dynamic libraries
-		- [include](deps/include/) : the folder including depedencies' include
-		- [libs](deps/libs/) : the folder including depedencies' static libraries
-		- [src](deps/src/) : the folder including depedencies' sources that needs to be compiled
-	- [include](include/) : the folder for all include files of this project
-	- [media](media/) : the media used for the project (such as models and textures)
-	- [src](src/) : the folder for all source files of this project
+- ルート
+	- [deps](deps/) : この研究が依存している物tが全て入っているフォルダー
+		- [bin](deps/bin/) : この研究が依存しているダイナミックライブラリー
+		- [include](deps/include/) : この研究が依存しているインクルード
+		- [libs](deps/libs/) : この研究が依存している静的ライブラリー
+		- [src](deps/src/) : この研究が依存している、コンパリルが必要なソースコード
+	- [include](include/) : 自分が研究で開発したインクルード
+	- [media](media/) : この研究が使っているメディア　(モデルやテキスチャーなど)
+	- [src](src/) : 自分が研究で開発したソースコード
 
-All dependencies and resources are in the [deps](deps/) and [media](media/) folders, with things I have not done and do not own with each having their own license.
-Files I have made for this project are in the [src](src/) and [include](include/) folders, and are subject to this repository's license.
+この研究が依存しているサードパーティー技術や物は[deps](deps/)で、動くため必要なメディアは[media](media/)フォルダーに分けられていて、全てに違うライセンスがあります。（基本的にオープンソースで見つけた物なので、問題ないですけど、念のためご確認ください）。
+自分が作成したファイルは全て[src](src/)と [include](include/)フォルダーにあります。これはこのレポジトリーのライセンスに属する物になります。
 
-Here is a list of the dependencies and resources used by this project
+下記がこの研究が依存しているサードパーティーになります。
 - deps
-	- [GLFW](https://www.glfw.org/) for multiplatform window interfacing
-	- [Dear ImGUI](https://github.com/ocornut/imgui) for simple UI
-	- [Rapid Json](https://rapidjson.org/) for json parsing used in gltf loading
-	- [stb_image](https://github.com/nothings/stb/tree/master) for jpeg texture loading
-	- [tiny_gltf](https://github.com/syoyo/tinygltf) for gltf loading
-	- [tiny_obj](https://github.com/tinyobjloader/tinyobjloader) for obj loading
+	- [GLFW](https://www.glfw.org/)　クロスプラットフォームウインドウ管理
+	- [Dear ImGUI](https://github.com/ocornut/imgui)　簡単なUI
+	- [Rapid Json](https://rapidjson.org/)　ｇｌｔｆローディングに必要なjsonパージング
+	- [stb_image](https://github.com/nothings/stb/tree/master)　jpegローディング
+	- [tiny_gltf](https://github.com/syoyo/tinygltf)　gltfローディング
+	- [tiny_obj](https://github.com/tinyobjloader/tinyobjloader)　objローディング
 - media
-	- [the COLLADA Duck](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Duck) licensed by Sony under [SCEA Shared Source License, Version 1.0](https://spdx.org/licenses/SCEA.html)
-	- [the Utah Teapot](https://graphics.cs.utah.edu/teapot/) (supposedly unlicensed)
+	- [the COLLADA Duck](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/Duck)　ソニーが[SCEA Shared Source License, Version 1.0](https://spdx.org/licenses/SCEA.html)のライセンスで配布しているアヒルのモデル
+	- [the Utah Teapot](https://graphics.cs.utah.edu/teapot/)　(多分ライセンスなし)
 
- As performance is a priority, we need to use a graphics API that can use accelerated raytracing cores, that leaves us with :
-  - DirectX 12 (and DirectX Raytracing)
-  - Vulkan (and the Vulkan Raytracing extension)
+リアルタイム性能を鑑みて、ハードウエアアクセラレーションを使用するレートレーシングが使える最新のグラフィクスAPIを使わざるを得ません。その中だと：
+  - DirectX12(DirectX Raytracingを使って)
+  - Vulkan(Vulkan Raytracingを使って)
   - Metal
 
-In the interest of multi-platform compatibility, I chose Vulkan, and thus use the Vulkan SDK.
-I took great inspiration of [GPSnoopy's Raytracing in Vulkan](https://github.com/GPSnoopy/RayTracingInVulkan) repository, particularly for glsl shader's raytracing syntax.
-You may find all [references](#reference-&-resources) in a section lower, but this one being very prominent, I prefered to cite it here.
+クロスプラットフォームのためにVulkanを選びました。なので、VulkanSDKも使っています。
 
+最後に、この研究で[GPSnoopyの「Raytracing in Vulkan」](https://github.com/GPSnoopy/RayTracingInVulkan)を凄く参考にしました、特にｇｌｓｌレートレースシェダーのシンタックス。
+自分が参照にした物や記事は全て[references](README.md#reference-&-resources)で見学できますが、特に参考にしましたので先に述べていただきました。
 
-## Building
-		
-As the project was developed on Vulkan, it is supposed to compile and run on most platform, however I did not test on every platform.
-Also as this projects uses Vulkan, you need to install the [Vulkan SDK](https://www.vulkan.org/tools#download-these-essential-development-tools) to make it work.
+## ビルド 
+	
+この研究がVulkanを使って開発されたため、ほとんどのOSでコンパイルして実行できると思いますが、全てのOSでテストを行った訳ではないのでご了承ください。
+当たり前ながらも、コンパイルできるために各OSでの[Vulkan SDK](https://www.vulkan.org/tools#download-these-essential-development-tools)をインストールしなけてはなりません。
 
-The project uses CMake to build, to make it easier to compile on most platforms, and it should work on most.
-However, it was only compiled using clang as a compiler, so be careful to use clang as a C/CXX compiler.
+クロスプラットフォームコンパイルを可能にするべく、CMakeを使用しました。
+でもCMakeだけで、どんな方法でもコンパイルできるとは限りませんので、そのためにクロスプラットフォーム性能が高いClangコンパイラーを使いましたので推奨します。（CMakeのC/CXXコンパイラー設定で付けるようを忘れずに）
 
 ### Windows
 
-While I developed mostly on Windows, I did not really used clang tools to build the project, but mostly Visual Studio 2022's CMake integration to compile as it was easier (thus the CMake Presets.json in the root folder of the repository).
+主にWindowsで開発したが、CMakeのツールを使った訳ではございません。Visual Studio ２０２２のCMakeツールを使って開発してました。（ルートディレクトリにあるCMakePresets.jsonはそのためです）。
+なので、その方法を推奨します。
 
-If you wish to use Visual Studio as a generator and and msvc as a compiler, you may by simply calling :
+直接CMakeを使いたいのであれば、方法はいくつかありますが、Visual Studioをジェネレータでｍｓｖｃをコンパイラーを使いたいのであれば：
 
 ```bash
-cmake.exe -G "[Your Desired Visual Studio Version]" -B out/ -S .
+cmake.exe -G "[使いたいVisual Studioのバージョン]" -B out/ -S .
 ```
-I have tested it and it works.
 
-If you want to compile with Ninja and clang like I have done, I recommend the CMake integration and clang compiler of Visual Studio, as everything will work just by opening visual studio at the root of the repository.
+一回試して、出来たので多分今も問題ないと思います。
 
-However, if you want to do it with your own installed tools, you may try, but I was not successful in making it work.
-The visual studio extension uses Ninja to generate the output directory and CMake Cache.
-The generation command I get is close to:
+自分が使ったNinjaをジェネレータとclangをコンパイラーを使いたいとすると、改めてVisual Studio ２０２２のCMakeツールをインストールしてプロジェクトをルートディレクトリで開いてコンパイルすると言う方法を推奨します。
+
+自分のツールでコンパイルしたいのであれば、試してもいいですけど、自分では出来なかったので、ちょっと試行錯誤が必要になるとおもいなす。
+Visual StudioのツールがNinjaを使ってアウトプットディレクトリとCMakeのキャッシュを構築しています。
+生成されるコマンドは下記に近いです：
 
 ```bash
 cmake.exe -G "Ninja" -B out/ -S . -DCMAKE_C_COMPILER="cl.exe" -DCMAKE_CXX_COMPILER="cl.exe"
 ```
 
-But you should not really rely on this command, as visual studio adds a lot to the environment to make the command work.
-Do not forget to add VK_SDK_PATH in your environment variable as the installed directory of your [Vulkan SDK](https://www.vulkan.org/tools#download-these-essential-development-tools) .
+コマンドだけだと、Visual Studioが付ける環境が見えないので、それだけだと不足になります。
+そして、Windowsの環境変数にVK_SDK_PATHをインストールした[Vulkan SDK](https://www.vulkan.org/tools#download-these-essential-development-tools)のディレクトリを付けるようを忘れずに。
 
-After the project is generated you can use :
-
+プロジェクトが生成された後はコンパイルは下記のコマンドで：
 ```bash
 cmake.exe --build out/ -DCMAKE_BUILD_TYPE="Debug"
 ```
-
-or 
 
 ```bash
 cmake.exe --build out/ -DCMAKE_BUILD_TYPE="Release"
 ```
 
-To build it in either Debug or Release config.
-
-But I highly advise to just use Visual Studio's Cmake and clang Integration to compile as the project was not made with command line build in mind.
+デバッグかリリースでコンパイルできます。
+VisualStudio内だとコマンドは必要ありません。普通にVisualStudioでのビルド機能を使ってコンパイルしたら大丈夫です。
 
 ### MacOS
 
-Mac build is actually quite straightforward.
+Macでのビルドは思ったより単純です。
 
-You need to install CMake (I used Homebrew for this), but as Apple uses AppleClang as the default compiler, it is not difficult to make it work.
+勿論、CMakeをインストールしなけてはなりません。（自分の場合だとHomebrewでやりました）。
+AppleはすでにAppleClangをデフォルトコンパイラーとして使っているのでclangをインストール必要がないはず。（なかったら、インストールがひつようです）。
 
-if you want to use the default Makefile process just use : 
+MacOSでのデフォルトジェネレータのMakefileを使いたいなら：
 
 ```bash
 cmake -B out/ -S .
 ```
 
-But I prefer to use XCode to build the project (for this you need to have XCode installed): 
+で大丈夫です。
+自分はXCodeを使う方が好きです。（XCodeがインストールされているの話しですけどね）。
+それだと：
 
 ```bash
 cmake -G="XCode" -B out/ -S .
 ```
 
-I find XCode better for the debugging features that it offers : mostly for gdb and the Metal Frame Debugger ; so you may not need it.
+XCodeはデバッグ機能が充実していて。ｇｄｂやＭｅｔａｌのＦｒａｍｅ Debuggerが便利ですけど、別に使わないのであれば、どっちでもいいと思います。
 
-Then like for on Windows : 
+プロジェクトが生成される後は、Windowsと同じ: 
 
 ```bash
 cmake --build out/ -DCMAKE_BUILD_TYPE="Debug"
 ```
 
-or 
+か
 
 ```bash
 cmake --build out/ -DCMAKE_BUILD_TYPE="Release"
 ```
 
-to build from command line, or use XCode "Run" if you used XCode as a generator.
+デバッグかリリースでコンパイルできます。
+
+XCodeだとXCode内でのビルドコマンドでできます。
 
 ### Linux
 
-Linux is the only OS I did not test, but I have hopes it should not be that different from compiling on Mac.
+唯一試していないOSはLinuxとそのディストリビューションですが、Macとそんなに違いないと思います。
 
-If you are to compile on a Linux distribution, I think Makefile as a generator will work, so as for Mac : 
+LinuxだとMakefileをジェネレータに使ってのプロジェクト生成がいいかと。
+コマンドとしては、デフォルトの：
 
 ```bash
 cmake -B out/ -S .
 ```
-Should be enough, but there is two things to keep in mind :
- - You need VulkanSDK
- - you need to compile with clang 
- - you may need to add missing dynamic and static libraries
 
-I am pretty certain that the project will not compile on gcc, so it would be better to use clang if possible.
+で足りるかどうかは不明ですけど、注意すべき点を述べると：
+ - VulkanSDKをインストールすること
+ - clangでコンパイルすること
+ - 依存しているライブラリーを付けること
+が必要になると思います。
 
-Build after generation, as per usual is :
+ｇｃｃだとコンパイルできないと思うので他のＯＳだとclangでコンパイルできたので、直接clangでコンパイルするのが早いと思います。
+そして、ライブラリーの件にしましては、[deps](deps/)のディレクトリでWindowsやMacOSの研究が依存しているサードパーティーのダイナミックライブラリーや静的ライブラリーを付けたのでっすけど、OSごとにフォーマットが異なるのでLinuxの方を探さないと行けないと思います。
+
+いつも通り、プロジェクトが生成された後は、普通に：
 
 ```bash
 cmake --build out/ -DCMAKE_BUILD_TYPE="Debug"
 ```
 
-or 
+か
 
 ```bash
 cmake --build out/ -DCMAKE_BUILD_TYPE="Release"
 ```
 
-Depending on the desired configuration.
+デバッグかリリースでコンパイルできると思います。
 
-## Running
+## 実行
 
-For every platform the one thing that needs to be taken into account is where is the media folder from the produced executable as path is based on the windows config for now.
+プラットフォーム問わず唯一考慮しないといけないのは充実ファイルとメディアディレクトリの居場所。実行のためのリーソースがはいってるので。（今のところWindowsの方の相対パスになってます）
 
-Depending on your CMake building method, the executable will be produced somewhere else.
-the CMakeList copies the dynamic libraries needed next to the executable, so it can be run by just calling
+ビルド方法によって実行ファイルの居場所が異なります。
+上に載っているコマンドを使ったであればoutのディレクトリで産出されましたが、そのディレクトリのルートかどうかはジェネレータによって異なります。
+CMakeLists.txtでダイナミックライブラリーは自動で実行ファイルの隣にコピーされるので実行自体は問題ないと思います。
+
+ダブルクリックやコマンドなど、好きな方法で実行してください。
 
 ```bash
-./[path/to/excutable]/RaytracedCel[.exe]
+./[実行ファイルまでのパス]/RaytracedCel[.exe]
 ```
 
-## Thoughts
+## 参考文献
 
-Here are thoughts I had while doing the project, related or unrelated to the research.
+申し訳ないですけど、自分が参考した記事や研究は英語が多いので[英語版の方のREADMEを参照してください](README.md#reference-&-resources)。
 
-## Reference & Resources
+## ライセンス
 
-Research Papers :
- - [Toon Shading Using Distributed Raytracing](https://www.cs.rpi.edu/~cutler/classes/advancedgraphics/S17/final_projects/amy_toshi.pdf) ; pretty much what I aim to do, though it is more straightforward toon shading than Cel-Look.
- - [“Non-photorealistic ray tracing with paint and toon shading” by Moon, Reddy and Tychonievich](https://history.siggraph.org/learning/non-photorealistic-ray-tracing-with-paint-and-toon-shading-by-moon-reddy-and-tychonievich/) ; an other instance of talented people already doing what I thought, but still not the Cel-Look I thought.
- - [Global Illumination-Aware Stylised Shading](https://diglib.eg.org/bitstream/handle/10.1111/cgf14397/v40i7pp011-020.pdf) ; talented people with an incredibly potent raytracer doing stylized shading ; this in real-time would be awesome.
- - [Hybrid Rendering For Real Time Raytracing](https://link.springer.com/chapter/10.1007/978-1-4842-4427-2_25) ; the inspiration to try to attain reasonable performance.
- - [Ray-Tracing NPR-style Feature Lines](https://www.sci.utah.edu/~roni/for-roni/NPR-lines/NPR-lines.NPAR09.pdf) ; cel-look usually needs outline. with an hybrid raytracer it seems useless to do it through the raytracer, but still can be useful.
+上にも書いている通り、[src](src/)と[include](include/)に入っている全ては自分で作成しましたので、このレポジトリーのライセンスのMIT Licenseの対象となります。
+詳しくは[LICENSE](LICENSE)をご確認ください。（えいごになります）
 
-Resources to learn and implement raytracing :
- - [Difference between Path-Tracing and Raytracing](https://www.techspot.com/article/2485-path-tracing-vs-ray-tracing/)
- - [Importance Sampling For Global Illumination](https://diglib.eg.org/server/api/core/bitstreams/0205c190-16aa-4f85-a26f-c7b3220683b9/content)
- - [ReSTIR Method Paper](https://cdn.pharr.org/ReSTIR.pdf)
- - [ReSTIR GI Method Paper](https://d1qx31qr3h6wln.cloudfront.net/publications/ReSTIR%20GI.pdf)
- - [GPSnoopy's Raytracing in Vulkan](https://github.com/GPSnoopy/RayTracingInVulkan) ; cannot be more grateful for this repository to have all the answers I needed in an understandable and readable codebase.
- - [Raytracing Denoiser](https://alain.xyz/blog/ray-tracing-denoising)
- - [GPU PseudoRNG](https://www.reedbeta.com/blog/hash-functions-for-gpu-rendering/)
- - [Sascha Willems's Vulkan Samples](https://github.com/SaschaWillems/Vulkan/tree/master)
- - [The Vulkan Raytracing Tutorial](https://github.com/alelenv/vk_raytracing_tutorial) ; still helpful while I would rather use the Khronos extensions than the NVidia one for compatibility.
- - [the all so helful vulkan raytracing extension text note](https://github.com/KhronosGroup/GLSL/blob/main/extensions/ext/GLSL_EXT_ray_tracing.txt) ; for glsl raytracing extension's syntax.
-	
-Resources on stylized shading or cel-look : 
- - [Locally Controllable Stylised Shading](https://www-ui.is.s.u-tokyo.ac.jp/~takeo/papers/todo_siggraph2007_shading.pdf)
- - [cel-look pipeline and challenges to take advantage of hand drawn animation](https://a-film-production-technique-seminar.com/fppat/materials/ppi_phones_possibility_celook_pipeline_challenges/index.html)
-
-Example of what I am looking for :
- - Difference between the [final cut of Kyoto Ani](https://sakugabooru.com/post/show/259302) and the [Genga](https://sakugabooru.com/post/show/259594) in the latest "Hibike Euphonium" season.
-
-
-Example of use of raytracing in cel-look titles
- - [The Idolmaster: Starlit Season Ray Tracing ON vs OFF 4K RTX 3090](https://youtu.be/Xzn98J44VTU) ; only reflections on the ground...
- - [Real Toon Shader in DXR | Unity HDRP](https://www.youtube.com/watch?v=7_VEjFL8O1w) ; proof that toon shader is transferable (and transfered), into real-time raytracing engines.
-
-## License
-
-Everything that is in the [src](src/) and [include](include/) folder are made by me which is licensed under the MIT License, see [LICENSE](LICENSE) for more information.
-
-For everything else, I do not own, and each resource is under their own license.
-You may find more in the [Repository Structure & Explanation](#repository-structure-&-explanation) chapter.
+あとは自分が作成したものではないし各々のライセンスがあいますのでご確認いただければと思います。
+[レポジトリー構造と説明](#レポジトリー構造と説明)で少しこの件に関してに触れていますのでそっちも宜しければご確認ください。

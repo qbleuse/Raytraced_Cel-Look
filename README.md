@@ -3,6 +3,8 @@
 This repository is the source code used for my research thesis at the Hachioji Campus of the Tokyo University Of Technology.
 You will find almost everything I've done from the day I've started working on it to this day.
 
+このファイルの日本語版は[こっち](README_JP.md)です。
+
 ## Table Of Contents
 
 - [Raytraced Cel-Look](#raytraced-cel-look)
@@ -116,7 +118,7 @@ However, it was only compiled using clang as a compiler, so be careful to use cl
 
 ### Windows
 
-While I developed mostly on Windows, I did not really used clang tools to build the project, but mostly Visual Studio 2022's CMake integration to compile as it was easier (thus the CMake Presets.json in the root folder of the repository).
+While I developed mostly on Windows, I did not really used cmake tools to build the project, but mostly Visual Studio 2022's CMake integration to compile as it was easier (thus the CMake Presets.json in the root folder of the repository).
 
 If you wish to use Visual Studio as a generator and and msvc as a compiler, you may by simply calling :
 
