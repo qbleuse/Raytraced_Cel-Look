@@ -11,7 +11,7 @@ endif()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-project ("VulkanLearning")
+project ("RaytracedCel")
 
 #we at least need C++ 11 (with imgui dependency)
 #set_property(TARGET VulkanLearning PROPERTY CXX_STANDARD 11)
