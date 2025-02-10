@@ -3,7 +3,7 @@
 This repository is the source code used for my research thesis at the Hachioji Campus of the Tokyo University Of Technology.
 You will find almost everything I've done from the day I've started working on it to this day.
 
-このファイルの日本語版は[こっち](README_JP.md)です。
+このファイルの日本語版は[こちら](README_JP.md)です。
 
 ## Table Of Contents
 
