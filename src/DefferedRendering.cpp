@@ -843,7 +843,7 @@ void DefferedRendering::BindPass(GAPIHandle& GAPIHandle, const VkPipeline& Pipel
 }
 
 
-void DefferedRendering::DrawGPUBuffer(GAPIHandle& GAPIHandle)
+void DefferedRendering::DrawGPUBuffer(GAPIHandle& GAPIHandle, const VulkanHelper::Model& model)
 {
 	//get the command buffer for this draw
 	const VkCommandBuffer& commandBuffer = GAPIHandle.GetCurrentVulkanCommand();
@@ -856,18 +856,18 @@ void DefferedRendering::DrawGPUBuffer(GAPIHandle& GAPIHandle)
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _GBUfferLayout, 0, 1, &_GBufferDescriptors._DescriptorSets[GAPIHandle._vk_current_frame], 0, nullptr);
 
 	//draw all meshes, as model may be composed of multiple meshes
-	for (uint32_t i = 0; i < _Model._Meshes.Nb(); i++)
+	for (uint32_t i = 0; i < model._Meshes.Nb(); i++)
 	{
 		//first bind the "material", basically the three compibined sampler descriptors ...
-		if (_Model._Materials.Nb() > 0)
+		if (model._Materials.Nb() > 0)
 			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _GBUfferLayout, 1, 1, &_ModelDescriptors._DescriptorSets[i], 0, nullptr);
 
 		//... then bind the vertex buffer as described in the input layout of the pipeline ...
-		vkCmdBindVertexBuffers(commandBuffer, 0, 3, _Model._Meshes[i]._VertexBuffers, (VkDeviceSize*)_Model._Meshes[i]._vertex_offsets);
+		vkCmdBindVertexBuffers(commandBuffer, 0, 3, model._Meshes[i]._VertexBuffers, (VkDeviceSize*)model._Meshes[i]._vertex_offsets);
 		//... and the index buffers associated with the vertex buffers ...
-		vkCmdBindIndexBuffer(commandBuffer, _Model._Meshes[i]._Indices, _Model._Meshes[i]._indices_offset, _Model._Meshes[i]._indices_type);
+		vkCmdBindIndexBuffer(commandBuffer, model._Meshes[i]._Indices, model._Meshes[i]._indices_offset, model._Meshes[i]._indices_type);
 		//... before finally drawing, following the index buffer.
-		vkCmdDrawIndexed(commandBuffer, _Model._Meshes[i]._indices_nb, 1, 0, 0, 0);
+		vkCmdDrawIndexed(commandBuffer, model._Meshes[i]._indices_nb, 1, 0, 0, 0);
 	}
 
 	//end G buffer pass
@@ -928,7 +928,7 @@ void DefferedRendering::Show(GAPIHandle& GAPIHandle)
 			VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	}
 
-	DrawGPUBuffer(GAPIHandle);
+	DrawGPUBuffer(GAPIHandle, _Model);
 
 	DrawCompositingPass(GAPIHandle);
 

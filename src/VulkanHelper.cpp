@@ -1109,6 +1109,110 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 	return true;
 }
 
+bool VulkanHelper::CreateModelFromRawVertices(Uploader& VulkanUploader, 
+	VolatileLoopArray<vec3>& pos, 
+	VolatileLoopArray<vec2>& uv, 
+	VolatileLoopArray<vec3>& normals, 
+	VolatileLoopArray<vec4>& vertexColor, 
+	VolatileLoopArray<uint32_t>& indices, Model& model)
+{
+	bool noError = true;
+	VkResult result = VK_SUCCESS;
+
+	//making the mesh
+	{
+
+		// 1. creating and uploading the position buffer
+		StaticBufferHandle posBuffer;
+		noError |= CreateStaticBufferHandle(VulkanUploader, posBuffer, sizeof(vec3) * pos.Nb(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+			| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+			| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR
+			| VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			0, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+		noError |= UploadStaticBufferHandle(VulkanUploader, posBuffer, (void*)*pos, sizeof(vec3) * pos.Nb());
+
+		// 2. creating and uploading the _Indices buffer (same index buffer is used for all of the meshes, but with different offset)
+		StaticBufferHandle indexBuffer;
+		noError |= CreateStaticBufferHandle(VulkanUploader, indexBuffer, sizeof(uint32_t) * indices.Nb(), VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+			| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+			| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR
+			| VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			0, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+		noError |= UploadStaticBufferHandle(VulkanUploader, indexBuffer, (void*)*indices, sizeof(uint32_t) * indices.Nb());
+
+		// 3. creating and uploading the _Uvs buffer
+		StaticBufferHandle uvBuffer;
+
+		
+		noError |= CreateStaticBufferHandle(VulkanUploader, uvBuffer, sizeof(vec2) * uv.Nb(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+			| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+			| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR
+			| VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			0, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+		noError |= UploadStaticBufferHandle(VulkanUploader, uvBuffer, (void*)*uv, sizeof(vec2) * uv.Nb());
+		
+
+		// 4. creating and uploading the normal buffer
+		StaticBufferHandle normalBuffer;
+		
+		noError |= CreateStaticBufferHandle(VulkanUploader, normalBuffer, sizeof(vec3) * normals.Nb(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+			| VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+			| VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR
+			| VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+			0, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+		noError |= UploadStaticBufferHandle(VulkanUploader, normalBuffer, (void*)*normals, sizeof(vec3) * normals.Nb());
+		
+
+		model._Meshes.Alloc(1);
+		model._Meshes[0]._VertexMemoryHandle.Alloc(4);
+		model._Meshes[0]._Positions				= posBuffer._StaticGPUBuffer;
+		model._Meshes[0]._VertexMemoryHandle[0]	= posBuffer._StaticGPUMemoryHandle;
+		model._Meshes[0]._Indices				= indexBuffer._StaticGPUBuffer;
+		model._Meshes[0]._VertexMemoryHandle[1]	= indexBuffer._StaticGPUMemoryHandle;
+		model._Meshes[0]._Uvs					= uvBuffer._StaticGPUBuffer;
+		model._Meshes[0]._VertexMemoryHandle[2]	= uvBuffer._StaticGPUMemoryHandle;
+		model._Meshes[0]._Normals				= normalBuffer._StaticGPUBuffer;
+		model._Meshes[0]._VertexMemoryHandle[3]	= normalBuffer._StaticGPUMemoryHandle;
+
+		model._Meshes[0]._pos_offset = 0;
+		model._Meshes[0]._indices_offset = 0;
+		model._Meshes[0]._normal_offset = 0;
+		model._Meshes[0]._uv_offset		= 0;
+
+		model._Meshes[0]._pos_nb		= pos.Nb();
+		model._Meshes[0]._indices_nb	= indices.Nb();
+		model._Meshes[0]._normal_nb		= normals.Nb();
+		model._Meshes[0]._uv_nb			= uv.Nb();
+		model._Meshes[0]._indices_type	= VK_INDEX_TYPE_UINT32;
+	}
+
+	//make texture
+	{
+		model._Textures.Alloc(1);
+		noError |= LoadTexture(VulkanUploader, (void*)*vertexColor, vertexColor.Nb(), 1, VK_FORMAT_R8G8B8A8_SRGB, model._Textures[0]);
+	}
+
+	//make sampler
+	{
+		model._Samplers.Alloc(1);
+		// a very basic sampler will be fine
+		VkSamplerCreateInfo samplerInfo{};
+		samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		VK_CALL_PRINT(vkCreateSampler(VulkanUploader._VulkanDevice, &samplerInfo, nullptr, &model._Samplers[0]));
+	}
+
+	//make material
+	{
+		model._Materials.Alloc(1);
+		
+		model._Materials[0]._Textures.Alloc(1);
+		model._Textures[0]._Sampler = model._Samplers[0];
+		model._Materials[0]._Textures[0] = model._Textures[0];
+	}
+
+	return result == VK_SUCCESS && noError;
+}
+
 void VulkanHelper::ClearModel(const VkDevice& VulkanDevice, Model& model)
 {
 	for (uint32_t i = 0; i < model._Meshes.Nb(); i++)
@@ -1326,6 +1430,7 @@ void VulkanHelper::ClearTexture(const VkDevice& VulkanDevice, Texture& texture)
 	texture._ImageMemory = nullptr;
 	texture._ImageView = nullptr;
 }
+
 
 /* Descriptors */
 
@@ -2342,6 +2447,113 @@ bool VulkanHelper::CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBu
 	return result == VK_SUCCESS;
 
 }
+
+bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBuffer& sceneBuffer, const MultipleVolatileMemory<Model>& models, uint32_t modelNb)
+{
+	//to record if an error happened
+	VkResult result = VK_SUCCESS;
+
+	uint32_t meshNb = 0;
+	for (uint32_t i = 0; i < modelNb; i++)
+		meshNb += models[i]._Meshes.Nb();
+
+	//very naive way of doing this. just copying the already allocated GPU memory into a new allocated scene buffer
+	{
+		//the offset buffer that tells the eqch mesh where its vertices are
+		MultipleScopedMemory<uint32_t> offsetBuffer{ meshNb * 3 };
+		memset(*offsetBuffer, 0, meshNb * sizeof(uint32_t) * 3);
+
+		//to count the total nb of vertices there is to allocate a buffer of that size 
+		uint32_t totalIndexNb = 0;
+		uint32_t totalUVNb = 0;
+		uint32_t totalNormalNb = 0;
+
+		//this is a naive method and should be improved, but for now, hoping that no model with both short and long index will be used
+		uint32_t indexSize = models[0]._Meshes[0]._indices_type == VK_INDEX_TYPE_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t);
+
+		
+		for (uint32_t j = 0, modelOffset = 0; j < modelNb; j++)
+		{
+
+			offsetBuffer[modelOffset + 0] = totalIndexNb;
+			offsetBuffer[modelOffset + 1] = totalUVNb;
+			offsetBuffer[modelOffset + 2] = totalNormalNb;
+
+			//filling the offset buffer and the total count
+			for (uint32_t i = 1; i <= models[j]._Meshes.Nb(); i++)
+			{
+				const Mesh& indexedMesh = models[j]._Meshes[i - 1];
+
+				totalIndexNb += indexedMesh._indices_nb;
+				totalUVNb += indexedMesh._uv_nb;
+				totalNormalNb += indexedMesh._normal_nb;
+
+				if (i == models[j]._Meshes.Nb())
+					break;
+
+				offsetBuffer[modelOffset + i * 3 + 0] = totalIndexNb;
+				offsetBuffer[modelOffset + i * 3 + 1] = totalUVNb;
+				offsetBuffer[modelOffset + i * 3 + 2] = totalNormalNb;
+			}
+
+			modelOffset = models[j]._Meshes.Nb() * 3;
+		}
+
+		//we can determine the final size of each buffer
+		sceneBuffer._IndexBufferSize = totalIndexNb * indexSize;
+		sceneBuffer._UVsBufferSize = totalUVNb * sizeof(vec2);
+		sceneBuffer._NormalBufferSize = totalNormalNb * sizeof(vec3);
+
+		//creating the buffer we'll fil with the vertices data 
+		CreateStaticBufferHandle(VulkanUploader, sceneBuffer._IndexBuffer, sceneBuffer._IndexBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+		CreateStaticBufferHandle(VulkanUploader, sceneBuffer._UVsBuffer, sceneBuffer._UVsBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+		CreateStaticBufferHandle(VulkanUploader, sceneBuffer._NormalBuffer, sceneBuffer._NormalBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+
+		//copy buffers
+		for (uint32_t j = 0, modelOffset = 0; j < modelNb; j++)
+		{
+			for (uint32_t i = 0; i < models[j]._Meshes.Nb(); i++)
+			{
+				const Mesh& indexedMesh = models[j]._Meshes[i];
+
+				VkBufferCopy region;
+				region.srcOffset = indexedMesh._indices_offset;//this is already the offset in bytes for the indices
+				region.dstOffset = offsetBuffer[modelOffset + i * 3] * indexSize;
+				region.size = indexedMesh._indices_nb * indexSize;
+				vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Indices, sceneBuffer._IndexBuffer._StaticGPUBuffer, 1, &region);
+
+
+				region.srcOffset = indexedMesh._uv_offset;//this is already the offset in bytes for the uvs
+				region.dstOffset = offsetBuffer[modelOffset + i * 3 + 1] * sizeof(vec2);
+				region.size = indexedMesh._uv_nb * sizeof(vec2);
+				vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Uvs, sceneBuffer._UVsBuffer._StaticGPUBuffer, 1, &region);
+
+
+				region.srcOffset = indexedMesh._normal_offset;//this is already the offset in bytes for the uvs
+				region.dstOffset = offsetBuffer[modelOffset + i * 3 + 2] * sizeof(vec3);
+				region.size = indexedMesh._normal_nb * sizeof(vec3);
+				vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Normals, sceneBuffer._NormalBuffer._StaticGPUBuffer, 1, &region);
+			}
+			
+			modelOffset = models[j]._Meshes.Nb() * 3;
+		}
+
+		//making the AS accessible
+		MemorySyncScope(VulkanUploader._CopyBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);//basically just changing this memory to be visible, so the scope can be "immediate"
+
+
+		sceneBuffer._OffsetBufferSize = meshNb * sizeof(uint32_t) * 3;
+
+		//creating our offset buffer
+		CreateStaticBufferHandle(VulkanUploader, sceneBuffer._OffsetBuffer, sceneBuffer._OffsetBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+		UploadStaticBufferHandle(VulkanUploader, sceneBuffer._OffsetBuffer, *offsetBuffer, sceneBuffer._OffsetBufferSize);
+
+	}
+
+	return result == VK_SUCCESS;
+}
+
 
 void VulkanHelper::ClearSceneBuffer(const VkDevice& VulkanDevice, SceneBuffer& sceneBuffer)
 {

@@ -128,6 +128,9 @@
 class GraphicsAPIManager;
 struct GAPIHandle;
 struct mat4;
+struct vec2;
+struct vec3;
+struct vec4;
 
 namespace VulkanHelper
 {
@@ -397,6 +400,8 @@ namespace VulkanHelper
 	};
 
 	bool LoadGLTFFile(Uploader& VulkanUploader, const char* fileName, Model& meshes);
+	bool CreateModelFromRawVertices(Uploader& VulkanUploader, VolatileLoopArray<vec3>& pos, VolatileLoopArray<vec2>& uv, VolatileLoopArray<vec3>& normal, VolatileLoopArray<vec4>& vertexColor, VolatileLoopArray<uint32_t>& indices, Model& meshes);
+
 	void ClearModel(const VkDevice& VulkanDevice, Model& model);
 
 	/* Images */
@@ -648,6 +653,8 @@ namespace VulkanHelper
 	};
 
 	bool CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBuffer& sceneBuffer, const VolatileLoopArray<Mesh>& mesh);
+	bool CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBuffer& sceneBuffer, const MultipleVolatileMemory<Model>& model, uint32_t modelNb);
+
 	void ClearSceneBuffer(const VkDevice& VulkanDevice, SceneBuffer& sceneBuffer);
 
 

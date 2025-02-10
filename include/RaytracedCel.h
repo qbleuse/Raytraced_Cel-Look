@@ -23,6 +23,11 @@ private:
 
 	/* Vulkan */
 
+	//a model containing a CornellBox
+	VulkanHelper::Model _CornellBox;
+	//the 3D geometry of the CornellBox in the GPU raytracing pipeline format (BLAS)
+	VulkanHelper::RaytracedGeometry		_CornellBoxBottomAS;
+
 	//the semaphore to synchronize between G Buffer work and raytracing/compositing work
 	MultipleScopedMemory<VkSemaphore>	_GBufferDrawnSemaphore;
 
@@ -64,6 +69,9 @@ private:
 	*/
 	void PrepareVulkanRaytracingProps(class GraphicsAPIManager& GAPI);
 
+
+	//Creates the model and the other necessary resources 
+	virtual void PrepareModelProps(class GraphicsAPIManager& GAPI)override;
 
 	//Creates the deffered compositing pass necessary resources 
 	virtual void PrepareDefferedPassProps(class GraphicsAPIManager& GAPI)override;

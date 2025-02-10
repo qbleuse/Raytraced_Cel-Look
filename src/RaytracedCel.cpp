@@ -7,6 +7,8 @@
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
 
+#include "CornellBox.h"
+
 #define NUMBER_OF_SPHERES 30
 
 /*==== Prepare =====*/
@@ -19,11 +21,13 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 	{
 		//create bottom level AS from model
 		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _Model._Meshes, VK_NULL_HANDLE, nullptr, 0, 0);
+		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _CornellBoxBottomAS, _Model._Meshes, VK_NULL_HANDLE, nullptr, 0, 0);
 
-		VulkanHelper::CreateSceneBufferFromMeshes(GAPI._VulkanUploader, _RaySceneBuffer, _Model._Meshes);
+		VulkanHelper::Model models[2] = { _Model, _CornellBox };
+		VulkanHelper::CreateSceneBufferFromModels(GAPI._VulkanUploader, _RaySceneBuffer, models, 2);
 
-		VulkanHelper::RaytracedGeometry* bottomAS[1] = { &_RayBottomAS };
-		VulkanHelper::CreateRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RayTopAS, identity(), bottomAS, 1);
+		VulkanHelper::RaytracedGeometry* bottomAS[2] = { &_RayBottomAS, &_CornellBoxBottomAS };
+		VulkanHelper::CreateRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RayTopAS, identity(), bottomAS, 2);
 
 	}
 	/*===== DESCRIBE SHADER STAGE AND GROUPS =====*/
@@ -582,6 +586,28 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 			_RayShaders.Add(Script);
 	}
 }
+void RaytracedCel::PrepareModelProps(class GraphicsAPIManager& GAPI)
+{
+	//get actual model
+	DefferedRendering::PrepareModelProps(GAPI);
+
+	//create Cornell Box as "background"
+	{
+		VolatileLoopArray<vec3>		pos;
+		VolatileLoopArray<vec2>		uv; 
+		VolatileLoopArray<vec3>		normal; 
+		VolatileLoopArray<vec4>		vertexColor; 
+		VolatileLoopArray<uint32_t> indices;
+		CornellBox::CreateMesh(10.0f,pos,uv,normal,vertexColor,indices);
+		VulkanHelper::CreateModelFromRawVertices(GAPI._VulkanUploader, pos, uv, normal, vertexColor, indices, _CornellBox);
+
+		pos.Clear();
+		uv.Clear();
+		normal.Clear();
+		vertexColor.Clear();
+		indices.Clear();
+	}
+}
 
 void RaytracedCel::PrepareDefferedPassProps(GraphicsAPIManager& GAPI)
 {
@@ -996,7 +1022,9 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 			VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	}
 
-	DrawGPUBuffer(GAPIHandle);
+	DrawGPUBuffer(GAPIHandle, _Model);
+	
+	DrawGPUBuffer(GAPIHandle, _CornellBox);
 
 	{
 		//the pipeline stage at which the GPU should waait for the semaphore to signal itself
@@ -1104,10 +1132,13 @@ void RaytracedCel::Close(GraphicsAPIManager& GAPI)
 	//the memory allocated by the Vulkan Helper is volatile : it must be explecitly freed !
 	DefferedRendering::Close(GAPI);
 
+	VulkanHelper::ClearModel(GAPI._VulkanDevice, _CornellBox);
+
 	VulkanHelper::ClearSceneBuffer(GAPI._VulkanDevice, _RaySceneBuffer);
 
 	//clear Acceleration Structures
 	VulkanHelper::ClearRaytracedGeometry(GAPI._VulkanDevice, _RayBottomAS);
+	VulkanHelper::ClearRaytracedGeometry(GAPI._VulkanDevice, _CornellBoxBottomAS);
 	VulkanHelper::ClearRaytracedGroup(GAPI._VulkanDevice, _RayTopAS);
 
 	//release descriptors
