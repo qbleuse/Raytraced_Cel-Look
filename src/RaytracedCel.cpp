@@ -834,7 +834,7 @@ void RaytracedCel::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI
 	{
 		ClearFrameBuffer(GAPI._VulkanDevice, _RayFramebuffers[0]);
 		ClearFrameBuffer(GAPI._VulkanDevice, _RayFramebuffers[1]);
-		_GBuffers.Clear();
+		_RayFramebuffers.Clear();
 	}
 	if (_GBufferDrawnSemaphore != nullptr)
 	{
@@ -1126,7 +1126,7 @@ void RaytracedCel::Close(GraphicsAPIManager& GAPI)
 	//clear the light buffers
 	if (_RayFramebuffers != nullptr)
 	{
-		for (char i = 0; i < 1; i++)
+		for (char i = 0; i <= 1; i++)
 		{
 			ClearFrameBuffer(GAPI._VulkanDevice, _RayFramebuffers[i]);
 		}

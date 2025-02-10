@@ -684,6 +684,7 @@ void DefferedRendering::ResizeGBufferResources(class GraphicsAPIManager& GAPI, i
 	}
 
 	VulkanHelper::ReleaseFrameBuffer(GAPI._VulkanDevice, _GBUfferPipelineOutput);
+	VulkanHelper::ReleaseDescriptor(GAPI._VulkanDevice, _GBufferDescriptors);
 
 	/*===== Pipeline OUTPUT ======*/
 
