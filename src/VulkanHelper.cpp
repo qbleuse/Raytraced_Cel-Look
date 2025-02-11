@@ -5,6 +5,9 @@
 //vulkan shader compiler
 #include "shaderc/shaderc.h"
 
+//vulkan helper
+#include "vulkan/utility/vk_format_utils.h"
+
 #include "Maths.h"
 
 //loader include
@@ -1189,7 +1192,7 @@ bool VulkanHelper::CreateModelFromRawVertices(Uploader& VulkanUploader,
 	//make texture
 	{
 		model._Textures.Alloc(1);
-		noError |= LoadTexture(VulkanUploader, (void*)*vertexColor, vertexColor.Nb(), 1, VK_FORMAT_R8G8B8A8_SRGB, model._Textures[0]);
+		noError |= LoadTexture(VulkanUploader, (void*)*vertexColor, vertexColor.Nb(), 1, VK_FORMAT_R32G32B32A32_SFLOAT, model._Textures[0]);
 	}
 
 	//make sampler
@@ -1298,10 +1301,10 @@ bool VulkanHelper::CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, V
 	return result == VK_SUCCESS;
 }
 
-bool VulkanHelper::UploadImage(Uploader& VulkanUploader, VkImage& imageToUploadTo, void* image_content, uint32_t width, uint32_t height, uint32_t channels, uint32_t depth)
+bool VulkanHelper::UploadImage(Uploader& VulkanUploader, VkImage& imageToUploadTo, void* image_content, uint32_t width, uint32_t height, VkFormat format, uint32_t depth)
 {
 	VkResult result = VK_SUCCESS;
-	uint32_t size = width * height * depth * channels;
+	uint32_t size = width * height * depth * vkuGetFormatInfo(format).block_size;
 	void* CPUHandle;
 
 	// create a staging buffer that can hold the images data
@@ -1374,8 +1377,6 @@ bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const char* file_name, 
 	return result == VK_SUCCESS;
 }
 
-#include "vulkan/utility/vk_format_utils.h"
-
 bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const void* pixels, uint32_t width, uint32_t height, VkFormat imageFormat, Texture& texture)
 {
 	VkResult result = VK_SUCCESS;
@@ -1390,7 +1391,7 @@ bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const void* pixels, uin
 	}
 
 	//upload image to buffer
-	if (!UploadImage(VulkanUploader, texture._Image, (void*)pixels, width, height, vkuGetFormatInfo(imageFormat).component_count))
+	if (!UploadImage(VulkanUploader, texture._Image, (void*)pixels, width, height, imageFormat))
 	{
 		return false;
 	}

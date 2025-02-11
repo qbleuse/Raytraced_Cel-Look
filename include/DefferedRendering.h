@@ -137,7 +137,9 @@ protected:
 	static void BindPass(GAPIHandle& GAPIHandle, const VkPipeline& Pipeline,
 		const VulkanHelper::PipelineOutput& PipelineOutput);
 
-	virtual void DrawGPUBuffer(GAPIHandle& GAPIHandle, const VulkanHelper::Model& model);
+	static void DrawModel(GAPIHandle& GAPIHandle, const VulkanHelper::Model& model, const VkPipelineLayout& PipelineLayout, const VulkanHelper::PipelineDescriptors& descriptors);
+	virtual void StartGBuffer(GAPIHandle& GAPIHandle);
+	virtual void EndGBuffer(GAPIHandle& GAPIHandle);
 	virtual void DrawCompositingPass(GAPIHandle& GAPIHandle);
 
 	/* DirectX */

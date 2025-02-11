@@ -431,7 +431,7 @@ namespace VulkanHelper
 	/* creates an image buffer depending on what's given in parameter (no content is being set) */
 	bool CreateImage(Uploader& VulkanUploader, VkImage& imageToMake, VkDeviceMemory& imageMemory, uint32_t width, uint32_t height, uint32_t depth, VkImageType imagetype, VkFormat format, VkImageUsageFlags usageFlags, VkMemoryPropertyFlagBits memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, uint32_t offset = 0u, bool allocate_memory = true);
 	/* uploads the content given in parameter to the device local image buffer's memory*/
-	bool UploadImage(Uploader& VulkanUploader, VkImage& imageToUploadTo, void* image_content, uint32_t width, uint32_t height, uint32_t channels, uint32_t depth = 1);
+	bool UploadImage(Uploader& VulkanUploader, VkImage& imageToUploadTo, void* image_content, uint32_t width, uint32_t height, VkFormat format, uint32_t depth = 1);
 
 	/*
 	* a struct representing a single texture. it contains everything a shader would need to use said texture meaning :

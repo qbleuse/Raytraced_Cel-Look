@@ -33,16 +33,16 @@ namespace CornellBox
 		//make the box
 		{
 			//l for left
-			const vec3 l0(0.0f, 0.0f, 0.0f);
-			const vec3 l1(0.0f, 0.0f, -s);
-			const vec3 l2(0.0f, s, -s);
-			const vec3 l3(0.0f, s, 0.0f);
+			const vec3 l0(-s*0.5f, 0.0f, 0.0f);
+			const vec3 l1(-s*0.5f, 0.0f, -s);
+			const vec3 l2(-s*0.5f, s, -s);
+			const vec3 l3(-s*0.5f, s, 0.0f);
 
 			//r for right
-			const vec3 r0(s, 0.0f, 0.0f);
-			const vec3 r1(s, 0.0f, -s);
-			const vec3 r2(s, s, -s);
-			const vec3 r3(s, s, 0.0f);
+			const vec3 r0(s*0.5f, 0.0f, 0.0f);
+			const vec3 r1(s*0.5f, 0.0f, -s);
+			const vec3 r2(s*0.5f, s, -s);
+			const vec3 r3(s*0.5f, s, 0.0f);
 
 			// Left green panel
 
@@ -51,13 +51,6 @@ namespace CornellBox
 				pos[1] = l1;
 				pos[2] = l2;
 				pos[3] = l3;
-				vec2 tmpUv = vec2(0.0f, 0.0f);
-				vec3 tmpNormal = vec3(1.0f, 0.0f, 0.0f);
-				for (char c = 0; c < 4; c++, i++)
-				{
-					uv[i] = tmpUv;
-					normal[i] = tmpNormal;
-				}
 				indices[0] = 0;
 				indices[1] = 1;
 				indices[2] = 2;
@@ -65,6 +58,14 @@ namespace CornellBox
 				indices[4] = 2;
 				indices[5] = 3;
 				indexOffset += 6;
+				vec2 tmpUv = vec2(0.0f, 0.0f);
+				vec3 tmpNormal = vec3(1.0f, 0.0f, 0.0f);
+				for (char c = 0; c < 4; c++, i++)
+				{
+					uv[i] = tmpUv;
+					normal[i] = tmpNormal;
+				}
+
 			}
 
 			// Right red panel
@@ -73,21 +74,23 @@ namespace CornellBox
 				pos[i + 1] = r1;
 				pos[i + 2] = r2;
 				pos[i + 3] = r3;
+				indices[indexOffset + 0] = i + 2;
+				indices[indexOffset + 1] = i + 1;
+				indices[indexOffset + 2] = i + 0;
+				indices[indexOffset + 3] = i + 3;
+				indices[indexOffset + 4] = i + 2;
+				indices[indexOffset + 5] = i + 0;
+				indexOffset += 6;
 				vec2 tmpUv = vec2(0.5f, 0.0f);
 				vec3 tmpNormal = vec3(-1.0f, 0.0f, 0.0f);
+
 				for (char c = 0; c < 4; c++, i++)
 				{
 					uv[i] = tmpUv;
 					normal[i] = tmpNormal;
 				}
 
-				indices[indexOffset+0]	= indexOffset + 2;
-				indices[indexOffset + 1] = indexOffset + 1;
-				indices[indexOffset + 2] = indexOffset + 0;
-				indices[indexOffset + 3] = indexOffset + 3;
-				indices[indexOffset + 4] = indexOffset + 2;
-				indices[indexOffset + 5] = indexOffset +0;
-				indexOffset += 6;
+
 			}
 
 			// Back white panel
@@ -96,20 +99,20 @@ namespace CornellBox
 				pos[i + 1] = r1;
 				pos[i + 2] = r2;
 				pos[i + 3] = l2;
-				vec2 tmpUv = vec2(1.0f, 0.0f);
+				indices[indexOffset + 0] = i + 0;
+				indices[indexOffset + 1] = i + 1;
+				indices[indexOffset + 2] = i + 2;
+				indices[indexOffset + 3] = i + 0;
+				indices[indexOffset + 4] = i + 2;
+				indices[indexOffset + 5] = i + 3;
+				indexOffset += 6;
+				vec2 tmpUv = vec2(0.99f, 0.0f);
 				vec3 tmpNormal = vec3(0.0f, 0.0f, 1.0f);
 				for (char c = 0; c < 4; c++, i++)
 				{
 					uv[i] = tmpUv;
 					normal[i] = tmpNormal;
 				}
-				indices[indexOffset + 0] = indexOffset + 0;
-				indices[indexOffset + 1] = indexOffset + 1;
-				indices[indexOffset + 2] = indexOffset + 2;
-				indices[indexOffset + 3] = indexOffset + 0;
-				indices[indexOffset + 4] = indexOffset + 2;
-				indices[indexOffset + 5] = indexOffset + 3;
-				indexOffset += 6;
 			}
 
 			// Bottom white panel
@@ -118,20 +121,20 @@ namespace CornellBox
 				pos[i + 1] = r0;
 				pos[i + 2] = r1;
 				pos[i + 3] = l1;
-				vec2 tmpUv = vec2(1.0f, 0.0f);
+				indices[indexOffset + 0] = i + 0;
+				indices[indexOffset + 1] = i + 1;
+				indices[indexOffset + 2] = i + 2;
+				indices[indexOffset + 3] = i + 0;
+				indices[indexOffset + 4] = i + 2;
+				indices[indexOffset + 5] = i + 3;
+				indexOffset += 6;
+				vec2 tmpUv = vec2(0.99f, 0.0f);
 				vec3 tmpNormal = vec3(0.0f, 1.0f, 0.0f);
 				for (char c = 0; c < 4; c++, i++)
 				{
 					uv[i] = tmpUv;
 					normal[i] = tmpNormal;
 				}
-				indices[indexOffset + 0] = indexOffset + 0;
-				indices[indexOffset + 1] = indexOffset + 1;
-				indices[indexOffset + 2] = indexOffset + 2;
-				indices[indexOffset + 3] = indexOffset + 0;
-				indices[indexOffset + 4] = indexOffset + 2;
-				indices[indexOffset + 5] = indexOffset + 3;
-				indexOffset += 6;
 			}
 
 			// Top white panel
@@ -140,20 +143,20 @@ namespace CornellBox
 				pos[i + 1] = r2;
 				pos[i + 2] = r3;
 				pos[i + 3] = l3;
-				vec2 tmpUv = vec2(1.0f, 0.0f);
+				indices[indexOffset + 0] = i + 0;
+				indices[indexOffset + 1] = i + 1;
+				indices[indexOffset + 2] = i + 2;
+				indices[indexOffset + 3] = i + 0;
+				indices[indexOffset + 4] = i + 2;
+				indices[indexOffset + 5] = i + 3;
+				indexOffset += 6;
+				vec2 tmpUv = vec2(0.99f, 0.0f);
 				vec3 tmpNormal = vec3(0.0f, -1.0f, 0.0f);
 				for (char c = 0; c < 4; c++, i++)
 				{
 					uv[i] = tmpUv;
 					normal[i] = tmpNormal;
 				}
-				indices[indexOffset + 0] = indexOffset + 0;
-				indices[indexOffset + 1] = indexOffset + 1;
-				indices[indexOffset + 2] = indexOffset + 2;
-				indices[indexOffset + 3] = indexOffset + 0;
-				indices[indexOffset + 4] = indexOffset + 2;
-				indices[indexOffset + 5] = indexOffset + 3;
-				indexOffset += 6;
 			}
 		}
 
@@ -172,19 +175,19 @@ namespace CornellBox
 				pos[i + 1] = vec3(x1, y1, z1);
 				pos[i + 2] = vec3(x1, y1, z0);
 				pos[i + 3] = vec3(x0, y1, z0);
-				vec2 tmpUv = vec2(1.0f, 0.0f);
+				indices[indexOffset + 0] = i + 0;
+				indices[indexOffset + 1] = i + 1;
+				indices[indexOffset + 2] = i + 2;
+				indices[indexOffset + 3] = i + 0;
+				indices[indexOffset + 4] = i + 2;
+				indices[indexOffset + 5] = i + 3;
+				vec2 tmpUv = vec2(0.99f, 0.0f);
 				vec3 tmpNormal = vec3(0.0f, -1.0f, 0.0f);
 				for (char c = 0; c < 4; c++, i++)
 				{
 					uv[i] = tmpUv;
 					normal[i] = tmpNormal;
 				}
-				indices[indexOffset + 0] = indexOffset + 0;
-				indices[indexOffset + 1] = indexOffset + 1;
-				indices[indexOffset + 2] = indexOffset + 2;
-				indices[indexOffset + 3] = indexOffset + 0;
-				indices[indexOffset + 4] = indexOffset + 2;
-				indices[indexOffset + 5] = indexOffset + 3;
 			}
 		}
 	}

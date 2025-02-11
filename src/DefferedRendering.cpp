@@ -842,25 +842,17 @@ void DefferedRendering::BindPass(GAPIHandle& GAPIHandle, const VkPipeline& Pipel
 	vkCmdSetScissor(commandBuffer, 0, 1, &PipelineOutput._OutputScissor);
 }
 
-
-void DefferedRendering::DrawGPUBuffer(GAPIHandle& GAPIHandle, const VulkanHelper::Model& model)
+void DefferedRendering::DrawModel(GAPIHandle& GAPIHandle, const VulkanHelper::Model& model, const VkPipelineLayout& PipelineLayout, const VulkanHelper::PipelineDescriptors& descriptors)
 {
 	//get the command buffer for this draw
 	const VkCommandBuffer& commandBuffer = GAPIHandle.GetCurrentVulkanCommand();
-
-	BindPass(GAPIHandle, _GBufferPipeline, _GBUfferPipelineOutput);
-
-	//the buffer will change every frame as the object rotates every frame
-	memcpy(_GBUfferUniformBuffer._CPUMemoryHandle[GAPIHandle._vk_current_frame], (void*)&_UniformBuffer, sizeof(UniformBuffer));
-	//binding an available uniform buffer (current frame and frame index may be different, as we can ask for redraw multiple times while the frame is not presenting)
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _GBUfferLayout, 0, 1, &_GBufferDescriptors._DescriptorSets[GAPIHandle._vk_current_frame], 0, nullptr);
 
 	//draw all meshes, as model may be composed of multiple meshes
 	for (uint32_t i = 0; i < model._Meshes.Nb(); i++)
 	{
 		//first bind the "material", basically the three compibined sampler descriptors ...
 		if (model._Materials.Nb() > 0)
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _GBUfferLayout, 1, 1, &_ModelDescriptors._DescriptorSets[i], 0, nullptr);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PipelineLayout, 1, 1, &descriptors._DescriptorSets[i], 0, nullptr);
 
 		//... then bind the vertex buffer as described in the input layout of the pipeline ...
 		vkCmdBindVertexBuffers(commandBuffer, 0, 3, model._Meshes[i]._VertexBuffers, (VkDeviceSize*)model._Meshes[i]._vertex_offsets);
@@ -869,9 +861,20 @@ void DefferedRendering::DrawGPUBuffer(GAPIHandle& GAPIHandle, const VulkanHelper
 		//... before finally drawing, following the index buffer.
 		vkCmdDrawIndexed(commandBuffer, model._Meshes[i]._indices_nb, 1, 0, 0, 0);
 	}
+}
 
+void DefferedRendering::StartGBuffer(GAPIHandle& GAPIHandle)
+{
+	//get the command buffer for this draw
+	const VkCommandBuffer& commandBuffer = GAPIHandle.GetCurrentVulkanCommand();
+
+	BindPass(GAPIHandle, _GBufferPipeline, _GBUfferPipelineOutput);
+}
+
+void DefferedRendering::EndGBuffer(GAPIHandle& GAPIHandle)
+{
 	//end G buffer pass
-	vkCmdEndRenderPass(commandBuffer);
+	vkCmdEndRenderPass(GAPIHandle.GetCurrentVulkanCommand());
 }
 
 void DefferedRendering::DrawCompositingPass(GAPIHandle& GAPIHandle)
@@ -928,7 +931,17 @@ void DefferedRendering::Show(GAPIHandle& GAPIHandle)
 			VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	}
 
-	DrawGPUBuffer(GAPIHandle, _Model);
+	StartGBuffer(GAPIHandle);
+
+
+	//the buffer will change every frame as the object rotates every frame
+	memcpy(_GBUfferUniformBuffer._CPUMemoryHandle[GAPIHandle._vk_current_frame], (void*)&_UniformBuffer, sizeof(UniformBuffer));
+	//binding an available uniform buffer (current frame and frame index may be different, as we can ask for redraw multiple times while the frame is not presenting)
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _GBUfferLayout, 0, 1, &_GBufferDescriptors._DescriptorSets[GAPIHandle._vk_current_frame], 0, nullptr);
+
+	DrawModel(GAPIHandle, _Model, _GBUfferLayout, _ModelDescriptors);
+
+	EndGBuffer(GAPIHandle);
 
 	DrawCompositingPass(GAPIHandle);
 

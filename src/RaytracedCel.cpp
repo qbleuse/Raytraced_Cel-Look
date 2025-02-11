@@ -598,8 +598,30 @@ void RaytracedCel::PrepareModelProps(class GraphicsAPIManager& GAPI)
 		VolatileLoopArray<vec3>		normal; 
 		VolatileLoopArray<vec4>		vertexColor; 
 		VolatileLoopArray<uint32_t> indices;
-		CornellBox::CreateMesh(10.0f,pos,uv,normal,vertexColor,indices);
+		CornellBox::CreateMesh(200.0f,pos,uv,normal,vertexColor,indices);
 		VulkanHelper::CreateModelFromRawVertices(GAPI._VulkanUploader, pos, uv, normal, vertexColor, indices, _CornellBox);
+
+		_CornellBoxDescriptor._DescriptorBindings = _ModelDescriptors._DescriptorBindings;
+		_CornellBoxDescriptor._DescriptorLayout = _ModelDescriptors._DescriptorLayout;
+
+		VulkanHelper::AllocateDescriptor(GAPI._VulkanUploader, _CornellBoxDescriptor, _CornellBox._Textures.Nb());
+
+		for (uint32_t i = 0; i < _CornellBox._Materials.Nb(); i++)
+		{
+			//the order of the textures in the material need to be ALBEDO, METAL-ROUGH, then NORMAL to actually work...
+			for (uint32_t j = 0; j < _CornellBox._Materials[i]._Textures.Nb(); j++)
+			{
+				//describing our combined sampler
+				VkDescriptorImageInfo samplerInfo{};
+				samplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				samplerInfo.imageView = _CornellBox._Materials[i]._Textures[j]._ImageView;
+				samplerInfo.sampler = _CornellBox._Materials[i]._Textures[j]._Sampler;
+
+				VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _CornellBoxDescriptor, _CornellBox._Materials[i]._Textures[j]._ImageView, _CornellBox._Materials[i]._Textures[j]._Sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, j, i);
+
+			}
+			_CornellBox._Materials[i]._TextureDescriptors = _CornellBoxDescriptor._DescriptorSets[i];
+		}
 
 		pos.Clear();
 		uv.Clear();
@@ -1022,9 +1044,19 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 			VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	}
 
-	DrawGPUBuffer(GAPIHandle, _Model);
-	
-	DrawGPUBuffer(GAPIHandle, _CornellBox);
+	StartGBuffer(GAPIHandle);
+
+
+	//the buffer will change every frame as the object rotates every frame
+	memcpy(_GBUfferUniformBuffer._CPUMemoryHandle[GAPIHandle._vk_current_frame], (void*)&_UniformBuffer, sizeof(UniformBuffer));
+	//binding an available uniform buffer (current frame and frame index may be different, as we can ask for redraw multiple times while the frame is not presenting)
+	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _GBUfferLayout, 0, 1, &_GBufferDescriptors._DescriptorSets[GAPIHandle._vk_current_frame], 0, nullptr);
+
+	DrawModel(GAPIHandle, _Model, _GBUfferLayout, _ModelDescriptors);
+
+	DrawModel(GAPIHandle, _CornellBox, _GBUfferLayout, _CornellBoxDescriptor);
+
+	EndGBuffer(GAPIHandle);
 
 	{
 		//the pipeline stage at which the GPU should waait for the semaphore to signal itself
@@ -1142,7 +1174,7 @@ void RaytracedCel::Close(GraphicsAPIManager& GAPI)
 	VulkanHelper::ClearRaytracedGroup(GAPI._VulkanDevice, _RayTopAS);
 
 	//release descriptors
-
+	ClearPipelineDescriptor(GAPI._VulkanDevice, _CornellBoxDescriptor);
 	ClearPipelineDescriptor(GAPI._VulkanDevice, _RayPipelineStaticDescriptor);
 	ClearPipelineDescriptor(GAPI._VulkanDevice, _RayPipelineDynamicDescriptor);
 

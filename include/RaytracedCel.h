@@ -27,6 +27,9 @@ private:
 	VulkanHelper::Model _CornellBox;
 	//the 3D geometry of the CornellBox in the GPU raytracing pipeline format (BLAS)
 	VulkanHelper::RaytracedGeometry		_CornellBoxBottomAS;
+	//the descriptors for the ccornell box
+	VulkanHelper::PipelineDescriptors	_CornellBoxDescriptor;
+
 
 	//the semaphore to synchronize between G Buffer work and raytracing/compositing work
 	MultipleScopedMemory<VkSemaphore>	_GBufferDrawnSemaphore;
