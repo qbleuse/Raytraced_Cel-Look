@@ -446,10 +446,13 @@ namespace VulkanHelper
 		VkDeviceMemory		_ImageMemory;
 		VkImageView			_ImageView;
 		VkSampler			_Sampler;
+		VkExtent3D			_ImageExtent;
 	};
 
 	bool LoadTexture(Uploader& VulkanUploader, const char* file_name, Texture& texture);
 	bool LoadTexture(Uploader& VulkanUploader, const void* pixels, uint32_t width, uint32_t height, VkFormat format, Texture& texture);
+
+	bool CreateImage2DArray(Uploader& VulkanUploader, Texture& texture, uint32_t width, uint32_t height, uint32_t layerCount, VkFormat format);
 
 	void ClearTexture(const VkDevice& VulkanDevice, Texture& texture);
 
@@ -631,6 +634,15 @@ namespace VulkanHelper
 	bool UpdateRaytracedGroup(Uploader& VulkanUploader, RaytracedGroup& raytracedGroup);
 	void ClearRaytracedGroup(const VkDevice& VulkanDevice, RaytracedGroup& raytracedGroup);
 
+	/* Scene Representation */
+
+
+	struct SceneMaterials
+	{
+		//color texture array
+		Texture _Textures;
+	};
+
 
 	struct SceneBuffer
 	{
@@ -644,6 +656,8 @@ namespace VulkanHelper
 		//an offset buffer containing information on which part of the scene buffer to pick when rendering in shader
 		StaticBufferHandle _OffsetBuffer;
 
+		//the object holding all texture info for all models
+		Texture	_TextureArray;
 
 		uint32_t _IndexBufferSize	= 0;
 		uint32_t _UVsBufferSize		= 0;
@@ -654,6 +668,8 @@ namespace VulkanHelper
 
 	bool CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBuffer& sceneBuffer, const VolatileLoopArray<Mesh>& mesh);
 	bool CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBuffer& sceneBuffer, const MultipleVolatileMemory<Model>& model, uint32_t modelNb);
+
+
 
 	void ClearSceneBuffer(const VkDevice& VulkanDevice, SceneBuffer& sceneBuffer);
 

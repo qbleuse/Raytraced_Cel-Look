@@ -1211,6 +1211,9 @@ bool VulkanHelper::CreateModelFromRawVertices(Uploader& VulkanUploader,
 		model._Materials[0]._Textures.Alloc(1);
 		model._Textures[0]._Sampler = model._Samplers[0];
 		model._Materials[0]._Textures[0] = model._Textures[0];
+		model._material_index.Alloc(1);
+		model._material_index[0] = 0;
+
 	}
 
 	return result == VK_SUCCESS && noError;
@@ -1384,8 +1387,10 @@ bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const void* pixels, uin
 	if (pixels == nullptr)
 		return false;
 
+	texture._ImageExtent = { width, height, 1 };
+
 	//creating image from stbi info
-	if (!CreateImage(VulkanUploader, texture._Image, texture._ImageMemory, width, height, 1u, VK_IMAGE_TYPE_2D, imageFormat, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT))
+	if (!CreateImage(VulkanUploader, texture._Image, texture._ImageMemory, width, height, 1u, VK_IMAGE_TYPE_2D, imageFormat, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT))
 	{
 		return false;
 	}
@@ -1415,6 +1420,49 @@ bool VulkanHelper::LoadTexture(Uploader& VulkanUploader, const void* pixels, uin
 	return result == VK_SUCCESS;
 }
 
+
+bool VulkanHelper::CreateImage2DArray(Uploader& VulkanUploader, Texture& texture, uint32_t width, uint32_t height, uint32_t layerCount, VkFormat format)
+{
+	//to record if an error happened
+	VkResult result = VK_SUCCESS;
+
+	//save the texture's dimension
+	texture._ImageExtent = { width, height, 1 };
+
+	// creating the image object with data given in parameters
+	VkImageCreateInfo imageInfo{};
+	imageInfo.sType			= VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	imageInfo.imageType		= VK_IMAGE_TYPE_2D;//can be 2D or 3D image (even if it is quite unexpected)
+	imageInfo.format		= format;
+	imageInfo.extent		= texture._ImageExtent;
+	imageInfo.mipLevels		= 1u;
+	imageInfo.arrayLayers	= layerCount;//this will be a texture array
+	imageInfo.tiling		= VK_IMAGE_TILING_OPTIMAL;//will only load images from buffers, so no need to change this
+	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;//same this can be changed later and each scene will do what they need on their own
+	imageInfo.usage			= VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;//this will be only sampled and wrote to
+	imageInfo.sharingMode	= VK_SHARING_MODE_EXCLUSIVE;//we have to command queues : one for the app, one for the UI. the UI shouldn't use iamge we create.
+	imageInfo.samples		= VK_SAMPLE_COUNT_1_BIT;//why would you want more than one sample in a simple app ?
+	imageInfo.flags			= 0; // Optional
+	VK_CALL_PRINT(vkCreateImage(VulkanUploader._VulkanDevice, &imageInfo, nullptr, &texture._Image));
+
+	//allocates space on GPU
+	CreateVulkanImageMemory(VulkanUploader, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, texture._Image, texture._ImageMemory);
+
+	VK_CALL_PRINT(vkBindImageMemory(VulkanUploader._VulkanDevice, texture._Image, texture._ImageMemory, 0))
+
+	//create the image view with our image array
+	VkImageViewCreateInfo viewCreateInfo {};
+	viewCreateInfo.sType						= VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	viewCreateInfo.subresourceRange.aspectMask	= VK_IMAGE_ASPECT_COLOR_BIT;
+	viewCreateInfo.format						= format;
+	viewCreateInfo.image						= texture._Image;
+	viewCreateInfo.subresourceRange.layerCount	= 1;
+	viewCreateInfo.subresourceRange.levelCount	= 1;
+	viewCreateInfo.viewType						= VK_IMAGE_VIEW_TYPE_2D_ARRAY;//as this is the array
+	VK_CALL_PRINT(vkCreateImageView(VulkanUploader._VulkanDevice, &viewCreateInfo, nullptr, &texture._ImageView));
+
+	return result == VK_SUCCESS;
+}
 
 void VulkanHelper::ClearTexture(const VkDevice& VulkanDevice, Texture& texture)
 {
@@ -2455,14 +2503,46 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 	VkResult result = VK_SUCCESS;
 
 	uint32_t meshNb = 0;
-	for (uint32_t i = 0; i < modelNb; i++)
-		meshNb += models[i]._Meshes.Nb();
+	uint32_t textureNb = 0;
+	{
+		uint32_t maxWidth = 0;
+		uint32_t maxHeight = 0;
+		for (uint32_t i = 0; i < modelNb; i++)
+		{
+			meshNb += models[i]._Meshes.Nb();
+			textureNb += models[i]._Textures.Nb();
+			for (uint32_t t = 0; t < models[i]._Textures.Nb(); t++)
+			{
+				if (models[i]._Textures[t]._ImageExtent.width > maxWidth)
+					maxWidth = models[i]._Textures[t]._ImageExtent.width;
+				if (models[i]._Textures[t]._ImageExtent.height > maxHeight)
+					maxHeight = models[i]._Textures[t]._ImageExtent.height;
+			}
+		}
+
+		//making our texture array. as every texture need to have the same size in the array, we'll scale all texture to be as big as the biggest one.
+		//in terms of performance and memory, absolutely not ideal, but easier to work with once in shader (as we'll just sample)
+		VulkanHelper::CreateImage2DArray(VulkanUploader, sceneBuffer._TextureArray, maxWidth, maxHeight, textureNb, VK_FORMAT_B8G8R8A8_UNORM);
+	}
+
+	VulkanHelper::ImageMemoryBarrier(VulkanUploader._CopyBuffer, sceneBuffer._TextureArray._Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 
+		VK_ACCESS_NONE, VK_IMAGE_LAYOUT_UNDEFINED, {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, textureNb});
+
+	struct offset
+	{
+		uint32_t indexOffset{0};
+		uint32_t uvOffset{0};
+		uint32_t normalOffset{0};
+
+		uint32_t textureOffset{ 0 };
+	};
 
 	//very naive way of doing this. just copying the already allocated GPU memory into a new allocated scene buffer
 	{
 		//the offset buffer that tells the eqch mesh where its vertices are
-		MultipleScopedMemory<uint32_t> offsetBuffer{ meshNb * 3 };
-		memset(*offsetBuffer, 0, meshNb * sizeof(uint32_t) * 3);
+		MultipleScopedMemory<offset> offsetBuffer{ meshNb };
+		memset(*offsetBuffer, 0, meshNb * sizeof(offset));
 
 		//to count the total nb of vertices there is to allocate a buffer of that size 
 		uint32_t totalIndexNb = 0;
@@ -2476,14 +2556,14 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 		for (uint32_t j = 0, modelOffset = 0; j < modelNb; j++)
 		{
 
-			offsetBuffer[modelOffset + 0] = totalIndexNb;
-			offsetBuffer[modelOffset + 1] = totalUVNb;
-			offsetBuffer[modelOffset + 2] = totalNormalNb;
+			offsetBuffer[modelOffset].indexOffset	= totalIndexNb;
+			offsetBuffer[modelOffset].uvOffset		= totalUVNb;
+			offsetBuffer[modelOffset].normalOffset	= totalNormalNb;
 
 			//filling the offset buffer and the total count
 			for (uint32_t i = 1; i <= models[j]._Meshes.Nb(); i++)
 			{
-				const Mesh& indexedMesh = models[j]._Meshes[i - 1];
+				const Mesh&		indexedMesh = models[j]._Meshes[i - 1];
 
 				totalIndexNb += indexedMesh._indices_nb;
 				totalUVNb += indexedMesh._uv_nb;
@@ -2492,9 +2572,9 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 				if (i == models[j]._Meshes.Nb())
 					break;
 
-				offsetBuffer[modelOffset + i * 3 + 0] = totalIndexNb;
-				offsetBuffer[modelOffset + i * 3 + 1] = totalUVNb;
-				offsetBuffer[modelOffset + i * 3 + 2] = totalNormalNb;
+				offsetBuffer[modelOffset + i].indexOffset	= totalIndexNb;
+				offsetBuffer[modelOffset + i].uvOffset		= totalUVNb;
+				offsetBuffer[modelOffset + i].textureOffset = totalNormalNb;
 			}
 
 			modelOffset = models[j]._Meshes.Nb() * 3;
@@ -2510,33 +2590,60 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 		CreateStaticBufferHandle(VulkanUploader, sceneBuffer._UVsBuffer, sceneBuffer._UVsBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 		CreateStaticBufferHandle(VulkanUploader, sceneBuffer._NormalBuffer, sceneBuffer._NormalBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
 
-		//copy buffers
-		for (uint32_t j = 0, modelOffset = 0; j < modelNb; j++)
+		//copy buffers and blit textures
 		{
-			for (uint32_t i = 0; i < models[j]._Meshes.Nb(); i++)
+			uint32_t textureOffset = 0;
+			VkImageBlit blit{};
+			// a single 2D texture
+			blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			blit.srcSubresource.layerCount = 1;
+
+			//copied and scaled to a texture 2D in the array
+			blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			blit.dstSubresource.layerCount = 1;
+			blit.dstOffsets[1] = *(VkOffset3D*)(&sceneBuffer._TextureArray._ImageExtent);// the trop right corner of destination
+
+			for (uint32_t j = 0, modelOffset = 0; j < modelNb; j++)
 			{
-				const Mesh& indexedMesh = models[j]._Meshes[i];
+				for (uint32_t i = 0; i < models[j]._Meshes.Nb(); i++)
+				{
+					const Mesh& indexedMesh = models[j]._Meshes[i];
 
-				VkBufferCopy region;
-				region.srcOffset = indexedMesh._indices_offset;//this is already the offset in bytes for the indices
-				region.dstOffset = offsetBuffer[modelOffset + i * 3] * indexSize;
-				region.size = indexedMesh._indices_nb * indexSize;
-				vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Indices, sceneBuffer._IndexBuffer._StaticGPUBuffer, 1, &region);
-
-
-				region.srcOffset = indexedMesh._uv_offset;//this is already the offset in bytes for the uvs
-				region.dstOffset = offsetBuffer[modelOffset + i * 3 + 1] * sizeof(vec2);
-				region.size = indexedMesh._uv_nb * sizeof(vec2);
-				vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Uvs, sceneBuffer._UVsBuffer._StaticGPUBuffer, 1, &region);
+					VkBufferCopy region;
+					region.srcOffset = indexedMesh._indices_offset;//this is already the offset in bytes for the indices
+					region.dstOffset = offsetBuffer[modelOffset + i].indexOffset * indexSize;
+					region.size = indexedMesh._indices_nb * indexSize;
+					vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Indices, sceneBuffer._IndexBuffer._StaticGPUBuffer, 1, &region);
 
 
-				region.srcOffset = indexedMesh._normal_offset;//this is already the offset in bytes for the uvs
-				region.dstOffset = offsetBuffer[modelOffset + i * 3 + 2] * sizeof(vec3);
-				region.size = indexedMesh._normal_nb * sizeof(vec3);
-				vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Normals, sceneBuffer._NormalBuffer._StaticGPUBuffer, 1, &region);
+					region.srcOffset = indexedMesh._uv_offset;//this is already the offset in bytes for the uvs
+					region.dstOffset = offsetBuffer[modelOffset + i].uvOffset * sizeof(vec2);
+					region.size = indexedMesh._uv_nb * sizeof(vec2);
+					vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Uvs, sceneBuffer._UVsBuffer._StaticGPUBuffer, 1, &region);
+
+
+					region.srcOffset = indexedMesh._normal_offset;//this is already the offset in bytes for the uvs
+					region.dstOffset = offsetBuffer[modelOffset + i].normalOffset * sizeof(vec3);
+					region.size = indexedMesh._normal_nb * sizeof(vec3);
+					vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Normals, sceneBuffer._NormalBuffer._StaticGPUBuffer, 1, &region);
+
+
+					{
+						//Note QB : we should loop through all textures in the material, but for the moement, we're jsut testing with albedo
+						const Texture& indexedTexture = models[j]._Materials[models[j]._material_index[i]]._Textures[0];
+						
+						blit.dstSubresource.baseArrayLayer = offsetBuffer[modelOffset + i].textureOffset = textureOffset++;
+						blit.srcOffsets[1] = *(VkOffset3D*)(&indexedTexture._ImageExtent);// the top-right corner of source
+						
+						VulkanHelper::ImageMemoryBarrier(VulkanUploader._CopyBuffer, indexedTexture._Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+						vkCmdBlitImage(VulkanUploader._CopyBuffer, indexedTexture._Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, sceneBuffer._TextureArray._Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+						VulkanHelper::ImageMemoryBarrier(VulkanUploader._CopyBuffer, indexedTexture._Image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_MEMORY_READ_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_MEMORY_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+					}
+				}
+
+				modelOffset = models[j]._Meshes.Nb();
 			}
-			
-			modelOffset = models[j]._Meshes.Nb() * 3;
 		}
 
 		//making the AS accessible
@@ -2544,7 +2651,7 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);//basically just changing this memory to be visible, so the scope can be "immediate"
 
 
-		sceneBuffer._OffsetBufferSize = meshNb * sizeof(uint32_t) * 3;
+		sceneBuffer._OffsetBufferSize = meshNb * sizeof(offset);
 
 		//creating our offset buffer
 		CreateStaticBufferHandle(VulkanUploader, sceneBuffer._OffsetBuffer, sceneBuffer._OffsetBufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
