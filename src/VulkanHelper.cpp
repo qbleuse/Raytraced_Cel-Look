@@ -2522,7 +2522,7 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 
 		//making our texture array. as every texture need to have the same size in the array, we'll scale all texture to be as big as the biggest one.
 		//in terms of performance and memory, absolutely not ideal, but easier to work with once in shader (as we'll just sample)
-		VulkanHelper::CreateImage2DArray(VulkanUploader, sceneBuffer._TextureArray, maxWidth, maxHeight, textureNb, VK_FORMAT_B8G8R8A8_UNORM);
+		VulkanHelper::CreateImage2DArray(VulkanUploader, sceneBuffer._TextureArray, maxWidth, maxHeight, textureNb, VK_FORMAT_R8G8B8A8_UINT);
 	}
 
 	VulkanHelper::ImageMemoryBarrier(VulkanUploader._CopyBuffer, sceneBuffer._TextureArray._Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -2650,6 +2650,10 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 		MemorySyncScope(VulkanUploader._CopyBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
 			VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR);//basically just changing this memory to be visible, so the scope can be "immediate"
 
+		//making the texture accessible
+		VulkanHelper::ImageMemoryBarrier(VulkanUploader._CopyBuffer, sceneBuffer._TextureArray._Image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_MEMORY_READ_BIT,
+			VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+			VK_ACCESS_TRANSFER_WRITE_BIT, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, textureNb });
 
 		sceneBuffer._OffsetBufferSize = meshNb * sizeof(offset);
 
