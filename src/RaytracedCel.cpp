@@ -404,7 +404,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				const vec2 uv		= vec2(UV1 * coordinates.x + UV2 * coordinates.y + UV3 * coordinates.z);
 
 				payload.bHit		= 1.0;
-				payload.hitColor	= vec3(uv,0.0);
+				payload.hitColor	= normal;//vec3(uv,0.0);
 				payload.hitDistance = gl_HitTEXT;
 				payload.hitNormal	= normal;
 
@@ -1048,7 +1048,7 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 	
 		VulkanHelper::Uploader tmpUploader;
 		VulkanHelper::StartUploader(GAPIHandle, tmpUploader);
-		VulkanHelper::UpdateTransform(GAPIHandle._VulkanDevice, _RayTopAS, transform, 0, _RayBottomAS._AccelerationStructure.Nb());
+		VulkanHelper::UpdateTransform(GAPIHandle._VulkanDevice, _RayTopAS, transform, 0, _RayTopAS._InstancesInfo.geometryCount);
 		VulkanHelper::UpdateRaytracedGroup(tmpUploader, _RayTopAS);
 		VulkanHelper::SubmitUploader(tmpUploader);
 	}
