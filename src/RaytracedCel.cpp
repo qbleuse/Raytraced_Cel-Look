@@ -1052,7 +1052,7 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 	
 		VulkanHelper::Uploader tmpUploader;
 		VulkanHelper::StartUploader(GAPIHandle, tmpUploader);
-		VulkanHelper::UpdateTransform(GAPIHandle._VulkanDevice, _RayTopAS, transform, 0, _RayBottomAS._AccelerationStructure.Nb());
+		VulkanHelper::UpdateTransform(GAPIHandle._VulkanDevice, _RayTopAS, transform, 0, _RayTopAS._InstancesInfo.geometryCount);
 		VulkanHelper::UpdateRaytracedGroup(tmpUploader, _RayTopAS);
 		VulkanHelper::SubmitUploader(tmpUploader);
 	}
