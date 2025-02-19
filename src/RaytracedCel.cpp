@@ -91,7 +91,7 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 	/*===== PIPELINE ATTACHEMENT =====*/
 
 	{
-		VkDescriptorSetLayoutBinding layoutStaticBinding[6] =
+		VkDescriptorSetLayoutBinding layoutStaticBinding[7] =
 		{
 			//binding , descriptor type, descriptor count, shader stage
 			{ 0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//acceleration structure
@@ -99,11 +99,11 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 			{ 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer indices
 			{ 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer uvs
 			{ 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer normals
-			{ 5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR}//scene textures
-
+			{ 5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene textures
+			{ 6, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR}//scene textures sampler
 		};
 
-		VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, layoutStaticBinding, 6);
+		VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, layoutStaticBinding, 7);
 
 		VkDescriptorSetLayoutBinding layoutDynamicBinding[5] =
 		{
@@ -145,6 +145,9 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, _RaySceneBuffer._UVsBuffer._StaticGPUBuffer, 0, _RaySceneBuffer._UVsBufferSize, 3);
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, _RaySceneBuffer._NormalBuffer._StaticGPUBuffer, 0, _RaySceneBuffer._NormalBufferSize, 4);
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, _RaySceneBuffer._TextureArray._ImageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 5);
+		for (uint32_t i = 0; i < _RaySceneBuffer._TextureSamplers.Nb(); i++)
+			VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, VK_NULL_HANDLE, _RaySceneBuffer._TextureSamplers[i], VK_IMAGE_LAYOUT_UNDEFINED, 6, 0, i);
+	
 	}
 
 	/*===== PIPELINE CREATION =====*/
@@ -347,7 +350,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 	//define traingle closest hit shader
 	const char* trinagle_closest_hit_shader =
 		R"(#version 460
-			#line 350
+			#line 353
 			#extension GL_EXT_ray_tracing : enable
 
 
@@ -366,7 +369,8 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 			layout(binding = 2) readonly buffer IndexBuffer { uint[] Indices; };
 			layout(binding = 3) readonly buffer UVBuffer { float[] UVs; };
 			layout(binding = 4) readonly buffer NormalBuffer { float[] Normals; };
-			layout(binding = 5, rgba8ui) readonly uniform uimage2DArray Textures;
+			layout(binding = 5) uniform texture2DArray Textures;
+			layout(binding = 6) uniform sampler samplers;
 
 			hitAttributeEXT vec2 barycentric;
 
@@ -404,7 +408,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				const vec2 uv		= vec2(UV1 * coordinates.x + UV2 * coordinates.y + UV3 * coordinates.z);
 
 				payload.bHit		= 1.0;
-				payload.hitColor	= vec3(uv,0.0);
+				payload.hitColor	= texture(sampler2DArray(Textures, samplers), vec3(uv, textureOffset)).rgb;
 				payload.hitDistance = gl_HitTEXT;
 				payload.hitNormal	= normal;
 

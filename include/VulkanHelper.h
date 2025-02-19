@@ -492,11 +492,11 @@ namespace VulkanHelper
 	//release the descriptor Pool and sets from the Pipeline Descriptor
 	void ReleaseDescriptor(const VkDevice& VulkanDevice, PipelineDescriptors& PipelineDescriptor);
 	//uploads an acceleration structure at the descriptor's index given in parameter
-	void UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkAccelerationStructureKHR& AS, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex = 0);
+	void UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkAccelerationStructureKHR& AS, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex = 0, uint32_t arrayElement = 0);
 	//uploads a buffer at the descriptor's index given in parameter
-	void UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkBuffer& Buffer, uint32_t offset, uint32_t range, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex = 0);
+	void UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkBuffer& Buffer, uint32_t offset, uint32_t range, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex = 0, uint32_t arrayElement = 0);
 	//uploads an image at the descriptor's index given in parameter
-	void UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkImageView& ImageView, const VkSampler& Sampler, VkImageLayout ImageLayout, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex = 0);
+	void UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkImageView& ImageView, const VkSampler& Sampler, VkImageLayout ImageLayout, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex = 0, uint32_t arrayElement = 0);
 	//clears all data from the pipeline descriptor object
 	void ClearPipelineDescriptor(const VkDevice& VulkanDevice, PipelineDescriptors& PipelineDescriptor);
 
@@ -658,6 +658,9 @@ namespace VulkanHelper
 
 		//the object holding all texture info for all models
 		Texture	_TextureArray;
+
+		//the array containing all the samplers for each textures
+		VolatileLoopArray<VkSampler> _TextureSamplers;
 
 		uint32_t _IndexBufferSize	= 0;
 		uint32_t _UVsBufferSize		= 0;

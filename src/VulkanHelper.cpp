@@ -1561,7 +1561,7 @@ void VulkanHelper::ReleaseDescriptor(const VkDevice& VulkanDevice, PipelineDescr
 	PipelineDescriptor._DescriptorSets.Clear();
 }
 
-void VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkAccelerationStructureKHR& AS, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex)
+void VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkAccelerationStructureKHR& AS, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex, uint32_t arrayElement)
 {
 	//the acceleration structure data
 	VkWriteDescriptorSetAccelerationStructureKHR ASInfo{};
@@ -1584,15 +1584,15 @@ void VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptor
 	descriptorWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	descriptorWrite.dstBinding		= PipelineDescriptor._DescriptorBindings[index].binding;
 	descriptorWrite.dstSet			= PipelineDescriptor._DescriptorSets[descriptorSetIndex];
-	descriptorWrite.dstArrayElement	= 0;
+	descriptorWrite.dstArrayElement	= arrayElement;
 	descriptorWrite.descriptorType	= PipelineDescriptor._DescriptorBindings[index].descriptorType;
-	descriptorWrite.descriptorCount	= PipelineDescriptor._DescriptorBindings[index].descriptorCount;
+	descriptorWrite.descriptorCount = 1;// PipelineDescriptor._DescriptorBindings[index].descriptorCount;
 	descriptorWrite.pNext			= &ASInfo;
 	vkUpdateDescriptorSets(VulkanUploader._VulkanDevice, 1, &descriptorWrite, 0, nullptr);
 }
 
 
-void VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkBuffer& Buffer, uint32_t offset, uint32_t range, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex)
+void VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkBuffer& Buffer, uint32_t offset, uint32_t range, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex, uint32_t arrayElement)
 {
 	//the buffer data
 	VkDescriptorBufferInfo bufferInfo{};
@@ -1615,14 +1615,14 @@ void VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptor
 	descriptorWrite.sType				= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	descriptorWrite.dstBinding			= PipelineDescriptor._DescriptorBindings[index].binding;
 	descriptorWrite.dstSet				= PipelineDescriptor._DescriptorSets[descriptorSetIndex];
-	descriptorWrite.dstArrayElement		= 0;
+	descriptorWrite.dstArrayElement		= arrayElement;
 	descriptorWrite.descriptorType		= PipelineDescriptor._DescriptorBindings[index].descriptorType;
 	descriptorWrite.descriptorCount		= PipelineDescriptor._DescriptorBindings[index].descriptorCount;
 	descriptorWrite.pBufferInfo			= &bufferInfo;
 	vkUpdateDescriptorSets(VulkanUploader._VulkanDevice, 1, &descriptorWrite, 0, nullptr);
 }
 
-void VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkImageView& ImageView, const VkSampler& Sampler, VkImageLayout ImageLayout, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex)
+void VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptors& PipelineDescriptor, const VkImageView& ImageView, const VkSampler& Sampler, VkImageLayout ImageLayout, uint32_t descriptorBindingIndex, uint32_t descriptorSetIndex, uint32_t arrayElement)
 {
 	//the image data
 	VkDescriptorImageInfo imageInfo{};
@@ -1645,7 +1645,7 @@ void VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptor
 	descriptorWrite.sType			= VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	descriptorWrite.dstBinding		= PipelineDescriptor._DescriptorBindings[index].binding;
 	descriptorWrite.dstSet			= PipelineDescriptor._DescriptorSets[descriptorSetIndex];
-	descriptorWrite.dstArrayElement = 0;
+	descriptorWrite.dstArrayElement = arrayElement;
 	descriptorWrite.descriptorType	= PipelineDescriptor._DescriptorBindings[index].descriptorType;
 	descriptorWrite.descriptorCount = PipelineDescriptor._DescriptorBindings[index].descriptorCount;
 	descriptorWrite.pImageInfo		= &imageInfo;
@@ -2504,13 +2504,18 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 
 	uint32_t meshNb = 0;
 	uint32_t textureNb = 0;
+	uint32_t samplerNb = 0;
 	{
 		uint32_t maxWidth = 0;
 		uint32_t maxHeight = 0;
 		for (uint32_t i = 0; i < modelNb; i++)
 		{
+			//adding overall nb
 			meshNb += models[i]._Meshes.Nb();
 			textureNb += models[i]._Textures.Nb();
+			samplerNb = models[i]._Samplers.Nb();
+
+			//looking for max width and max height
 			for (uint32_t t = 0; t < models[i]._Textures.Nb(); t++)
 			{
 				if (models[i]._Textures[t]._ImageExtent.width > maxWidth)
@@ -2522,7 +2527,9 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 
 		//making our texture array. as every texture need to have the same size in the array, we'll scale all texture to be as big as the biggest one.
 		//in terms of performance and memory, absolutely not ideal, but easier to work with once in shader (as we'll just sample)
-		VulkanHelper::CreateImage2DArray(VulkanUploader, sceneBuffer._TextureArray, maxWidth, maxHeight, textureNb, VK_FORMAT_R8G8B8A8_UINT);
+		VulkanHelper::CreateImage2DArray(VulkanUploader, sceneBuffer._TextureArray, maxWidth, maxHeight, textureNb, VK_FORMAT_R8G8B8A8_SNORM);
+
+		sceneBuffer._TextureSamplers.Alloc(samplerNb);
 	}
 
 	VulkanHelper::ImageMemoryBarrier(VulkanUploader._CopyBuffer, sceneBuffer._TextureArray._Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_TRANSFER_WRITE_BIT,
@@ -2536,6 +2543,7 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 		uint32_t normalOffset{0};
 
 		uint32_t textureOffset{ 0 };
+		uint32_t samplerOffset{ 0 };
 	};
 
 	//very naive way of doing this. just copying the already allocated GPU memory into a new allocated scene buffer
@@ -2576,6 +2584,13 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 				offsetBuffer[modelOffset + i].uvOffset		= totalUVNb;
 				offsetBuffer[modelOffset + i].textureOffset = totalNormalNb;
 			}
+
+			//copying samplers
+			for (uint32_t i = 0; i < models[j]._Samplers.Nb(); i++)
+			{
+				sceneBuffer._TextureSamplers[modelOffset + i] = models[j]._Samplers[i];
+			}
+
 
 			modelOffset = models[j]._Meshes.Nb() * 3;
 		}
@@ -2673,5 +2688,8 @@ void VulkanHelper::ClearSceneBuffer(const VkDevice& VulkanDevice, SceneBuffer& s
 	ClearStaticBufferHandle(VulkanDevice, sceneBuffer._NormalBuffer);
 	ClearStaticBufferHandle(VulkanDevice, sceneBuffer._OffsetBuffer);
 	ClearStaticBufferHandle(VulkanDevice, sceneBuffer._UVsBuffer);
+
+	ClearTexture(VulkanDevice, sceneBuffer._TextureArray);
+	sceneBuffer._TextureSamplers.Clear();
 }
 
