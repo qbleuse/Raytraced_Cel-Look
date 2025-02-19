@@ -1586,7 +1586,7 @@ void VulkanHelper::UploadDescriptor(Uploader& VulkanUploader, PipelineDescriptor
 	descriptorWrite.dstSet			= PipelineDescriptor._DescriptorSets[descriptorSetIndex];
 	descriptorWrite.dstArrayElement	= arrayElement;
 	descriptorWrite.descriptorType	= PipelineDescriptor._DescriptorBindings[index].descriptorType;
-	descriptorWrite.descriptorCount = 1;// PipelineDescriptor._DescriptorBindings[index].descriptorCount;
+	descriptorWrite.descriptorCount = PipelineDescriptor._DescriptorBindings[index].descriptorCount;
 	descriptorWrite.pNext			= &ASInfo;
 	vkUpdateDescriptorSets(VulkanUploader._VulkanDevice, 1, &descriptorWrite, 0, nullptr);
 }
@@ -2513,7 +2513,7 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 			//adding overall nb
 			meshNb += models[i]._Meshes.Nb();
 			textureNb += models[i]._Textures.Nb();
-			samplerNb = models[i]._Samplers.Nb();
+			samplerNb += models[i]._Samplers.Nb();
 
 			//looking for max width and max height
 			for (uint32_t t = 0; t < models[i]._Textures.Nb(); t++)
@@ -2543,7 +2543,6 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 		uint32_t normalOffset{0};
 
 		uint32_t textureOffset{ 0 };
-		uint32_t samplerOffset{ 0 };
 	};
 
 	//very naive way of doing this. just copying the already allocated GPU memory into a new allocated scene buffer
@@ -2592,7 +2591,7 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 			}
 
 
-			modelOffset = models[j]._Meshes.Nb() * 3;
+			modelOffset += models[j]._Meshes.Nb();
 		}
 
 		//we can determine the final size of each buffer
@@ -2657,7 +2656,7 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 					}
 				}
 
-				modelOffset = models[j]._Meshes.Nb();
+				modelOffset += models[j]._Meshes.Nb();
 			}
 		}
 

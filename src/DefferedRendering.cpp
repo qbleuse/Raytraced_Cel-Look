@@ -105,7 +105,7 @@ void DefferedRendering::PrepareGBufferProps(class GraphicsAPIManager& GAPI)
 		depthBufferAttachment.samples = VK_SAMPLE_COUNT_1_BIT;//one pixel will have exactly one calculation done
 		depthBufferAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;//we'll make the pipeline clear the depth buffer
 		depthBufferAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;//we just want the rasterizer to use it
-		depthBufferAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		depthBufferAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		depthBufferAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 		depthBufferAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;//we write onto the entire vewport so it will be completely replaced, what was before does not interests us
 		depthBufferAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;//we just want to use it as depth buffer.
@@ -133,7 +133,7 @@ void DefferedRendering::PrepareDefferedPassProps(class GraphicsAPIManager& GAPI)
 		VkAttachmentDescription attachements[1] =
 		{
 			//flags, format, samples, loadOp, storeOp, stencilLoadOp, stencilStoreOp, inialLayout, finalLayout
-			{0, GAPI._VulkanSurfaceFormat.format,  VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR}
+			{0, GAPI._VulkanSurfaceFormat.format,  VK_SAMPLE_COUNT_1_BIT, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_DONT_CARE, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR}
 		};
 
 		VulkanHelper::CreatePipelineOutput(GAPI._VulkanUploader, _DefferedPipelineOutput, attachements, 1, {});

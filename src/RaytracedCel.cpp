@@ -91,31 +91,35 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 	/*===== PIPELINE ATTACHEMENT =====*/
 
 	{
-		VkDescriptorSetLayoutBinding layoutStaticBinding[7] =
 		{
-			//binding , descriptor type, descriptor count, shader stage
-			{ 0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//acceleration structure
-			{ 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer offset
-			{ 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer indices
-			{ 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer uvs
-			{ 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer normals
-			{ 5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene textures
-			{ 6, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR}//scene textures sampler
-		};
+			VkDescriptorSetLayoutBinding layoutStaticBinding[7] =
+			{
+				//binding , descriptor type, descriptor count, shader stage
+				{ 0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//acceleration structure
+				{ 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer offset
+				{ 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer indices
+				{ 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer uvs
+				{ 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer normals
+				{ 5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene textures
+				{ 6, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR}//scene textures sampler
+			};
 
-		VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, layoutStaticBinding, 7);
+			VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, layoutStaticBinding, 7);
+		}
 
-		VkDescriptorSetLayoutBinding layoutDynamicBinding[5] =
 		{
-			//binding , descriptor type, descriptor count, shader stage
-			{ 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR},//uniform global buffer
-			{ 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//direct light framebuffer
-			{ 2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//indirect light framebuffer
-			{ 3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//g buffer position
-			{ 4, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR}//g buffer normal
-		};
+			VkDescriptorSetLayoutBinding layoutDynamicBinding[5] =
+			{
+				//binding , descriptor type, descriptor count, shader stage
+				{ 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR},//uniform global buffer
+				{ 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//direct light framebuffer
+				{ 2, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//indirect light framebuffer
+				{ 3, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//g buffer position
+				{ 4, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR}//g buffer normal
+			};
 
-		VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, layoutDynamicBinding, 5);
+			VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, layoutDynamicBinding, 5);
+		}
 	}
 
 	{
@@ -145,8 +149,8 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, _RaySceneBuffer._UVsBuffer._StaticGPUBuffer, 0, _RaySceneBuffer._UVsBufferSize, 3);
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, _RaySceneBuffer._NormalBuffer._StaticGPUBuffer, 0, _RaySceneBuffer._NormalBufferSize, 4);
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, _RaySceneBuffer._TextureArray._ImageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 5);
-		for (uint32_t i = 0; i < _RaySceneBuffer._TextureSamplers.Nb(); i++)
-			VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, VK_NULL_HANDLE, _RaySceneBuffer._TextureSamplers[i], VK_IMAGE_LAYOUT_UNDEFINED, 6, 0, i);
+		//for (uint32_t i = 0; i < _RaySceneBuffer._TextureSamplers.Nb(); i++)
+			VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, VK_NULL_HANDLE, _RaySceneBuffer._TextureSamplers[0], VK_IMAGE_LAYOUT_UNDEFINED, 6, 0, 0);
 	
 	}
 
@@ -246,22 +250,37 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 
 				for (int j = 0; j < nb_samples; j++)
 				{
+					//const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(RandomFloat(seed) - 0.5,RandomFloat(seed) - 0.5);
+					//
+					////finding the pixel we are computing from the ray launch arguments
+					//const vec2 inUV = (pixelCenter) / vec2(gl_LaunchSizeEXT.xy);
+					//
+					////technically the first rebound but we already have it so let's use it
+					//vec4 origin = imageLoad(posBuffer, ivec2(pixelCenter));
+					//vec4 normal = imageLoad(normalBuffer, ivec2(pixelCenter));
+					//
+					//
+					//callablePayload.direction = origin.xyz - view[3].xyz;
+					//callablePayload.normal = normal.xyz;
+					//callablePayload.RandomSeed = payload.RandomSeed;
+					////creating a direction for our ray
+					//executeCallableEXT(0, 1);//for the moment just diffuse
+					//vec4 direction = vec4(callablePayload.normal,0.0);
+
 					const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(RandomFloat(seed) - 0.5,RandomFloat(seed) - 0.5);
 
 					//finding the pixel we are computing from the ray launch arguments
 					const vec2 inUV = (pixelCenter) / vec2(gl_LaunchSizeEXT.xy);
 
-					//technically the first rebound but we already have it so let's use it
-					vec4 origin = imageLoad(posBuffer, ivec2(pixelCenter));
-					vec4 normal = imageLoad(normalBuffer, ivec2(pixelCenter));
+					vec2 d = inUV * 2.0 - 1.0;
 
-					
-					callablePayload.direction = origin.xyz - view[3].xyz;
-					callablePayload.normal = normal.xyz;
-					callablePayload.RandomSeed = payload.RandomSeed;
+					vec4 origin = -view[3];
+					//the targets are on a viewport ahead of us by 3
+					vec4 target = proj * vec4(d,1.0,1.0);
+					target = target/target.w;
+
 					//creating a direction for our ray
-					executeCallableEXT(0, 1);//for the moment just diffuse
-					vec4 direction = vec4(callablePayload.normal,0.0);
+					vec4 direction = view * vec4(normalize(target.xyz),0.0);
 
 					//zero init
 					payload.bHit		= 0;
@@ -350,8 +369,9 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 	//define traingle closest hit shader
 	const char* trinagle_closest_hit_shader =
 		R"(#version 460
-			#line 353
+			#line 368
 			#extension GL_EXT_ray_tracing : enable
+			#extension GL_EXT_shader_16bit_storage : enable
 
 
 			struct HitRecord 
@@ -366,7 +386,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 			layout(location = 0) rayPayloadInEXT HitRecord payload;
 
 			layout(binding = 1) readonly buffer OffsetBuffer { uint[] Offsets; };
-			layout(binding = 2) readonly buffer IndexBuffer { uint[] Indices; };
+			layout(binding = 2) readonly buffer IndexBuffer { uint16_t[] Indices; };
 			layout(binding = 3) readonly buffer UVBuffer { float[] UVs; };
 			layout(binding = 4) readonly buffer NormalBuffer { float[] Normals; };
 			layout(binding = 5) uniform texture2DArray Textures;
@@ -381,12 +401,12 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				const uint indexOffset	= Offsets[gl_InstanceID * 4 + 0];
 				const uint uvOffset		= Offsets[gl_InstanceID * 4 + 1];
 				const uint normalOffset = Offsets[gl_InstanceID * 4 + 2];
-				const uint textureOffset = Offsets[gl_InstanceID * 4 + 4];
+				const uint textureOffset = Offsets[gl_InstanceID * 4 + 3];
 
 
-				const uint n1_offset = (Indices[indexOffset + gl_PrimitiveID * 3 + 0] + normalOffset) * 3;
-				const uint n2_offset = (Indices[indexOffset + gl_PrimitiveID * 3 + 1] + normalOffset) * 3;
-				const uint n3_offset = (Indices[indexOffset + gl_PrimitiveID * 3 + 2] + normalOffset) * 3;
+				const uint n1_offset = (uint(Indices[indexOffset + gl_PrimitiveID * 3 + 0]) + normalOffset) * 3;
+				const uint n2_offset = (uint(Indices[indexOffset + gl_PrimitiveID * 3 + 1]) + normalOffset) * 3;
+				const uint n3_offset = (uint(Indices[indexOffset + gl_PrimitiveID * 3 + 2]) + normalOffset) * 3;
 
 
 				const vec3 N1 = vec3(Normals[n1_offset + 0], Normals[n1_offset + 1], Normals[n1_offset + 2]);
@@ -397,9 +417,9 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 
 				vec3 normal = gl_ObjectToWorldEXT * vec4(normalize(N1 * coordinates.x + N2 * coordinates.y + N3 * coordinates.z),0.0);
 
-				const uint uv1_offset = (Indices[indexOffset + gl_PrimitiveID * 3 + 0] + uvOffset) * 3;
-				const uint uv2_offset = (Indices[indexOffset + gl_PrimitiveID * 3 + 1] + uvOffset) * 3;
-				const uint uv3_offset = (Indices[indexOffset + gl_PrimitiveID * 3 + 2] + uvOffset) * 3;
+				const uint uv1_offset = (uint(Indices[indexOffset + gl_PrimitiveID * 3 + 0]) + uvOffset) * 2;
+				const uint uv2_offset = (uint(Indices[indexOffset + gl_PrimitiveID * 3 + 1]) + uvOffset) * 2;
+				const uint uv3_offset = (uint(Indices[indexOffset + gl_PrimitiveID * 3 + 2]) + uvOffset) * 2;
 
 				const vec2 UV1 = vec2(UVs[uv1_offset + 0], UVs[uv1_offset + 1]);
 				const vec2 UV2 = vec2(UVs[uv2_offset + 0], UVs[uv2_offset + 1]);
@@ -807,12 +827,6 @@ void RaytracedCel::PrepareCompositingScripts(GraphicsAPIManager& GAPI)
 			const vec3 indirectLight = texture(sampler2D(indirectLightBuffer,pointSampler),uv).rgb;
 
 			const float outline = sobel(normalBuffer, uv);
-
-			if (dot(normal,normal) == 0.0)
-			{
-				outColor = vec4(color,1.0);
-				return;
-			}
 
 			//the compositing input
 			if (debugIndex == 0)
