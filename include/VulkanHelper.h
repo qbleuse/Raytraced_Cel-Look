@@ -368,7 +368,6 @@ namespace VulkanHelper
 		VkBuffer	_Indices{ VK_NULL_HANDLE };
 		uint32_t	_indices_nb;
 		uint32_t	_indices_offset;
-		VkIndexType _indices_type;
 
 	};
 

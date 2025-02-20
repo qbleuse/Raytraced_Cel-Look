@@ -707,7 +707,6 @@ void VulkanHelper::LoadObjFile(Uploader& VulkanUploader, const char* file_name, 
 		meshes[i]._indices_nb = indexNb;
 		//set the offest in the _Indices buffer to draw the mesh
 		meshes[i]._indices_offset = indexOffset * sizeof(uint32_t);
-		meshes[i]._indices_type = VK_INDEX_TYPE_UINT32;
 
 		//sets the nb of vertices in the buffers
 		meshes[i]._pos_nb		= nbVertices;
@@ -801,9 +800,9 @@ bool LoadGLTFBuffersInGPU(Uploader& VulkanUploader, const tinygltf::Model& loade
 
 		//we're using a static because it is easier to upload with, but we actually only want to allocate and send data to device memory
 		StaticBufferHandle tmpBufferHandle;
-		noError &= CreateVulkanBufferAndMemory(VulkanUploader, buffer.data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		noError &= VulkanHelper::CreateVulkanBufferAndMemory(VulkanUploader, buffer.data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tmpBufferHandle._StaticGPUBuffer, tmpBufferHandle._StaticGPUMemoryHandle, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
-		noError &= UploadStaticBufferHandle(VulkanUploader, tmpBufferHandle, buffer.data.data(), buffer.data.size());
+		noError &= VulkanHelper::UploadStaticBufferHandle(VulkanUploader, tmpBufferHandle, buffer.data.data(), buffer.data.size());
 
 		model._BuffersHandle[i] = tmpBufferHandle._StaticGPUMemoryHandle;
 
@@ -979,6 +978,102 @@ bool LoadGLTFMaterialInGPU(Uploader& VulkanUploader, const tinygltf::Model& load
 	return noError;
 }
 
+void SetUint32IndexBuffer(Uploader& VulkanUploader, const tinygltf::Model& loadedModel, const tinygltf::Accessor& indexAccessor, Model& model, uint32_t meshIndex)
+{
+	//out index buffer size at the end should always be the number of index by the size of a single uint32
+	uint32_t indexBufferSize = indexAccessor.count * sizeof(uint32_t);
+
+	//the index in our own model of the buffer memory we should use to create our index buffer
+	uint32_t bufferHandleIndex = 0;
+
+	//here, we will create a new buffer hand le if necessarry
+	{
+		//the buffer view that represents our 
+		const tinygltf::BufferView& bufferView = loadedModel.bufferViews[indexAccessor.bufferView];
+
+		switch (indexAccessor.componentType)
+		{
+		case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
+			//first, we need to expand our buffer handles number
+			ExpandHeap<VkDeviceMemory, false, false>(model._BuffersHandle, model._BuffersHandle.Nb(), model._BuffersHandle.Nb() + 1);
+
+			//we need to create a new uint32 buffer so do this first
+			{
+				//getting back a pointer to the start of our buffer
+				uint8_t* bytes = (uint8_t*)(loadedModel.buffers[bufferView.buffer].data.data() + bufferView.byteOffset + indexAccessor.byteOffset);
+
+				//linear copy. I am quite unpleased by the fact that no other faster way came to mind...
+				SingleScopedMemory<uint32_t> indices{ static_cast<uint32_t>(indexAccessor.count) };
+				for (uint32_t i = 0; i < indexAccessor.count; i++)
+				{
+					indices[i] = static_cast<uint32_t>(bytes[i]);
+				}
+
+				/* we're using a static because it is easier to upload with, but we actually only want to allocate and send data to device memory*/
+				StaticBufferHandle tmpBufferHandle;
+				VulkanHelper::CreateVulkanBufferAndMemory(VulkanUploader, indexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tmpBufferHandle._StaticGPUBuffer, tmpBufferHandle._StaticGPUMemoryHandle, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+				VulkanHelper::UploadStaticBufferHandle(VulkanUploader, tmpBufferHandle, *indices, indexBufferSize);
+
+				VulkanUploader._ToFreeBuffers.Add(tmpBufferHandle._StaticGPUBuffer);
+
+				//set our new buffer in oàçur handles
+				bufferHandleIndex = model._BuffersHandle.Nb() - 1;
+				model._BuffersHandle[bufferHandleIndex] = tmpBufferHandle._StaticGPUMemoryHandle;
+
+				//as it is a buffer wit honly the indices, no need for offsets
+				model._Meshes[meshIndex]._indices_offset = 0;
+			}
+
+			break;
+		case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
+			//first, we need to expand our buffer handles number
+			ExpandHeap<VkDeviceMemory, false, false>(model._BuffersHandle, model._BuffersHandle.Nb(), model._BuffersHandle.Nb() + 1);
+
+			//we need to create a new uint32 buffer so do this first
+			{
+				//getting back a pointer to the start of our buffer
+				uint16_t* bytes = (uint16_t*)(loadedModel.buffers[bufferView.buffer].data.data() + bufferView.byteOffset + indexAccessor.byteOffset);
+
+				//linear copy. I am quite unpleased by the fact that no other faster way came to mind...
+				SingleScopedMemory<uint32_t> indices{ static_cast<uint32_t>(indexAccessor.count) };
+				for (uint32_t i = 0; i < indexAccessor.count; i++)
+				{
+					indices[i] = static_cast<uint32_t>(bytes[i]);
+				}
+
+				/* we're using a static because it is easier to upload with, but we actually only want to allocate and send data to device memory*/
+				StaticBufferHandle tmpBufferHandle;
+				VulkanHelper::CreateVulkanBufferAndMemory(VulkanUploader, indexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+					VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, tmpBufferHandle._StaticGPUBuffer, tmpBufferHandle._StaticGPUMemoryHandle, 0, true, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
+				VulkanHelper::UploadStaticBufferHandle(VulkanUploader, tmpBufferHandle, *indices, indexBufferSize);
+
+				VulkanUploader._ToFreeBuffers.Add(tmpBufferHandle._StaticGPUBuffer);
+
+				//set our new buffer in oàçur handles
+				bufferHandleIndex = model._BuffersHandle.Nb() - 1;
+				model._BuffersHandle[bufferHandleIndex] = tmpBufferHandle._StaticGPUMemoryHandle;
+
+				//as it is a buffer wit honly the indices, no need for offsets
+				model._Meshes[meshIndex]._indices_offset = 0;
+			}
+			break;
+		case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT://it is already uint32, we can use, as-is
+			//using the same offset as buffer view
+			bufferHandleIndex = bufferView.buffer;
+			model._Meshes[meshIndex]._indices_offset	= bufferView.byteOffset + indexAccessor.byteOffset;
+			break;
+		}
+	}
+
+	//then create buffer
+	VulkanHelper::CreateVulkanBufferAndMemory(VulkanUploader, indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		model._Meshes[meshIndex]._Indices, model._BuffersHandle[bufferHandleIndex], 0, false);
+
+	//the index number never changes
+	model._Meshes[meshIndex]._indices_nb = indexAccessor.count;
+}
+
 bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name, Model& model)
 {
 	tinygltf::TinyGLTF loader;
@@ -1027,33 +1122,15 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 
 			//create _Indices buffer from preallocated device memory
 			{
-				tinygltf::Accessor&	accessor		= loadedModel.accessors[jPrimitive.indices];
-				tinygltf::BufferView& bufferView	= loadedModel.bufferViews[accessor.bufferView];
-
-				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-					model._Meshes[meshIndex]._Indices, model._BuffersHandle[bufferView.buffer], 0, false);
-
-				model._Meshes[meshIndex]._indices_nb = accessor.count;
-				model._Meshes[meshIndex]._indices_offset = bufferView.byteOffset + accessor.byteOffset;
-				switch (accessor.componentType)
-				{
-				case TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE:
-					model._Meshes[meshIndex]._indices_type = VK_INDEX_TYPE_UINT8_KHR;
-					break;
-				case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
-					model._Meshes[meshIndex]._indices_type = VK_INDEX_TYPE_UINT16;
-					break;
-				case TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT:
-					model._Meshes[meshIndex]._indices_type = VK_INDEX_TYPE_UINT32;
-					break;
-				}
+				const tinygltf::Accessor&	accessor	= loadedModel.accessors[jPrimitive.indices];
+				SetUint32IndexBuffer(VulkanUploader, loadedModel, accessor, model, meshIndex);
 			}
 
 			//position
 			if (jPrimitive.attributes.count("POSITION") > 0)
 			{
-				tinygltf::Accessor& accessor		= loadedModel.accessors[jPrimitive.attributes["POSITION"]];
-				tinygltf::BufferView& bufferView	= loadedModel.bufferViews[accessor.bufferView];
+				const tinygltf::Accessor& accessor		= loadedModel.accessors[jPrimitive.attributes["POSITION"]];
+				const tinygltf::BufferView& bufferView	= loadedModel.bufferViews[accessor.bufferView];
 
 				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Positions, model._BuffersHandle[bufferView.buffer], 0, false);
@@ -1066,8 +1143,8 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 			//_Uvs
 			if (jPrimitive.attributes.count("TEXCOORD_0") > 0)
 			{
-				tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["TEXCOORD_0"]];
-				tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
+				const tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["TEXCOORD_0"]];
+				const tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
 
 				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Uvs, model._BuffersHandle[bufferView.buffer], 0, false);
@@ -1080,8 +1157,8 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 			//_Normals
 			if (jPrimitive.attributes.count("NORMAL") > 0)
 			{
-				tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["NORMAL"]];
-				tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
+				const tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["NORMAL"]];
+				const tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
 
 				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Normals, model._BuffersHandle[bufferView.buffer], 0, false);
@@ -1094,8 +1171,8 @@ bool VulkanHelper::LoadGLTFFile(Uploader& VulkanUploader, const char* file_name,
 			//tangents
 			if (jPrimitive.attributes.count("TANGENT") > 0)
 			{
-				tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["TANGENT"]];
-				tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
+				const tinygltf::Accessor& accessor = loadedModel.accessors[jPrimitive.attributes["TANGENT"]];
+				const tinygltf::BufferView& bufferView = loadedModel.bufferViews[accessor.bufferView];
 
 				CreateVulkanBufferAndMemory(VulkanUploader, loadedModel.buffers[bufferView.buffer].data.size(), VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT | VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 					model._Meshes[meshIndex]._Tangents, model._BuffersHandle[bufferView.buffer], 0, false);
@@ -1186,7 +1263,6 @@ bool VulkanHelper::CreateModelFromRawVertices(Uploader& VulkanUploader,
 		model._Meshes[0]._indices_nb	= indices.Nb();
 		model._Meshes[0]._normal_nb		= normals.Nb();
 		model._Meshes[0]._uv_nb			= uv.Nb();
-		model._Meshes[0]._indices_type	= VK_INDEX_TYPE_UINT32;
 	}
 
 	//make texture
@@ -1456,7 +1532,7 @@ bool VulkanHelper::CreateImage2DArray(Uploader& VulkanUploader, Texture& texture
 	viewCreateInfo.subresourceRange.aspectMask	= VK_IMAGE_ASPECT_COLOR_BIT;
 	viewCreateInfo.format						= format;
 	viewCreateInfo.image						= texture._Image;
-	viewCreateInfo.subresourceRange.layerCount	= 1;
+	viewCreateInfo.subresourceRange.layerCount	= layerCount;
 	viewCreateInfo.subresourceRange.levelCount	= 1;
 	viewCreateInfo.viewType						= VK_IMAGE_VIEW_TYPE_2D_ARRAY;//as this is the array
 	VK_CALL_PRINT(vkCreateImageView(VulkanUploader._VulkanDevice, &viewCreateInfo, nullptr, &texture._ImageView));
@@ -2072,7 +2148,7 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 
 		//giving the indices
 		bottomLevelMeshASData.indexData = VkDeviceOrHostAddressConstKHR{ GPUBufferAddress };// this is sure to be a static buffer as we will not change vertex data
-		bottomLevelMeshASData.indexType = iMesh._indices_type;
+		bottomLevelMeshASData.indexType = VK_INDEX_TYPE_UINT32;//the application only supports full precision index throughout, as it is easier to work with in raytracing...
 
 		bottomLevelMeshASData.transformData = transformAddress;
 
@@ -2425,9 +2501,6 @@ bool VulkanHelper::CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBu
 		uint32_t totalUVNb = 0;
 		uint32_t totalNormalNb = 0;
 
-		//this is a naive method and should be improved, but for now, hoping that no model with both short and long index will be used
-		uint32_t indexSize = mesh[0]._indices_type == VK_INDEX_TYPE_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t);
-
 		//filling the offset buffer and the total count
 		for (uint32_t i = 1; i <= mesh.Nb(); i++)
 		{
@@ -2447,7 +2520,7 @@ bool VulkanHelper::CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBu
 
 
 		//we can determine the final size of each buffer
-		sceneBuffer._IndexBufferSize	= totalIndexNb * indexSize;
+		sceneBuffer._IndexBufferSize	= totalIndexNb * sizeof(uint32_t);
 		sceneBuffer._UVsBufferSize		= totalUVNb * sizeof(vec2);
 		sceneBuffer._NormalBufferSize	= totalNormalNb * sizeof(vec3);
 
@@ -2463,8 +2536,8 @@ bool VulkanHelper::CreateSceneBufferFromMeshes(Uploader& VulkanUploader, SceneBu
 
 			VkBufferCopy region;
 			region.srcOffset = indexedMesh._indices_offset;//this is already the offset in bytes for the indices
-			region.dstOffset = offsetBuffer[i * 3] * indexSize;
-			region.size		= indexedMesh._indices_nb * indexSize;
+			region.dstOffset = offsetBuffer[i * 3] * sizeof(uint32_t);
+			region.size		= indexedMesh._indices_nb * sizeof(uint32_t);
 			vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Indices, sceneBuffer._IndexBuffer._StaticGPUBuffer, 1, &region);
 
 
@@ -2556,9 +2629,6 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 		uint32_t totalUVNb = 0;
 		uint32_t totalNormalNb = 0;
 
-		//this is a naive method and should be improved, but for now, hoping that no model with both short and long index will be used
-		uint32_t indexSize = models[0]._Meshes[0]._indices_type == VK_INDEX_TYPE_UINT16 ? sizeof(uint16_t) : sizeof(uint32_t);
-
 		
 		for (uint32_t j = 0, modelOffset = 0; j < modelNb; j++)
 		{
@@ -2581,7 +2651,7 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 
 				offsetBuffer[modelOffset + i].indexOffset	= totalIndexNb;
 				offsetBuffer[modelOffset + i].uvOffset		= totalUVNb;
-				offsetBuffer[modelOffset + i].textureOffset = totalNormalNb;
+				offsetBuffer[modelOffset + i].normalOffset	= totalNormalNb;
 			}
 
 			//copying samplers
@@ -2595,7 +2665,7 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 		}
 
 		//we can determine the final size of each buffer
-		sceneBuffer._IndexBufferSize = totalIndexNb * indexSize;
+		sceneBuffer._IndexBufferSize = totalIndexNb * sizeof(uint32_t);
 		sceneBuffer._UVsBufferSize = totalUVNb * sizeof(vec2);
 		sceneBuffer._NormalBufferSize = totalNormalNb * sizeof(vec3);
 
@@ -2625,8 +2695,8 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 
 					VkBufferCopy region;
 					region.srcOffset = indexedMesh._indices_offset;//this is already the offset in bytes for the indices
-					region.dstOffset = offsetBuffer[modelOffset + i].indexOffset * indexSize;
-					region.size = indexedMesh._indices_nb * indexSize;
+					region.dstOffset = offsetBuffer[modelOffset + i].indexOffset * sizeof(uint32_t);
+					region.size = indexedMesh._indices_nb * sizeof(uint32_t);
 					vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Indices, sceneBuffer._IndexBuffer._StaticGPUBuffer, 1, &region);
 
 

@@ -23,10 +23,10 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _Model._Meshes, VK_NULL_HANDLE, nullptr, 0, 0);
 		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _CornellBoxBottomAS, _CornellBox._Meshes, VK_NULL_HANDLE, nullptr, 0, 0);
 
-		VulkanHelper::Model models[2] = { _Model, _CornellBox };
+		VulkanHelper::Model models[2] = { _CornellBox, _Model };
 		VulkanHelper::CreateSceneBufferFromModels(GAPI._VulkanUploader, _RaySceneBuffer, models, 2);
 
-		VulkanHelper::RaytracedGeometry* bottomAS[2] = { &_RayBottomAS, &_CornellBoxBottomAS };
+		VulkanHelper::RaytracedGeometry* bottomAS[2] = { &_CornellBoxBottomAS, &_RayBottomAS };
 		VulkanHelper::CreateRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RayTopAS, identity(), bottomAS, 2);
 
 	}
@@ -92,7 +92,7 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 
 	{
 		{
-			VkDescriptorSetLayoutBinding layoutStaticBinding[7] =
+			VkDescriptorSetLayoutBinding layoutStaticBinding[6] =
 			{
 				//binding , descriptor type, descriptor count, shader stage
 				{ 0, VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR, 1, VK_SHADER_STAGE_RAYGEN_BIT_KHR},//acceleration structure
@@ -100,11 +100,11 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 				{ 2, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer indices
 				{ 3, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer uvs
 				{ 4, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene buffer normals
-				{ 5, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},//scene textures
-				{ 6, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR}//scene textures sampler
+				{ 5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR}//scene textures
+				//{ 6, VK_DESCRIPTOR_TYPE_SAMPLER, 1, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR}//scene textures sampler
 			};
 
-			VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, layoutStaticBinding, 7);
+			VulkanHelper::CreatePipelineDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, layoutStaticBinding, 6);
 		}
 
 		{
@@ -148,9 +148,9 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, _RaySceneBuffer._IndexBuffer._StaticGPUBuffer, 0, _RaySceneBuffer._IndexBufferSize, 2);
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, _RaySceneBuffer._UVsBuffer._StaticGPUBuffer, 0, _RaySceneBuffer._UVsBufferSize, 3);
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, _RaySceneBuffer._NormalBuffer._StaticGPUBuffer, 0, _RaySceneBuffer._NormalBufferSize, 4);
-		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, _RaySceneBuffer._TextureArray._ImageView, VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 5);
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, _RaySceneBuffer._TextureArray._ImageView, _DefferedSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 5);
 		//for (uint32_t i = 0; i < _RaySceneBuffer._TextureSamplers.Nb(); i++)
-			VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, VK_NULL_HANDLE, _RaySceneBuffer._TextureSamplers[0], VK_IMAGE_LAYOUT_UNDEFINED, 6, 0, 0);
+		//	VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineStaticDescriptor, VK_NULL_HANDLE, _DefferedSampler, VK_IMAGE_LAYOUT_UNDEFINED, 6, 0, 0);
 	
 	}
 
@@ -314,6 +314,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 						callablePayload.normal = payload.hitNormal;
 						callablePayload.RandomSeed = payload.RandomSeed;
 						executeCallableEXT(0, 1);//for the moment just diffuse
+						payload.RandomSeed = callablePayload.RandomSeed;
 						origin		+= direction * payload.hitDistance;
 						direction	= vec4(callablePayload.normal,0.0);
 					}
@@ -371,7 +372,6 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 		R"(#version 460
 			#line 368
 			#extension GL_EXT_ray_tracing : enable
-			#extension GL_EXT_shader_16bit_storage : enable
 
 
 			struct HitRecord 
@@ -386,11 +386,11 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 			layout(location = 0) rayPayloadInEXT HitRecord payload;
 
 			layout(binding = 1) readonly buffer OffsetBuffer { uint[] Offsets; };
-			layout(binding = 2) readonly buffer IndexBuffer { uint16_t[] Indices; };
+			layout(binding = 2) readonly buffer IndexBuffer { uint[] Indices; };
 			layout(binding = 3) readonly buffer UVBuffer { float[] UVs; };
 			layout(binding = 4) readonly buffer NormalBuffer { float[] Normals; };
-			layout(binding = 5) uniform texture2DArray Textures;
-			layout(binding = 6) uniform sampler samplers;
+			layout(binding = 5) uniform sampler2DArray Textures;
+			//layout(binding = 6) uniform sampler samplers;
 
 			hitAttributeEXT vec2 barycentric;
 
@@ -404,9 +404,9 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				const uint textureOffset = Offsets[gl_InstanceID * 4 + 3];
 
 
-				const uint n1_offset = (uint(Indices[indexOffset + gl_PrimitiveID * 3 + 0]) + normalOffset) * 3;
-				const uint n2_offset = (uint(Indices[indexOffset + gl_PrimitiveID * 3 + 1]) + normalOffset) * 3;
-				const uint n3_offset = (uint(Indices[indexOffset + gl_PrimitiveID * 3 + 2]) + normalOffset) * 3;
+				const uint n1_offset = (Indices[indexOffset + gl_PrimitiveID * 3 + 0] + normalOffset) * 3;
+				const uint n2_offset = (Indices[indexOffset + gl_PrimitiveID * 3 + 1] + normalOffset) * 3;
+				const uint n3_offset = (Indices[indexOffset + gl_PrimitiveID * 3 + 2] + normalOffset) * 3;
 
 
 				const vec3 N1 = vec3(Normals[n1_offset + 0], Normals[n1_offset + 1], Normals[n1_offset + 2]);
@@ -417,9 +417,9 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 
 				vec3 normal = gl_ObjectToWorldEXT * vec4(normalize(N1 * coordinates.x + N2 * coordinates.y + N3 * coordinates.z),0.0);
 
-				const uint uv1_offset = (uint(Indices[indexOffset + gl_PrimitiveID * 3 + 0]) + uvOffset) * 2;
-				const uint uv2_offset = (uint(Indices[indexOffset + gl_PrimitiveID * 3 + 1]) + uvOffset) * 2;
-				const uint uv3_offset = (uint(Indices[indexOffset + gl_PrimitiveID * 3 + 2]) + uvOffset) * 2;
+				const uint uv1_offset = (Indices[indexOffset + gl_PrimitiveID * 3 + 0] + uvOffset) * 2;
+				const uint uv2_offset = (Indices[indexOffset + gl_PrimitiveID * 3 + 1] + uvOffset) * 2;
+				const uint uv3_offset = (Indices[indexOffset + gl_PrimitiveID * 3 + 2] + uvOffset) * 2;
 
 				const vec2 UV1 = vec2(UVs[uv1_offset + 0], UVs[uv1_offset + 1]);
 				const vec2 UV2 = vec2(UVs[uv2_offset + 0], UVs[uv2_offset + 1]);
@@ -428,7 +428,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				const vec2 uv		= vec2(UV1 * coordinates.x + UV2 * coordinates.y + UV3 * coordinates.z);
 
 				payload.bHit		= 1.0;
-				payload.hitColor	= texture(sampler2DArray(Textures, samplers), vec3(uv, textureOffset)).rgb;
+				payload.hitColor	= texture(Textures, vec3(uv, textureOffset)).rgb;
 				payload.hitDistance = gl_HitTEXT;
 				payload.hitNormal	= normal;
 
@@ -1066,7 +1066,7 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 	
 		VulkanHelper::Uploader tmpUploader;
 		VulkanHelper::StartUploader(GAPIHandle, tmpUploader);
-		VulkanHelper::UpdateTransform(GAPIHandle._VulkanDevice, _RayTopAS, transform, 0, _RayTopAS._InstancesInfo.geometryCount);
+		VulkanHelper::UpdateTransform(GAPIHandle._VulkanDevice, _RayTopAS, transform, 0, _RayTopAS._InstancesRange[0].primitiveCount);
 		VulkanHelper::UpdateRaytracedGroup(tmpUploader, _RayTopAS);
 		VulkanHelper::SubmitUploader(tmpUploader);
 	}

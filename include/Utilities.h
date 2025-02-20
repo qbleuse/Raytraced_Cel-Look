@@ -147,6 +147,33 @@ public:
 #define ZERO_SET(heap, size) \
 	memset(*heap,0,size);
 
+//HeapMemory is supposed to be a fixed size memory, but sometimes, there is still exeptin where you may need to expand the size.
+//here is a method for this
+template<typename T, bool scoped, bool single_data>
+void ExpandHeap(HeapMemory<T, scoped, single_data>& heap, uint32_t oldSize, uint32_t newSize)
+{
+	if (oldSize >= newSize)
+	{
+		printf("invald use of expand heap : oldSize (%u) >= newSize (%u)",oldSize, newSize);
+		return;
+	}
+
+	T* tmp = *heap;
+	if (tmp)
+	{
+		heap.Alloc(newSize);
+		memcpy(*heap, tmp, oldSize * sizeof(T));
+		if (scoped)
+		{
+			if (single_data)
+				delete tmp;
+			else
+				delete[] tmp;
+		}
+	}
+}
+	
+
 template<typename T>
 using SingleVolatileMemory = HeapMemory<T, false, true>;
 template<typename T>

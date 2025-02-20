@@ -857,7 +857,7 @@ void DefferedRendering::DrawModel(GAPIHandle& GAPIHandle, const VulkanHelper::Mo
 		//... then bind the vertex buffer as described in the input layout of the pipeline ...
 		vkCmdBindVertexBuffers(commandBuffer, 0, 3, model._Meshes[i]._VertexBuffers, (VkDeviceSize*)model._Meshes[i]._vertex_offsets);
 		//... and the index buffers associated with the vertex buffers ...
-		vkCmdBindIndexBuffer(commandBuffer, model._Meshes[i]._Indices, model._Meshes[i]._indices_offset, model._Meshes[i]._indices_type);
+		vkCmdBindIndexBuffer(commandBuffer, model._Meshes[i]._Indices, model._Meshes[i]._indices_offset, VK_INDEX_TYPE_UINT32);
 		//... before finally drawing, following the index buffer.
 		vkCmdDrawIndexed(commandBuffer, model._Meshes[i]._indices_nb, 1, 0, 0, 0);
 	}
