@@ -468,8 +468,8 @@ __forceinline mat4 perspective_proj(float width, float height, float fov, float 
 	float tan_half_fov = tanf(fov * 0.5f);
 
 	return mat4{ {
-		1.0f / (aspect_ratio * tan_half_fov), 0.0f, 0.0f, 0.0f,
-		0.0f, 1.0f / tan_half_fov, 0.0f, 0.0f,
+		-1.0f / (aspect_ratio * tan_half_fov), 0.0f, 0.0f, 0.0f,
+		0.0f, -1.0f / tan_half_fov, 0.0f, 0.0f,
 		0.0f, 0.0f, -(far_plane + near_plane) / (far_plane - near_plane), -1.0f,
 		0.0f, 0.0f, -(near_plane * far_plane) / (far_plane - near_plane), 0.0f
 	} };
@@ -492,11 +492,15 @@ __forceinline mat4 inv_perspective_proj(float width, float height, float fov, fl
 	float aspect_ratio = width > height ? width / height : height / width;
 	float tan_half_fov = tanf(fov * 0.5f);
 
+	float far_near_add = (far_plane + near_plane);
+	float far_near_mult = near_plane * far_plane;
+	float far_near_length = (far_plane - near_plane);
+
 	return mat4{ {
 		-(aspect_ratio * tan_half_fov), 0.0f, 0.0f, 0.0f,
 		0.0f, -tan_half_fov, 0.0f, 0.0f,
-		0.0f, 0.0f, (far_plane + near_plane) / (far_plane - near_plane), -1.0f,
-		0.0f, 0.0f, -(near_plane * far_plane) / (far_plane - near_plane), 0.0f
+		0.0f, 0.0f, -1.0f, 0.0f,
+		0.0f, 0.0f, 0.0f, 1.0f
 	} };
 }
 

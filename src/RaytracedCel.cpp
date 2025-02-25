@@ -178,6 +178,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 	const char* ray_gen_shader =
 		R"(#version 460
 			#extension GL_EXT_ray_tracing : enable
+			#line 181
 
 			struct HitRecord 
 			{
@@ -248,39 +249,47 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				payload.RandomSeed = (gl_LaunchIDEXT.x * gl_LaunchSizeEXT.x + gl_LaunchIDEXT.y);
 				payload.RandomSeed = RandomInt(payload.RandomSeed);
 
+				vec4 origin;
+				vec4 direction;
+
 				for (int j = 0; j < nb_samples; j++)
 				{
-					//const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(RandomFloat(seed) - 0.5,RandomFloat(seed) - 0.5);
-					//
-					////finding the pixel we are computing from the ray launch arguments
-					//const vec2 inUV = (pixelCenter) / vec2(gl_LaunchSizeEXT.xy);
-					//
-					////technically the first rebound but we already have it so let's use it
-					//vec4 origin = imageLoad(posBuffer, ivec2(pixelCenter));
-					//vec4 normal = imageLoad(normalBuffer, ivec2(pixelCenter));
-					//
-					//
-					//callablePayload.direction = origin.xyz - view[3].xyz;
-					//callablePayload.normal = normal.xyz;
-					//callablePayload.RandomSeed = payload.RandomSeed;
-					////creating a direction for our ray
-					//executeCallableEXT(0, 1);//for the moment just diffuse
-					//vec4 direction = vec4(callablePayload.normal,0.0);
-
 					const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(RandomFloat(seed) - 0.5,RandomFloat(seed) - 0.5);
 
-					//finding the pixel we are computing from the ray launch arguments
-					const vec2 inUV = (pixelCenter) / vec2(gl_LaunchSizeEXT.xy);
+					if (nb_samples > 1)
+					{
+						
+						//technically the first rebound but we already have it so let's use it
+						origin = imageLoad(posBuffer, ivec2(pixelCenter));
+						vec4 normal = imageLoad(normalBuffer, ivec2(pixelCenter));
 
-					vec2 d = inUV * 2.0 - 1.0;
+						if (dot(normal,normal) == 0.0)
+							continue;
+						
+						callablePayload.direction = origin.xyz - view[3].xyz;
+						callablePayload.normal = normal.xyz;
+						callablePayload.RandomSeed = payload.RandomSeed;
+						//creating a direction for our ray
+						executeCallableEXT(0, 1);//for the moment just diffuse
+						direction = vec4(callablePayload.normal,0.0);
+					}
+					else
+					{
+						const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(RandomFloat(seed) - 0.5,RandomFloat(seed) - 0.5);
 
-					vec4 origin = -view[3];
-					//the targets are on a viewport ahead of us by 3
-					vec4 target = proj * vec4(d,1.0,1.0);
-					target = target/target.w;
+						//finding the pixel we are computing from the ray launch arguments
+						const vec2 inUV = (pixelCenter) / vec2(gl_LaunchSizeEXT.xy);
 
-					//creating a direction for our ray
-					vec4 direction = view * vec4(normalize(target.xyz),0.0);
+						vec2 d = inUV * 2.0 - 1.0;
+
+						origin = view[3];
+						//the targets are on a viewport ahead of us by 3
+						vec4 target = proj * vec4(d,1.0,1.0);
+						target = target/target.w;
+
+						//creating a direction for our ray
+						direction = view * vec4(normalize(target.xyz),0.0);
+					}
 
 					//zero init
 					payload.bHit		= 0;
@@ -325,7 +334,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				finalColor /= nb_samples;
 				
 				//our recursive call finished, let's write into the image
-				imageStore(directLightBuffer, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor,0.0));
+				imageStore(directLightBuffer, ivec2(gl_LaunchIDEXT.xy), vec4(finalColor.rgb,0.0));
 
 			})";
 
@@ -981,8 +990,8 @@ void RaytracedCel::ResizeVulkanRaytracingResource(class GraphicsAPIManager& GAPI
 		//bind the framebuffers to each descriptor
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _RayFramebuffers[0]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, 1, i);
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _RayFramebuffers[1]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, 2, i);
-		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _GBuffers[0]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, 3, i);
-		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _GBuffers[1]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, 4, i);
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _GBuffers[1]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, 3, i);
+		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _RayPipelineDynamicDescriptor, _GBuffers[2]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_GENERAL, 4, i);
 
 
 		VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _DefferedDescriptors, _RayFramebuffers[0]._ImageViews[i], VK_NULL_HANDLE, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 4, i);
@@ -1014,7 +1023,7 @@ void RaytracedCel::Act(AppWideContext& AppContext)
 		_RayBuffer._view.x.w = 0.0f;
 		_RayBuffer._view.y.w = 0.0f;
 		_RayBuffer._view.z.w = 0.0f;
-		_RayBuffer._view.w.xyz = AppContext.camera_pos;
+		_RayBuffer._view.w.xyz = -AppContext.camera_pos;
 	}
 
 
@@ -1060,7 +1069,7 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 
 	//if (changedFlag)
 	{
-		mat4 transform = scale(_ObjData.scale.x, _ObjData.scale.y, _ObjData.scale.z) * intrinsic_rot(_ObjData.euler_angles.x, _ObjData.euler_angles.y, _ObjData.euler_angles.z) * translate(_ObjData.pos);
+		mat4 transform = scale(_ObjData.scale.x, _ObjData.scale.y, _ObjData.scale.z) * transpose(extrinsic_rot(_ObjData.euler_angles.x, _ObjData.euler_angles.y, _ObjData.euler_angles.z)) * translate(_ObjData.pos);
 	
 		changedFlag = false;
 	
@@ -1139,7 +1148,7 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 		VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayFramebuffers[i]._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT,
 			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-		VulkanHelper::ImageMemoryBarrier(commandBuffer, _GBuffers[i]._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT,
+		VulkanHelper::ImageMemoryBarrier(commandBuffer, _GBuffers[i+1]._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT,
 			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	}
 
@@ -1159,7 +1168,7 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL);
 	
 		//allowing copy from write iamge to framebuffer
-		VulkanHelper::ImageMemoryBarrier(commandBuffer, _GBuffers[i]._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
+		VulkanHelper::ImageMemoryBarrier(commandBuffer, _GBuffers[i+1]._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
 			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL);
 
 	}

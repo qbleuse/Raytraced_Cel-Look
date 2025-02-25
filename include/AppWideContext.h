@@ -24,7 +24,7 @@ struct AppWideContext
 	//the projection matrix used for the camera in every scene
 	mat4		proj_mat;
 	//the near plane value for the camera
-	float		near_plane{ 0.1f };
+	float		near_plane{ 0.01f };
 	//the far plane value for the camera
 	float		far_plane{ 10000.0f };
 	//the field of view of the camera

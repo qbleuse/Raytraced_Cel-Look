@@ -255,7 +255,8 @@ Resources to learn and implement raytracing :
  - [Sascha Willems's Vulkan Samples](https://github.com/SaschaWillems/Vulkan/tree/master)
  - [The Vulkan Raytracing Tutorial](https://github.com/alelenv/vk_raytracing_tutorial) ; still helpful while I would rather use the Khronos extensions than the NVidia one for compatibility.
  - [the all so helful vulkan raytracing extension text note](https://github.com/KhronosGroup/GLSL/blob/main/extensions/ext/GLSL_EXT_ray_tracing.txt) ; for glsl raytracing extension's syntax.
-	
+ - [Fantastic Hybrid Rendering Implementation by Dihara Wijetunga](https://diharaw.github.io/post/adventures_in_hybrid_rendering/) ; also great inspiration on how to implement the hybrid rendering techniques.
+
 Resources on stylized shading or cel-look : 
  - [Locally Controllable Stylised Shading](https://www-ui.is.s.u-tokyo.ac.jp/~takeo/papers/todo_siggraph2007_shading.pdf)
  - [cel-look pipeline and challenges to take advantage of hand drawn animation](https://a-film-production-technique-seminar.com/fppat/materials/ppi_phones_possibility_celook_pipeline_challenges/index.html)

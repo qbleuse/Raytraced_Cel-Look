@@ -194,7 +194,7 @@ void BeginDrawUIWindow(const GraphicsAPIManager& GAPI, ScopedLoopArray<class Sce
 		bool camera_changed = false;
 
 		camera_changed |= ImGui::SliderAngle("Camera Field Of View", &AppContext.fov, 0.0f, 180.0f);
-		camera_changed |= ImGui::SliderFloat("Near Plane", &AppContext.near_plane, 0.0f, 4000.0f);
+		camera_changed |= ImGui::SliderFloat("Near Plane", &AppContext.near_plane, 0.0f, 40.0f);
 		camera_changed |= ImGui::SliderFloat("Far Plane", &AppContext.far_plane, 0.0f, 4000.0f);
 		camera_changed |= ImGui::SliderFloat("Cam Translate Speed", &AppContext.camera_translate_speed, 0.1f, 1000.0f);
 		camera_changed |= ImGui::SliderFloat("Cam Rot Speed", &AppContext.camera_rotational_speed, 0.1f, 1000.0f);
