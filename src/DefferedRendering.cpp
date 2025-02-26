@@ -783,15 +783,6 @@ void DefferedRendering::Resize(class GraphicsAPIManager& GAPI, int32_t old_width
 
 void DefferedRendering::Act(struct AppWideContext& AppContext)
 {
-	//it will change every frame
-	{
-		_UniformBuffer._proj = perspective_proj(_GBUfferPipelineOutput._OutputScissor.extent.width, _GBUfferPipelineOutput._OutputScissor.extent.height, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
-		_UniformBuffer._view = AppContext.view_mat;
-		_UniformBuffer._model = scale(_ObjData.scale.x, _ObjData.scale.y, _ObjData.scale.z) * intrinsic_rot(_ObjData.euler_angles.x, _ObjData.euler_angles.y, _ObjData.euler_angles.z) * translate(_ObjData.pos);
-
-	}
-
-
 	//UI update
 	if (SceneCanShowUI(AppContext))
 	{
@@ -814,6 +805,15 @@ void DefferedRendering::Act(struct AppWideContext& AppContext)
 	_CompositingBuffer._cameraPos = AppContext.camera_pos;
 
 	_ObjData.euler_angles.y += _ObjRotSpeed * AppContext.delta_time;
+
+
+	//it will change every frame
+	{
+		_UniformBuffer._proj = perspective_proj(_GBUfferPipelineOutput._OutputScissor.extent.width, _GBUfferPipelineOutput._OutputScissor.extent.height, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
+		_UniformBuffer._view = AppContext.view_mat;
+		_UniformBuffer._model = scale(_ObjData.scale.x, _ObjData.scale.y, _ObjData.scale.z) * intrinsic_rot(_ObjData.euler_angles.x, _ObjData.euler_angles.y, _ObjData.euler_angles.z) * translate(_ObjData.pos);
+
+	}
 }
 
 /*===== Show =====*/

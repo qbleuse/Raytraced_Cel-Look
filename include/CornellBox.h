@@ -163,8 +163,8 @@ namespace CornellBox
 		//make the light
 		{
 
-			const float x0 = s * (213.0f / 555.0f);
-			const float x1 = s * (343.0f / 555.0f);
+			const float x0 = -s * 0.5f + s * (213.0f / 555.0f);
+			const float x1 = -s * 0.5f + s * (343.0f / 555.0f);
 			const float z0 = s * (-555.0f + 332.0f) / 555.0f;
 			const float z1 = s * (-555.0f + 227.0f) / 555.0f;
 			const float y1 = s * 0.998f;

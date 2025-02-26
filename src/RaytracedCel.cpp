@@ -23,10 +23,10 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _Model._Meshes, VK_NULL_HANDLE, nullptr, 0, 0);
 		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _CornellBoxBottomAS, _CornellBox._Meshes, VK_NULL_HANDLE, nullptr, 0, 0);
 
-		VulkanHelper::Model models[2] = { _CornellBox, _Model };
+		VulkanHelper::Model models[2] = { _Model, _CornellBox };
 		VulkanHelper::CreateSceneBufferFromModels(GAPI._VulkanUploader, _RaySceneBuffer, models, 2);
 
-		VulkanHelper::RaytracedGeometry* bottomAS[2] = { &_CornellBoxBottomAS, &_RayBottomAS };
+		VulkanHelper::RaytracedGeometry* bottomAS[2] = { &_RayBottomAS, &_CornellBoxBottomAS };
 		VulkanHelper::CreateRaytracedGroupFromGeometry(GAPI._VulkanUploader, _RayTopAS, identity(), bottomAS, 2);
 
 	}
@@ -256,13 +256,13 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				{
 					const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(RandomFloat(seed) - 0.5,RandomFloat(seed) - 0.5);
 
-					if (nb_samples > 1)
+					if (depth > 10)
 					{
 						
 						//technically the first rebound but we already have it so let's use it
 						origin = imageLoad(posBuffer, ivec2(pixelCenter));
 						vec4 normal = imageLoad(normalBuffer, ivec2(pixelCenter));
-
+					
 						if (dot(normal,normal) == 0.0)
 							continue;
 						
@@ -271,22 +271,23 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 						callablePayload.RandomSeed = payload.RandomSeed;
 						//creating a direction for our ray
 						executeCallableEXT(0, 1);//for the moment just diffuse
+						payload.RandomSeed = callablePayload.RandomSeed;
 						direction = vec4(callablePayload.normal,0.0);
 					}
 					else
 					{
-						const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy) + vec2(RandomFloat(seed) - 0.5,RandomFloat(seed) - 0.5);
-
+						const vec2 pixelCenter = vec2(gl_LaunchIDEXT.xy);// + vec2(RandomFloat(seed) - 0.5,RandomFloat(seed) - 0.5);
+					
 						//finding the pixel we are computing from the ray launch arguments
 						const vec2 inUV = (pixelCenter) / vec2(gl_LaunchSizeEXT.xy);
-
+					
 						vec2 d = inUV * 2.0 - 1.0;
-
+					
 						origin = view[3];
 						//the targets are on a viewport ahead of us by 3
 						vec4 target = proj * vec4(d,1.0,1.0);
 						target = target/target.w;
-
+					
 						//creating a direction for our ray
 						direction = view * vec4(normalize(target.xyz),0.0);
 					}
@@ -1140,15 +1141,15 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 	
 
 	//the buffer will change every frame as the object rotates every frame
-	memcpy(_RayUniformBuffer._CPUMemoryHandle[GAPIHandle._vk_current_frame], (void*)&_RayBuffer, sizeof(UniformBuffer));
+	memcpy(_RayUniformBuffer._CPUMemoryHandle[GAPIHandle._vk_frame_index], (void*)&_RayBuffer, sizeof(UniformBuffer));
 
 	for (char i = 0; i < 2; i++)
 	{
 		// changing the back buffer to be able to being written by pipeline
-		VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayFramebuffers[i]._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT,
+		VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayFramebuffers[i]._Images[GAPIHandle._vk_frame_index], VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_WRITE_BIT,
 			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
-		VulkanHelper::ImageMemoryBarrier(commandBuffer, _GBuffers[i+1]._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT,
+		VulkanHelper::ImageMemoryBarrier(commandBuffer, _GBuffers[i+1]._Images[GAPIHandle._vk_frame_index], VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_SHADER_READ_BIT,
 			VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_PIPELINE_STAGE_RAY_TRACING_SHADER_BIT_KHR, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	}
 
@@ -1156,7 +1157,7 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 
 	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _RayPipeline);
 	//binding an available uniform buffer (current frame and frame index may be different, as we can ask for redraw multiple times while the frame is not presenting)
-	VkDescriptorSet currentSet[2] = { _RayPipelineStaticDescriptor._DescriptorSets[0], _RayPipelineDynamicDescriptor._DescriptorSets[GAPIHandle._vk_current_frame] };
+	VkDescriptorSet currentSet[2] = { _RayPipelineStaticDescriptor._DescriptorSets[0], _RayPipelineDynamicDescriptor._DescriptorSets[GAPIHandle._vk_frame_index] };
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR, _RayLayout, 0, 2, currentSet, 0, nullptr);
 	
 	VK_CALL_KHR(GAPIHandle._VulkanDevice, vkCmdTraceRaysKHR, commandBuffer, &_RayShaderBindingTable._RayGenRegion, &_RayShaderBindingTable._MissRegion, &_RayShaderBindingTable._HitRegion, &_RayShaderBindingTable._CallableRegion, _GBUfferPipelineOutput._OutputScissor.extent.width, _GBUfferPipelineOutput._OutputScissor.extent.height, 1);
@@ -1164,11 +1165,11 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 	for (char i = 0; i < 2; i++)
 	{
 		//allowing copy from write iamge to framebuffer
-		VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayFramebuffers[i]._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
+		VulkanHelper::ImageMemoryBarrier(commandBuffer, _RayFramebuffers[i]._Images[GAPIHandle._vk_frame_index], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
 			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_LAYOUT_GENERAL);
 	
 		//allowing copy from write iamge to framebuffer
-		VulkanHelper::ImageMemoryBarrier(commandBuffer, _GBuffers[i+1]._Images[GAPIHandle._vk_current_frame], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
+		VulkanHelper::ImageMemoryBarrier(commandBuffer, _GBuffers[i+1]._Images[GAPIHandle._vk_frame_index], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
 			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_LAYOUT_GENERAL);
 
 	}

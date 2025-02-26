@@ -2409,6 +2409,11 @@ bool VulkanHelper::CreateRaytracedGroupFromGeometry(Uploader& VulkanUploader, Ra
 		VulkanUploader._ToFreeMemory.Add(scratchMemory);
 	}
 
+
+	//making the AS buildable
+	MemorySyncScope(VulkanUploader._CopyBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);//basically just changing this memory to be visible, so the scope can be "immediate"
+
 	VkAccelerationStructureBuildRangeInfoKHR* buildRangePtr = &buildRange;
 	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCmdBuildAccelerationStructuresKHR, VulkanUploader._CopyBuffer, 1, &raytracedObject._InstancesInfo, &buildRangePtr);
 
@@ -2460,11 +2465,18 @@ bool VulkanHelper::UpdateRaytracedGroup(VulkanHelper::Uploader& VulkanUploader, 
 		VulkanUploader._ToFreeMemory.Add(scratchMemory);
 	}
 
+
+	//making the AS buildable
+	MemorySyncScope(VulkanUploader._CopyBuffer, VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR,
+		VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);//basically just changing this memory to be visible, so the scope can be "immediate"
+
+
 	VK_CALL_KHR(VulkanUploader._VulkanDevice, vkCmdBuildAccelerationStructuresKHR, VulkanUploader._CopyBuffer, 1, &raytracedGroup._InstancesInfo, &raytracedGroup._InstancesRange);
 
 	//making the AS accessible
 	MemorySyncScope(VulkanUploader._CopyBuffer, VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR, VK_ACCESS_ACCELERATION_STRUCTURE_READ_BIT_KHR,
 		VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_ACCELERATION_STRUCTURE_BUILD_BIT_KHR);//basically just changing this memory to be visible, so the scope can be "immediate"
+
 
 	return result == VK_SUCCESS;
 }
