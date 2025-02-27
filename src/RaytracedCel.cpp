@@ -20,8 +20,9 @@ void RaytracedCel::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 	/*===== MODEL LOADING & AS BUILDING ======*/
 	{
 		//create bottom level AS from model
-		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _Model._Meshes, VK_NULL_HANDLE, nullptr, 0, 0);
-		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _CornellBoxBottomAS, _CornellBox._Meshes, VK_NULL_HANDLE, nullptr, 0, 0);
+		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _Model._Meshes, VK_NULL_HANDLE);
+		uint32_t instanceIndex[2] = { 0u, 3u };
+		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _CornellBoxBottomAS, _CornellBox._Meshes, VK_NULL_HANDLE, nullptr, instanceIndex);
 
 		VulkanHelper::Model models[2] = { _Model, _CornellBox };
 		VulkanHelper::CreateSceneBufferFromModels(GAPI._VulkanUploader, _RaySceneBuffer, models, 2);
@@ -182,7 +183,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 
 			struct HitRecord 
 			{
-				float	bHit;//a float that acts as a boolean to know if it hit or missed, also used for padding
+				int		matIndex;//an index to know which material type we use
 				vec3	hitColor;// the color of the hit object
 				float	hitDistance;// the distance from the ray's origin the hit was recorded
 				vec3	hitNormal;// the normal got from contact with the object
@@ -293,15 +294,19 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 					}
 
 					//zero init
-					payload.bHit		= 0;
+					payload.matIndex	= 0;
 					payload.hitColor	= vec3(0.0);
 					payload.hitDistance = 0.0;
 					payload.hitNormal	= vec3(0.0);
 
 					vec3 fragColor = vec3(1.0);
 
-					for (int i = 0; i < depth; i++)
+					for (int i = 0; i <= depth; i++)
 					{
+
+						if (i == depth)
+							vec3 fragColor = vec3(0.0);
+
 						//tracing rays
 						traceRayEXT(
 							topLevelAS,//Acceleration structure
@@ -317,13 +322,13 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 
 						fragColor *= vec3(payload.hitColor);
 
-						if (payload.hitDistance < 0.0 || payload.bHit == 0.0)
+						if (payload.hitDistance <= 0.0 || payload.matIndex == 3)
 							break;
 
 						callablePayload.direction = direction.xyz;
 						callablePayload.normal = payload.hitNormal;
 						callablePayload.RandomSeed = payload.RandomSeed;
-						executeCallableEXT(0, 1);//for the moment just diffuse
+						executeCallableEXT(payload.matIndex, 1);//for the moment just diffuse
 						payload.RandomSeed = callablePayload.RandomSeed;
 						origin		+= direction * payload.hitDistance;
 						direction	= vec4(callablePayload.normal,0.0);
@@ -346,7 +351,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 
 			struct HitRecord 
 			{
-				float	bHit;//a float that acts as a boolean to know if it hit or missed, also used for padding
+				int		matIndex;//an index to know which material type we use
 				vec3	hitColor;// the color of the hit object
 				float	hitDistance;// the distance from the ray's origin the hit was recorded
 				vec3	hitNormal;// the normal got from contact with the object
@@ -371,8 +376,8 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 			{
 				float backgroundGradient = 0.5 * (gl_WorldRayDirectionEXT.y + 1.0);
 
-				payload.bHit = 0.0;
-				payload.hitColor = background_color_bottom.rgb * (1.0 - backgroundGradient) + background_color_top.rgb * backgroundGradient;
+				payload.matIndex = 0;
+				payload.hitColor = vec3(0.0);//background_color_bottom.rgb * (1.0 - backgroundGradient) + background_color_top.rgb * backgroundGradient;
 				payload.hitDistance = 0.0;
 				payload.hitNormal = vec3(0.0);
 			})";
@@ -386,7 +391,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 
 			struct HitRecord 
 			{
-				float	bHit;//a float that acts as a boolean to know if it hit or missed, also used for padding
+				int		matIndex;//an index to know which material type we use
 				vec3	hitColor;// the color of the hit object
 				float	hitDistance;// the distance from the ray's origin the hit was recorded
 				vec3	hitNormal;// the normal got from contact with the object
@@ -437,7 +442,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 
 				const vec2 uv		= vec2(UV1 * coordinates.x + UV2 * coordinates.y + UV3 * coordinates.z);
 
-				payload.bHit		= 1.0;
+				payload.matIndex	= gl_InstanceCustomIndexEXT;
 				payload.hitColor	= texture(Textures, vec3(uv, textureOffset)).rgb;
 				payload.hitDistance = gl_HitTEXT;
 				payload.hitNormal	= normal;
@@ -636,6 +641,62 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 			_RayShaders.Add(Script);
 	}
 }
+
+void CreateCornellBoxModel(GraphicsAPIManager& GAPI, VulkanHelper::Model& model)
+{
+	{
+		//all the raw vertices info
+		VolatileLoopArray<vec3>		pos;
+		VolatileLoopArray<vec2>		uv;
+		VolatileLoopArray<vec3>		normal;
+		VolatileLoopArray<vec4>		vertexColor;
+		VolatileLoopArray<uint32_t> indices;
+
+		//fill the raw vertices array with the info
+		CornellBox::CreateMesh(200.0f, pos, uv, normal, vertexColor, indices);
+
+		//make a model out of it
+		VulkanHelper::CreateModelFromRawVertices(GAPI._VulkanUploader, pos, uv, normal, vertexColor, indices, model);
+
+		//clear out 
+		pos.Clear();
+		uv.Clear();
+		normal.Clear();
+		vertexColor.Clear();
+		indices.Clear();
+	}
+
+	//separate the box and the light into two meshes
+	{
+		//add a mesh
+		ExpandHeap(model._Meshes, model._Meshes.Nb(), model._Meshes.Nb() + 1);
+		ExpandHeap(model._material_index, model._Meshes.Nb(), model._Meshes.Nb() + 1);
+		model._material_index[1] = model._material_index[0];
+
+		//the new mesh uses the same buffer as the other one, we will just change some info
+		memcpy(&model._Meshes[1], &model._Meshes[0], sizeof(VulkanHelper::Mesh));
+
+		//we need to offset the buffer by the number of vertices the box has, which is 5 quads * 4 vertices per quads = 20
+		model._Meshes[1]._pos_offset		= 0;
+		model._Meshes[1]._normal_offset		= 0;
+		model._Meshes[1]._uv_offset			= 0;
+		//we need to offset the buffer by the number of indices the box has, which is 5 quads * 6 indices per quads = 30
+		model._Meshes[1]._indices_offset = sizeof(uint32_t) * 30;
+
+		//we remove 4 vertices of a single quad
+		model._Meshes[0]._pos_nb -= 4;
+		model._Meshes[0]._uv_nb -= 4;
+		model._Meshes[0]._normal_nb -= 4;
+		// and the 6 indices that makes one quad
+		model._Meshes[0]._indices_nb -= 6;
+		
+		//the number of vertices of a single quad is 4
+		//model._Meshes[1]._pos_nb = model._Meshes[1]._normal_nb = model._Meshes[1]._uv_nb = 4;
+		//the number of indices of a single quad is 4
+		model._Meshes[1]._indices_nb = 6;
+	}
+}
+
 void RaytracedCel::PrepareModelProps(class GraphicsAPIManager& GAPI)
 {
 	//get actual model
@@ -643,13 +704,7 @@ void RaytracedCel::PrepareModelProps(class GraphicsAPIManager& GAPI)
 
 	//create Cornell Box as "background"
 	{
-		VolatileLoopArray<vec3>		pos;
-		VolatileLoopArray<vec2>		uv; 
-		VolatileLoopArray<vec3>		normal; 
-		VolatileLoopArray<vec4>		vertexColor; 
-		VolatileLoopArray<uint32_t> indices;
-		CornellBox::CreateMesh(200.0f,pos,uv,normal,vertexColor,indices);
-		VulkanHelper::CreateModelFromRawVertices(GAPI._VulkanUploader, pos, uv, normal, vertexColor, indices, _CornellBox);
+		CreateCornellBoxModel(GAPI, _CornellBox);
 
 		_CornellBoxDescriptor._DescriptorBindings = _ModelDescriptors._DescriptorBindings;
 		_CornellBoxDescriptor._DescriptorLayout = _ModelDescriptors._DescriptorLayout;
@@ -673,11 +728,6 @@ void RaytracedCel::PrepareModelProps(class GraphicsAPIManager& GAPI)
 			_CornellBox._Materials[i]._TextureDescriptors = _CornellBoxDescriptor._DescriptorSets[i];
 		}
 
-		pos.Clear();
-		uv.Clear();
-		normal.Clear();
-		vertexColor.Clear();
-		indices.Clear();
 	}
 }
 

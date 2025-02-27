@@ -21,7 +21,7 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 		VulkanHelper::LoadObjFile(GAPI._VulkanUploader, "../../../media/teapot/teapot.obj", _RayModel._Meshes);
 
 		//create bottom level AS from model
-		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _RayModel._Meshes, VK_NULL_HANDLE, nullptr, 0, 0);
+		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _RayModel._Meshes, VK_NULL_HANDLE, nullptr);
 
 		VulkanHelper::CreateSceneBufferFromMeshes(GAPI._VulkanUploader, _RaySceneBuffer, _RayModel._Meshes);
 

@@ -33,16 +33,16 @@ namespace CornellBox
 		//make the box
 		{
 			//l for left
-			const vec3 l0(-s*0.5f, 0.0f, 0.0f);
-			const vec3 l1(-s*0.5f, 0.0f, -s);
-			const vec3 l2(-s*0.5f, s, -s);
-			const vec3 l3(-s*0.5f, s, 0.0f);
+			const vec3 l0(-s*0.5f, 0.0f, s * 0.5f);
+			const vec3 l1(-s*0.5f, 0.0f, -s * 0.5f);
+			const vec3 l2(-s*0.5f, s, -s*0.5f);
+			const vec3 l3(-s*0.5f, s, s * 0.5f);
 
 			//r for right
-			const vec3 r0(s*0.5f, 0.0f, 0.0f);
-			const vec3 r1(s*0.5f, 0.0f, -s);
-			const vec3 r2(s*0.5f, s, -s);
-			const vec3 r3(s*0.5f, s, 0.0f);
+			const vec3 r0(s*0.5f, 0.0f, s * 0.5f);
+			const vec3 r1(s*0.5f, 0.0f, -s * 0.5f);
+			const vec3 r2(s*0.5f, s, -s * 0.5f);
+			const vec3 r3(s*0.5f, s, s * 0.5f);
 
 			// Left green panel
 
@@ -165,8 +165,8 @@ namespace CornellBox
 
 			const float x0 = -s * 0.5f + s * (213.0f / 555.0f);
 			const float x1 = -s * 0.5f + s * (343.0f / 555.0f);
-			const float z0 = s * (-555.0f + 332.0f) / 555.0f;
-			const float z1 = s * (-555.0f + 227.0f) / 555.0f;
+			const float z0 = s*0.5f + s * (-555.0f + 332.0f) / 555.0f;
+			const float z1 = s*0.5f + s * (-555.0f + 227.0f) / 555.0f;
 			const float y1 = s * 0.998f;
 
 			// light panel

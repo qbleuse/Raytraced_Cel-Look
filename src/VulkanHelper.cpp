@@ -2035,7 +2035,7 @@ void VulkanHelper::ClearFrameBuffer(const VkDevice& VulkanDevice, FrameBuffer& F
 
 /* Acceleration Structures */
 
-bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index, uint32_t customInstanceIndex, uint32_t shaderOffset)
+bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index, const MultipleVolatileMemory<uint32_t>& customInstanceIndex, const MultipleVolatileMemory<uint32_t>& shaderOffset)
 {
 	//filling the build struct if not already done
 	vkBuildInfo.sType			= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
@@ -2073,18 +2073,18 @@ bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAcc
 																		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
 																		tmpBuffer, tmpMemory, vkBuildInfo.scratchData.deviceAddress, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 
-	if (raytracedGeometry._CustomInstanceIndex != nullptr)
-		raytracedGeometry._CustomInstanceIndex[index] = customInstanceIndex;
+	if (raytracedGeometry._CustomInstanceIndex != nullptr && customInstanceIndex != nullptr)
+		raytracedGeometry._CustomInstanceIndex[index] = customInstanceIndex[index];
 
-	if (raytracedGeometry._ShaderOffset != nullptr)
-		raytracedGeometry._ShaderOffset[index] = shaderOffset;
+	if (raytracedGeometry._ShaderOffset != nullptr && shaderOffset != nullptr)
+		raytracedGeometry._ShaderOffset[index] = shaderOffset[index];
 
 	return true;
 }
 
 
 //creating a bottom level AS for each mesh of model
-bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh, const VkBuffer& transformBuffer, const MultipleVolatileMemory<uint32_t>& transformOffset, uint32_t customInstanceIndex, uint32_t shaderOffset)
+bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh, const VkBuffer& transformBuffer, const MultipleVolatileMemory<uint32_t>& transformOffset, const MultipleVolatileMemory<uint32_t>& customInstanceIndex, const MultipleVolatileMemory<uint32_t>& shaderOffset)
 {
 	//if an error happens...
 	VkResult result = VK_SUCCESS;
@@ -2113,8 +2113,11 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 	raytracedGeometry._AccelerationStructure.Alloc(mesh.Nb());
 	raytracedGeometry._AccelerationStructureBuffer.Alloc(mesh.Nb());
 	raytracedGeometry._AccelerationStructureMemory.Alloc(mesh.Nb());
-	raytracedGeometry._CustomInstanceIndex.Alloc(mesh.Nb());
-	raytracedGeometry._ShaderOffset.Alloc(mesh.Nb());
+
+	if (customInstanceIndex != nullptr)
+		raytracedGeometry._CustomInstanceIndex.Alloc(mesh.Nb());
+	if (shaderOffset != nullptr)
+		raytracedGeometry._ShaderOffset.Alloc(mesh.Nb());
 
 	bool usesOffset = transformOffset != nullptr;
 
@@ -2701,6 +2704,20 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 
 			for (uint32_t j = 0, modelOffset = 0; j < modelNb; j++)
 			{
+				for (uint32_t i = 0; i < models[j]._Materials.Nb(); i++)
+				{
+					//Note QB : we should loop through all textures in the material, but for the moement, we're jsut testing with albedo
+					const Texture& indexedTexture = models[j]._Materials[i]._Textures[0];
+
+					blit.dstSubresource.baseArrayLayer = textureOffset+i;
+					blit.srcOffsets[1] = *(VkOffset3D*)(&indexedTexture._ImageExtent);// the top-right corner of source
+
+					VulkanHelper::ImageMemoryBarrier(VulkanUploader._CopyBuffer, indexedTexture._Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
+					vkCmdBlitImage(VulkanUploader._CopyBuffer, indexedTexture._Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, sceneBuffer._TextureArray._Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+					VulkanHelper::ImageMemoryBarrier(VulkanUploader._CopyBuffer, indexedTexture._Image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_MEMORY_READ_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_MEMORY_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+
+				}
+
 				for (uint32_t i = 0; i < models[j]._Meshes.Nb(); i++)
 				{
 					const Mesh& indexedMesh = models[j]._Meshes[i];
@@ -2724,21 +2741,13 @@ bool VulkanHelper::CreateSceneBufferFromModels(Uploader& VulkanUploader, SceneBu
 					vkCmdCopyBuffer(VulkanUploader._CopyBuffer, indexedMesh._Normals, sceneBuffer._NormalBuffer._StaticGPUBuffer, 1, &region);
 
 
-					{
-						//Note QB : we should loop through all textures in the material, but for the moement, we're jsut testing with albedo
-						const Texture& indexedTexture = models[j]._Materials[models[j]._material_index[i]]._Textures[0];
-						
-						blit.dstSubresource.baseArrayLayer = offsetBuffer[modelOffset + i].textureOffset = textureOffset++;
-						blit.srcOffsets[1] = *(VkOffset3D*)(&indexedTexture._ImageExtent);// the top-right corner of source
-						
-						VulkanHelper::ImageMemoryBarrier(VulkanUploader._CopyBuffer, indexedTexture._Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-						vkCmdBlitImage(VulkanUploader._CopyBuffer, indexedTexture._Image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, sceneBuffer._TextureArray._Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
-						VulkanHelper::ImageMemoryBarrier(VulkanUploader._CopyBuffer, indexedTexture._Image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_MEMORY_READ_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_ACCESS_MEMORY_READ_BIT, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-
-					}
+					offsetBuffer[modelOffset + i].textureOffset = textureOffset + models[j]._material_index[i];
 				}
 
+
+
 				modelOffset += models[j]._Meshes.Nb();
+				textureOffset += models[j]._Materials.Nb();//for the moment materials == texture
 			}
 		}
 

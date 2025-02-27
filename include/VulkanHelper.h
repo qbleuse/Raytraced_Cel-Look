@@ -575,7 +575,7 @@ namespace VulkanHelper
 
 	/* Creates the Accelerations Structure Buffers and objects, and fills the build info, but does not call build.
 	 * /!\ RaytracedGeometry needs to be pre allocated /!\ */
-	bool CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index = 0, uint32_t customInstanceIndex = 0, uint32_t shaderOffset = 0);
+	bool CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index = 0, const MultipleVolatileMemory<uint32_t>& customInstanceIndex = nullptr, const MultipleVolatileMemory<uint32_t>& shaderOffset = nullptr);
 	/*
 	* Creates and Build Acceleration Structure of all mesh in array, with one Acceleration Structure per mesh.
 	* 
@@ -583,7 +583,7 @@ namespace VulkanHelper
 	* - it must be one buffer for each transform of each mesh. if it is null, we will consider that there is no transform
 	* - if offset is nullptr, we consider that every mesh uses the same transform. if it is not, offset must be the same size as mesh.
 	*/
-	bool CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh, const VkBuffer& transformBuffer = VK_NULL_HANDLE, const MultipleVolatileMemory<uint32_t>& transformOffset = nullptr, uint32_t customInstanceIndex = 0, uint32_t shaderOffset = 0);
+	bool CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, RaytracedGeometry& raytracedGeometry, const VolatileLoopArray<Mesh>& mesh, const VkBuffer& transformBuffer = VK_NULL_HANDLE, const MultipleVolatileMemory<uint32_t>& transformOffset = nullptr, const MultipleVolatileMemory<uint32_t>& customInstanceIndex = nullptr, const MultipleVolatileMemory<uint32_t>& shaderOffset = nullptr);
 	/*
 	* Creates and builds Accelerations Structure at index of raytracedGeometry from and array of AABBs. 
 	* /!\ raytraced geometry must be pre allocated /!\

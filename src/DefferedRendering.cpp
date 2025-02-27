@@ -853,7 +853,7 @@ void DefferedRendering::DrawModel(GAPIHandle& GAPIHandle, const VulkanHelper::Mo
 	{
 		//first bind the "material", basically the three compibined sampler descriptors ...
 		if (model._Materials.Nb() > 0)
-			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PipelineLayout, 1, 1, &descriptors._DescriptorSets[i], 0, nullptr);
+			vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, PipelineLayout, 1, 1, &descriptors._DescriptorSets[model._material_index[i]], 0, nullptr);
 
 		//... then bind the vertex buffer as described in the input layout of the pipeline ...
 		vkCmdBindVertexBuffers(commandBuffer, 0, 3, model._Meshes[i]._VertexBuffers, (VkDeviceSize*)model._Meshes[i]._vertex_offsets);
