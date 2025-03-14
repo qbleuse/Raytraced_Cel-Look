@@ -2035,7 +2035,7 @@ void VulkanHelper::ClearFrameBuffer(const VkDevice& VulkanDevice, FrameBuffer& F
 
 /* Acceleration Structures */
 
-bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index, const MultipleVolatileMemory<uint32_t>& customInstanceIndex, const MultipleVolatileMemory<uint32_t>& shaderOffset)
+bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index, uint32_t customInstanceIndex, uint32_t shaderOffset)
 {
 	//filling the build struct if not already done
 	vkBuildInfo.sType			= VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_BUILD_GEOMETRY_INFO_KHR;
@@ -2073,11 +2073,11 @@ bool VulkanHelper::CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAcc
 																		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
 																		tmpBuffer, tmpMemory, vkBuildInfo.scratchData.deviceAddress, VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT);
 
-	if (raytracedGeometry._CustomInstanceIndex != nullptr && customInstanceIndex != nullptr)
-		raytracedGeometry._CustomInstanceIndex[index] = customInstanceIndex[index];
+	if (raytracedGeometry._CustomInstanceIndex != nullptr)
+		raytracedGeometry._CustomInstanceIndex[index] = customInstanceIndex;
 
-	if (raytracedGeometry._ShaderOffset != nullptr && shaderOffset != nullptr)
-		raytracedGeometry._ShaderOffset[index] = shaderOffset[index];
+	if (raytracedGeometry._ShaderOffset != nullptr)
+		raytracedGeometry._ShaderOffset[index] = shaderOffset;
 
 	return true;
 }
@@ -2114,9 +2114,11 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 	raytracedGeometry._AccelerationStructureBuffer.Alloc(mesh.Nb());
 	raytracedGeometry._AccelerationStructureMemory.Alloc(mesh.Nb());
 
-	if (customInstanceIndex != nullptr)
+	bool useCustomInstance = customInstanceIndex != nullptr;
+	bool useShaderOffset = shaderOffset != nullptr;
+	if (useCustomInstance)
 		raytracedGeometry._CustomInstanceIndex.Alloc(mesh.Nb());
-	if (shaderOffset != nullptr)
+	if (useShaderOffset)
 		raytracedGeometry._ShaderOffset.Alloc(mesh.Nb());
 
 	bool usesOffset = transformOffset != nullptr;
@@ -2170,7 +2172,8 @@ bool VulkanHelper::CreateRaytracedGeometryFromMesh(Uploader& VulkanUploader, Ray
 		meshASRange.transformOffset = usesOffset ? transformOffset[i] : 0;
 		bottomLevelMeshASRangeInfoPtr[i] = &meshASRange;
 
-		CreateRaytracedGeometry(VulkanUploader, meshAS, meshASRange, raytracedGeometry, bottomLevelMeshASInfo[i], i, customInstanceIndex, shaderOffset);
+		CreateRaytracedGeometry(VulkanUploader, meshAS, meshASRange, raytracedGeometry, bottomLevelMeshASInfo[i], i, 
+			useCustomInstance ? customInstanceIndex[i] : 0, useShaderOffset ? shaderOffset[i] : 0);
 	}
 
 	//finally, asking to build all of the acceleration structures at once (this is basically a copy command, so it is a defered call)

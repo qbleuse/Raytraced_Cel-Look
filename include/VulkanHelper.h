@@ -575,7 +575,7 @@ namespace VulkanHelper
 
 	/* Creates the Accelerations Structure Buffers and objects, and fills the build info, but does not call build.
 	 * /!\ RaytracedGeometry needs to be pre allocated /!\ */
-	bool CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index = 0, const MultipleVolatileMemory<uint32_t>& customInstanceIndex = nullptr, const MultipleVolatileMemory<uint32_t>& shaderOffset = nullptr);
+	bool CreateRaytracedGeometry(Uploader& VulkanUploader, const VkAccelerationStructureGeometryKHR& vkGeometry, const VkAccelerationStructureBuildRangeInfoKHR& vkBuildRangeInfo, RaytracedGeometry& raytracedGeometry, VkAccelerationStructureBuildGeometryInfoKHR& vkBuildInfo, uint32_t index = 0, uint32_t customInstanceIndex = 0, uint32_t shaderOffset = 0);
 	/*
 	* Creates and Build Acceleration Structure of all mesh in array, with one Acceleration Structure per mesh.
 	* 

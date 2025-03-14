@@ -62,7 +62,7 @@ Here is a list of available features :
 
 To compare rasterized cel-shading, and raytraced cel-shading, we would need to:
 
-- [ ] implement a proper cel-shader (a basic version of the popular [NiloToonURP](https://github.com/ColinLeung-NiloCat/UnityURPToonLitShaderExample))
+- [ ] implement a proper cel-shader (a basic version of the popular [NiloToonURP](https://github.com/ColinLeung-NiloCat/UnityURPToonLitShaderExample)
 - [ ] implement a proper hybrid raytracer with all its advantages
 - [ ] study the "cel-look", and integrate this look into the hybrid raytracer
 - [ ] compare the styles

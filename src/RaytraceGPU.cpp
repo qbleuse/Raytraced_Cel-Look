@@ -21,7 +21,7 @@ void RaytraceGPU::PrepareVulkanRaytracingProps(GraphicsAPIManager& GAPI)
 		VulkanHelper::LoadObjFile(GAPI._VulkanUploader, "../../../media/teapot/teapot.obj", _RayModel._Meshes);
 
 		//create bottom level AS from model
-		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _RayModel._Meshes, VK_NULL_HANDLE, nullptr);
+		VulkanHelper::CreateRaytracedGeometryFromMesh(GAPI._VulkanUploader, _RayBottomAS, _RayModel._Meshes, VK_NULL_HANDLE);
 
 		VulkanHelper::CreateSceneBufferFromMeshes(GAPI._VulkanUploader, _RaySceneBuffer, _RayModel._Meshes);
 
@@ -932,10 +932,10 @@ void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
 	MultipleVolatileMemory<VkAabbPositionsKHR> AABBs{ NUMBER_OF_SPHERES };
 
 	//init of the example sphere. the array will be split in 3, diffuse first, metal second, dieletrics third. 
-	spheres[0] = vec4( 0.0f, 1000.0f, 0.0f, 1000.0f);//the ground
-	spheres[1] = vec4( 0.0f, -5.0f, 0.0f, 5.0f);//a lambertian diffuse example
-	spheres[nbOfSpherePerMat[0]] = vec4(10.0f, -5.0f, 0.0f, 5.0f);//a metal example
-	spheres[nbOfSpherePerMat[0] + nbOfSpherePerMat[1]] = vec4(-10.0f, -5.0f, 0.0f, 5.0f);//a dieletric example (this is a glass sphere)
+	spheres[0] = vec4( 0.0f, -1000.0f, 0.0f, 1000.0f);//the ground
+	spheres[1] = vec4( 0.0f, 5.0f, 0.0f, 5.0f);//a lambertian diffuse example
+	spheres[nbOfSpherePerMat[0]] = vec4(10.0f, 5.0f, 0.0f, 5.0f);//a metal example
+	spheres[nbOfSpherePerMat[0] + nbOfSpherePerMat[1]] = vec4(-10.0f, 5.0f, 0.0f, 5.0f);//a dieletric example (this is a glass sphere)
 
 	sphereColour[0] = vec4{ 0.5f,0.5f,0.5f, 1.0f };//the ground material
 	sphereColour[1] = vec4{ 0.4f, 0.2f, 0.1f, 1.0f };//a lambertian diffuse example
@@ -953,7 +953,7 @@ void RaytraceGPU::GenerateSpheres(GraphicsAPIManager& GAPI)
 			for (; randomSphereIndex < groupLength; randomSphereIndex++)
 			{
 				float radius = 1.0f + randf() * 1.0f;
-				vec3 sphereCenter = vec3{ (randf(-1.0f,1.0f)) * 20.0f, -radius, (randf(-1.0f,1.0f)) * 20.0f };
+				vec3 sphereCenter = vec3{ (randf(-1.0f,1.0f)) * 20.0f, radius, (randf(-1.0f,1.0f)) * 20.0f };
 
 				spheres[randomSphereIndex] = vec4(sphereCenter.x, sphereCenter.y, sphereCenter.z, radius);
 

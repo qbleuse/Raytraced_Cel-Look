@@ -155,19 +155,19 @@ void RefreshAppWideContext(const GraphicsAPIManager& GAPI, AppWideContext& AppCo
 			}
 			if (ImGui::IsKeyDown(ImGuiKey_D))
 			{
-				AppContext.camera_pos -= right * AppContext.camera_translate_speed * AppContext.delta_time;
+				AppContext.camera_pos += right * AppContext.camera_translate_speed * AppContext.delta_time;
 			}
 			if (ImGui::IsKeyDown(ImGuiKey_A))
 			{
-				AppContext.camera_pos += right * AppContext.camera_translate_speed * AppContext.delta_time;
+				AppContext.camera_pos -= right * AppContext.camera_translate_speed * AppContext.delta_time;
 			}
 			if (ImGui::IsKeyDown(ImGuiKey_Q))
 			{
-				AppContext.camera_pos -= up * AppContext.camera_translate_speed * AppContext.delta_time;
+				AppContext.camera_pos += up * AppContext.camera_translate_speed * AppContext.delta_time;
 			}
 			if (ImGui::IsKeyDown(ImGuiKey_E))
 			{
-				AppContext.camera_pos += up * AppContext.camera_translate_speed * AppContext.delta_time;
+				AppContext.camera_pos -= up * AppContext.camera_translate_speed * AppContext.delta_time;
 			}
 		}
 
