@@ -428,13 +428,33 @@ void RasterTriangle::Act(AppWideContext& AppContext)
 	//UI update
 	if (SceneCanShowUI(AppContext))
 	{
-		_changed |= ImGui::SliderFloat2("First Point", _PointBuffer.first.xy.scalar, -1.0f, 1.0f);
-		_changed |= ImGui::SliderFloat2("Second Point", _PointBuffer.second.xy.scalar, -1.0f, 1.0f);
-		_changed |= ImGui::SliderFloat2("Third Point", _PointBuffer.third.xy.scalar, -1.0f, 1.0f);
+		//change vertex position
+		{
+			_changed |= ImGui::SliderFloat2("First Vertex", _PointBuffer.first.xy.scalar, -1.0f, 1.0f);
+			_changed |= ImGui::SliderFloat2("Second Vertex", _PointBuffer.second.xy.scalar, -1.0f, 1.0f);
+			_changed |= ImGui::SliderFloat2("Third Vertex", _PointBuffer.third.xy.scalar, -1.0f, 1.0f);
+		}
 
-		_changed |= ImGui::ColorPicker4("First Point Color", _ColourBuffer.first.scalar);
-		_changed |= ImGui::ColorPicker4("Second Point Color", _ColourBuffer.second.scalar);
-		_changed |= ImGui::ColorPicker4("Third Point Color", _ColourBuffer.third.scalar);
+		//change vertex colors
+		if (ImGui::CollapsingHeader("Colors"))
+		{
+
+			ImGui::BeginGroup();
+			
+			float width = (ImGui::CalcItemWidth() / 3.0f);
+			ImGui::PushItemWidth(width);
+			_changed |= ImGui::ColorPicker4("First", _ColourBuffer.first.scalar);
+			ImGui::PopItemWidth();
+			ImGui::SameLine(0, 0);
+			ImGui::PushItemWidth(width);
+			_changed |= ImGui::ColorPicker4("Second", _ColourBuffer.second.scalar);
+			ImGui::PopItemWidth();
+			ImGui::SameLine(0, 0);
+			ImGui::PushItemWidth(width);
+			_changed |= ImGui::ColorPicker4("Third", _ColourBuffer.third.scalar);
+			ImGui::PopItemWidth();
+			ImGui::EndGroup();
+		}
 	}
 }
 

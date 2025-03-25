@@ -9,6 +9,7 @@
 //include app class
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
+#include "ImGuiHelper.h"
 
 //include loader app
 #include "tiny_obj_loader.h"
@@ -528,7 +529,7 @@ void RaytraceCPU::Resize(GraphicsAPIManager& GAPI, int32_t old_width, int32_t ol
 	ResizeVulkanResource(GAPI, old_width, old_height, old_nb_frames);
 	_ComputeBatch.Clear();
 	_ComputeHeap.Clear();
-	_ComputeHeap = MultipleSharedMemory<ray_compute>(_FullScreenScissors.extent.width * _FullScreenScissors.extent.height + _FullScreenScissors.extent.width * _FullScreenScissors.extent.height * _pixel_sample_nb);
+	_ComputeHeap = MultipleSharedMemory<ray_compute>(_FullScreenScissors.extent.width * _FullScreenScissors.extent.height + _FullScreenScissors.extent.width * _FullScreenScissors.extent.height * _rtParams._pixel_sample_nb);
 	_need_refresh = true;
 }
 
@@ -546,7 +547,7 @@ void RaytraceCPU::DispatchSceneRay(AppWideContext& AppContext)
 	float focalLength			= 1.0f;
 	float viewportHeight		= 2.0f * tanf(AppContext.fov * 0.5f) * focalLength;
 	float viewportWidth			= viewportHeight * (windowWidth / windowHeight);
-	const vec3& cameraCenter	= AppContext.view_mat.vector[3].xyz;
+	const vec3& cameraCenter	= -AppContext.view_mat.vector[3].xyz;
 
 	mat4 viewMat = transpose(AppContext.view_mat);
 
@@ -618,22 +619,24 @@ void RaytraceCPU::Act(AppWideContext& AppContext)
 	//UI update
 	if (SceneCanShowUI(AppContext))
 	{
+		//Forece Refresh
 		_need_refresh |= ImGui::Button("REFRESH");
+
+		//CPU Computes
 		ImGui::Text("Pending Rays to Compute : %d", _ComputeBatch.GetNb());
+		_need_refresh |= ImGui::SliderInt("ComputesPerFrame", (int*)&_compute_per_frames, 1, MAX_CPU_COMPUTE_PER_FRAMES);
 
-		bool SampleNbChange = ImGui::SliderInt("SampleNb", (int*)&_pixel_sample_nb, 1, 250);
-		_need_refresh |= SampleNbChange;
-		_need_refresh |= ImGui::SliderInt("Max Bounce Depth", (int*)&_max_depth, 1, 50);
-		_need_refresh |= ImGui::SliderInt("ComputesPerFrame", (int*)&_compute_per_frames, 1, 10000);
+		//Raytracing Parameters
+		uint32_t previousSampleNb = _rtParams._pixel_sample_nb;
+		ImGuiHelper::RaytracingParamsUI("RaytracingParams", _rtParams, _need_refresh);
 
-		_need_refresh |= ImGui::ColorPicker4("Background Gradient Top", _background_gradient_top.scalar);
-		_need_refresh |= ImGui::ColorPicker4("Background Gradient Bottom", _background_gradient_bottom.scalar);
 
-		if (SampleNbChange && _need_refresh)
+		//pixel sample nb changed, we need to reallocate our array
+		if (previousSampleNb != _rtParams._pixel_sample_nb && _need_refresh)
 		{
 			_ComputeBatch.Clear();
 			_ComputeHeap.Clear();
-			_ComputeHeap = MultipleSharedMemory<ray_compute>(_FullScreenScissors.extent.width * _FullScreenScissors.extent.height + _FullScreenScissors.extent.width * _FullScreenScissors.extent.height * _pixel_sample_nb);
+			_ComputeHeap = MultipleSharedMemory<ray_compute>(_FullScreenScissors.extent.width * _FullScreenScissors.extent.height + _FullScreenScissors.extent.width * _FullScreenScissors.extent.height * _rtParams._pixel_sample_nb);
 		}
 	}
 	

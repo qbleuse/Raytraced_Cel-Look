@@ -9,6 +9,7 @@
 
 //for imgui and context
 #include "AppWideContext.h"
+#include "Define.h"
 
 //utilities include
 #include "RaytraceCPUHelper.h"
@@ -18,10 +19,6 @@
 
 //defines for init values
 #define RAY_TO_COMPUTE_PER_FRAME 2700
-#define PIXEL_SAMPLE_NB 50
-#define BACKGROUND_GRADIENT_TOP vec4{ 0.3f, 0.7f, 1.0f, 1.0f }
-#define BACKGROUND_GRADIENT_BOTTOM vec4{ 1.0f, 1.0f, 1.0f, 1.0f }
-#define INIT_BOUNCE_DEPTH 10
 
 typedef Queue<MultipleSharedMemory<ray_compute>>::QueueNode RayBatch;
 
@@ -170,9 +167,9 @@ public:
 			RaytraceJob(const RayBatch& RayBatch, const RaytraceCPU& Owner) :
 				_Computes{RayBatch},
 				_Scene{Owner._Scene},
-				_background_gradient_top{ Owner._background_gradient_top},
-				_background_gradient_bottom{ Owner._background_gradient_bottom },
-				_depth{Owner._max_depth}
+				_background_gradient_top{ Owner._rtParams._background_gradient_top},
+				_background_gradient_bottom{ Owner._rtParams._background_gradient_bottom },
+				_depth{ Owner._rtParams._max_depth}
 			{
 			}
 
@@ -270,7 +267,7 @@ public:
 
 		AnyHitRaytraceJob(const RayBatch& RayBatch, RaytraceCPU& Owner) :
 			RaytraceJob(RayBatch, Owner),
-			_sample_weight{ 1.0f / static_cast<float>(Owner._pixel_sample_nb) },
+			_sample_weight{ 1.0f / static_cast<float>(Owner._rtParams._pixel_sample_nb) },
 			_ComputeQueue{ Owner._ComputeBatch },
 			_fence{ Owner._batch_fence }
 
@@ -345,7 +342,7 @@ public:
 		FirstContactRaytraceJob(const RayBatch& RayBatch, RaytraceCPU& Owner) :
 			RaytraceJob(RayBatch, Owner),
 			_offset{ Owner._FullScreenScissors.extent.width * Owner._FullScreenScissors.extent.height },
-			_pixel_sample_nb{Owner._pixel_sample_nb},
+			_pixel_sample_nb{ Owner._rtParams._pixel_sample_nb},
 			_is_moving{Owner._is_moving},
 			_ComputeQueue{Owner._ComputeBatch},
 			_fence{Owner._batch_fence}
@@ -445,14 +442,8 @@ public:
 
 	//how many rays should we compute per frame refresh ?
 	uint32_t	_compute_per_frames{ RAY_TO_COMPUTE_PER_FRAME };
-	//the number of sample for a single pixel
-	uint32_t	_pixel_sample_nb{ PIXEL_SAMPLE_NB };
-	//the color for the top of the background gradient 
-	vec4		_background_gradient_top{ BACKGROUND_GRADIENT_TOP };
-	//the color for the bottom of the background gradient 
-	vec4		_background_gradient_bottom{ BACKGROUND_GRADIENT_BOTTOM};
-	//the maximum ray bounce generation allowed
-	uint32_t	_max_depth{ INIT_BOUNCE_DEPTH };
+	//parameters useful for raytracing (such as depth or samples)
+	RaytracingParams _rtParams;
 
 	//need to recompute the frame
 	bool _need_refresh{ true };

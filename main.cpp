@@ -236,7 +236,7 @@ int main()
 		//The imgui Resource stuct regrouping every resource for every graphics interface
 		ImGuiResource imguiResource{};
 		if (GAPI._vulkan_supported)
-			InitImGuiVulkan(GAPI, imguiResource);
+			ImGuiHelper::InitImGuiVulkan(GAPI, imguiResource);
 
 		//resources for main loop
 		AppWideContext AppContext;
@@ -302,7 +302,7 @@ int main()
 					//submit all the resize work to GPU
 					GAPI.SubmitUpload();
 				}
-				ResetImGuiResource(GAPI, imguiResource);
+				ImGuiHelper::ResetImGuiResource(GAPI, imguiResource);
 				InitAppWideContext(GAPI, AppContext);
 				continue;
 			}
@@ -316,7 +316,7 @@ int main()
 			RefreshAppWideContext(GAPI, AppContext);
 
 			//2. draw our ui window
-			BeginDrawUIWindow(GAPI, scenes, AppContext);
+			ImGuiHelper::BeginDrawUIWindow(GAPI, scenes, AppContext);
 
 			if (scenes[sceneIndex]->enabled)
 			{
@@ -329,7 +329,7 @@ int main()
 			sceneIndex = AppContext.scene_index;
 
 			//5. draw the ui
-			FinishDrawUIWindow(GAPI, imguiResource, AppContext);
+			ImGuiHelper::FinishDrawUIWindow(GAPI, imguiResource, AppContext);
 
 			//6. present
 			FramePresent(GAPI,imguiResource, AppContext);
@@ -357,7 +357,7 @@ int main()
 			delete scenes[i];
 		}
 
-		ClearImGuiResource(GAPI, imguiResource);
+		ImGuiHelper::ClearImGuiResource(GAPI, imguiResource);
 	}
 
 	glfwTerminate();

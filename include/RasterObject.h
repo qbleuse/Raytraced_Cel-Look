@@ -141,9 +141,7 @@ public:
 	
 	struct ObjectData
 	{
-		vec3 pos;
-		vec3 euler_angles;
-		vec3 scale;
+		Transform _Trs;
 	};
 	//a struct to group the data that can be changed by user
 	ObjectData _ObjData;

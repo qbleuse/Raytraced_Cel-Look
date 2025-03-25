@@ -4,12 +4,7 @@
 
 //include parent
 #include "DefferedRendering.h"
-
-
-#define PIXEL_SAMPLE_NB 5
-#define BACKGROUND_GRADIENT_TOP vec4{ 0.3f, 0.7f, 1.0f, 1.0f }
-#define BACKGROUND_GRADIENT_BOTTOM vec4{ 1.0f, 1.0f, 1.0f, 1.0f }
-#define BOUNCE_DEPTH 10
+#include "Define.h"
 
 /**
 * This class is a scene to attempt at stylized, cel-look, realtime raytracing.
@@ -147,10 +142,7 @@ public:
 	{
 		mat4 _view;
 		mat4 _proj;
-		vec4 _background_color_top{ BACKGROUND_GRADIENT_TOP };
-		vec4 _background_color_bottom{ BACKGROUND_GRADIENT_BOTTOM };
-		uint32_t _nb_samples{ PIXEL_SAMPLE_NB };
-		uint32_t _depth{ BOUNCE_DEPTH };
+		RaytracingParams _rtParams;
 		uint32_t _nb_frame;
 		float	_random;
 	};

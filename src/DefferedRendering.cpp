@@ -6,6 +6,7 @@
 //include app class
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
+#include "ImGuiHelper.h"
 
 /*==== Prepare =====*/
 
@@ -523,18 +524,25 @@ void DefferedRendering::PrepareCompositingScripts(GraphicsAPIManager& GAPI)
 			vec3	cameraPos;
 			//an index allowing to change the output to debug frames
 			uint	debugIndex;
+
 			//directionnal Light direction
 			vec3	directionalDir;
-			//specular Glossiness
-			float	specGlossiness;
+			//light padding
+			float padding;
 			//the color of the directional light
 			vec3	directionnalColor;
-			//the ambient occlusion
-			float	ambientOcclusion;
+			//light padding
+			float padding2;
+
 			//cel Shading Diffuse Step
 			vec2	celDiffuseStep;
 			//cel shading spec Step
 			vec2	celSpecStep;
+
+			//specular Glossiness
+			float	specGlossiness;
+			//the ambient occlusion
+			float	ambientOcclusion;
 		};
 
 		//gets the "intensity" of the pixel, basically computing the length
@@ -651,8 +659,8 @@ void DefferedRendering::PrepareVulkanScripts(GraphicsAPIManager& GAPI)
 void DefferedRendering::Prepare(class GraphicsAPIManager& GAPI)
 {
 	//a "zero init" of the transform values
-	_ObjData.scale = vec3{ 1.0f, 1.0f, 1.0f };
-	_ObjData.pos = vec3{ 0.0f, 0.0f, 0.0f };
+	_ObjData._Trs.scale = vec3{ 1.0f, 1.0f, 1.0f };
+	_ObjData._Trs.pos = vec3{ 0.0f, 0.0f, 0.0f };
 
 	//preparing full screen copy pipeline
 	{
@@ -786,32 +794,36 @@ void DefferedRendering::Act(struct AppWideContext& AppContext)
 	//UI update
 	if (SceneCanShowUI(AppContext))
 	{
-		changedFlag | ImGui::SliderInt("Debug Frame", (int*)&_CompositingBuffer._debugIndex, 0, 6);
+		//Deffered Buffer debug visualization
+		_ObjData._ChangedFlag| ImGui::SliderInt("Debug Frame", (int*)&_CompositingBuffer._debugIndex, 0, 6);
 
-		changedFlag |= ImGui::SliderFloat3("Object Postion", _ObjData.pos.scalar, -100.0f, 100.0f);
-		changedFlag |= ImGui::SliderFloat3("Object Rotation", _ObjData.euler_angles.scalar, -180.0f, 180.0f);
-		changedFlag |= ImGui::SliderFloat3("Object Scale", _ObjData.scale.scalar, 0.0f, 1.0f, "%0.01f");
-		changedFlag |= ImGui::SliderFloat("Object Rot Speed", &_ObjRotSpeed, 0.0f, 100.0f, "%0.01f");
+		//Object Transform
+		if (ImGuiHelper::TransformUI("Object", _ObjData._Trs, _ObjData._ChangedFlag))
+		{
+			//Realtime control
+			_ObjData._ChangedFlag |= ImGui::SliderFloat("Object Rot Speed", &_ObjData._ObjRotSpeed, 0.0f, 100.0f, "%0.01f");
+		}
 
-		changedFlag | ImGui::SliderFloat3("Directionnal Light Direction", _CompositingBuffer._directionalDir.scalar, -1.0f, 1.0f);
-		changedFlag | ImGui::SliderFloat3("Directionnal Light Color", _CompositingBuffer._directionnalColor.scalar, -1.0f, 1.0f);
-		changedFlag | ImGui::SliderFloat("Specular Glossiness", &_CompositingBuffer._specGlossiness, 0.0f, 64.0f);
-		changedFlag | ImGui::SliderFloat("Ambient Occlusion", &_CompositingBuffer._ambientOcclusion, 0.0f, 1.0f);
-		
-		changedFlag | ImGui::SliderFloat2("Diffuse Cel Shading Diffuse Step", _CompositingBuffer._celDiffuseStep.scalar, 0.0f, 0.1f, "%5f");
-		changedFlag | ImGui::SliderFloat2("Diffuse Cel Shading Spec Step", _CompositingBuffer._celSpecStep.scalar, 0.0f, 0.1f, "%5f");
+		//light edit
+		if (ImGuiHelper::LightUI("Directionnal Light", _CompositingBuffer._dirLight, _ObjData._ChangedFlag))
+		{
+			_ObjData._ChangedFlag |= ImGui::SliderFloat("Ambient Occlusion", &_CompositingBuffer._ambientOcclusion, 0.0f, 1.0f);
+		}
+
+		//shading params
+		ImGuiHelper::CelParamsUI("Cel Shading Parameters", _CompositingBuffer._celParams, _ObjData._ChangedFlag);
 	}
 
 	_CompositingBuffer._cameraPos = AppContext.camera_pos;
 
-	_ObjData.euler_angles.y += _ObjRotSpeed * AppContext.delta_time;
+	_ObjData._Trs.rot.y += _ObjData._ObjRotSpeed * AppContext.delta_time;
 
 
 	//it will change every frame
 	{
 		_UniformBuffer._proj = perspective_proj(_GBUfferPipelineOutput._OutputScissor.extent.width, _GBUfferPipelineOutput._OutputScissor.extent.height, AppContext.fov, AppContext.near_plane, AppContext.far_plane);
 		_UniformBuffer._view = AppContext.view_mat;
-		_UniformBuffer._model = scale(_ObjData.scale.x, _ObjData.scale.y, _ObjData.scale.z) * intrinsic_rot(_ObjData.euler_angles.x, _ObjData.euler_angles.y, _ObjData.euler_angles.z) * translate(_ObjData.pos);
+		_UniformBuffer._model = TransformToMat(_ObjData._Trs);
 
 	}
 }

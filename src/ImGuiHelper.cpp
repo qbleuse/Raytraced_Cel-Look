@@ -10,9 +10,11 @@
 #include "Scene.h"
 #include "GraphicsAPIManager.h"
 
+using namespace ImGuiHelper;
+
 /*===== Init =====*/
 
-void InitImGuiVulkan(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResource)
+void ImGuiHelper::InitImGuiVulkan(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResource)
 {
 	VkResult result = VK_SUCCESS;
 
@@ -76,7 +78,7 @@ void InitImGuiVulkan(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResourc
 
 	ImGui_ImplGlfw_InitForVulkan(GAPI._VulkanWindow, true);
 
-	ResetImGuiResource(GAPI, ImGuiResource);
+	ImGuiHelper::ResetImGuiResource(GAPI, ImGuiResource);
 
 	ImGui_ImplVulkan_InitInfo init_info = {};
 	init_info.Instance			= GAPI._VulkanInterface;
@@ -98,7 +100,7 @@ void InitImGuiVulkan(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResourc
 
 /*===== Resize Resource =====*/
 
-bool ResetImGuiResource(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResource)
+bool ImGuiHelper::ResetImGuiResource(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResource)
 {
 	VkResult result = VK_SUCCESS;
 
@@ -151,7 +153,7 @@ bool ResetImGuiResource(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiReso
 
 /*===== Draw =====*/
 
-void BeginDrawUIWindow(const GraphicsAPIManager& GAPI, ScopedLoopArray<class Scene*>& scenes, AppWideContext& AppContext)
+void ImGuiHelper::BeginDrawUIWindow(const GraphicsAPIManager& GAPI, ScopedLoopArray<Scene*>& scenes, AppWideContext& AppContext)
 {
 	if (!AppContext.ui_visible)
 		return;
@@ -222,7 +224,7 @@ void BeginDrawUIWindow(const GraphicsAPIManager& GAPI, ScopedLoopArray<class Sce
 }
 
 
-void FinishDrawUIWindow(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResource, AppWideContext& AppContext)
+void ImGuiHelper::FinishDrawUIWindow(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResource, AppWideContext& AppContext)
 {
 	VkResult err;
 
@@ -289,7 +291,7 @@ void FinishDrawUIWindow(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiReso
 
 /*===== Clear =====*/
 
-void ClearImGuiResource(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResource)
+void ImGuiHelper::ClearImGuiResource(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiResource)
 {
 
 	VK_CLEAR_ARRAY(ImGuiResource._ImguiFrameBuffer, GAPI._nb_vk_frames, vkDestroyFramebuffer, GAPI._VulkanDevice);
@@ -305,4 +307,121 @@ void ClearImGuiResource(const GraphicsAPIManager& GAPI, ImGuiResource& ImGuiReso
 	{
 		vkDestroyRenderPass(GAPI._VulkanDevice, ImGuiResource._ImGuiRenderPass, nullptr);
 	}
+}
+
+
+/*===== UI Methods ======*/
+
+
+bool ImGuiHelper::TransformUI(const char* label, Transform& trs, bool& changed)
+{
+
+	if (ImGui::CollapsingHeader(label))
+	{
+		ImGui::BeginGroup();
+
+
+		changed |= ImGui::SliderFloat3("Postion",	trs.pos.scalar, -MAX_TRANSLATE, MAX_TRANSLATE);
+		changed |= ImGui::SliderFloat3("Rotation", trs.rot.scalar, -MAX_ROT, MAX_ROT);
+		changed |= ImGui::SliderFloat3("Scale",	trs.scale.scalar, 0.0f, MAX_SCALE, "%0.01f");
+
+		ImGui::EndGroup();
+
+		return true;
+
+	}
+
+	return false;
+}
+
+bool ImGuiHelper::RaytracingParamsUI(const char* label, RaytracingParams& rtParams, bool& changed)
+{
+
+	if (ImGui::CollapsingHeader(label))
+	{
+		//Sample nb and depth
+		changed |= ImGui::SliderInt("SampleNb", (int*)&rtParams._pixel_sample_nb, 1, 250);
+		changed |= ImGui::SliderInt("Max Bounce Depth", (int*)&rtParams._max_depth, 1, 50);
+
+		//background grdient simulating a sky
+		if (ImGui::CollapsingHeader("Background Gradient"))
+		{
+			ImGui::BeginGroup();
+
+			//we use the 4th component of our vector to act as a boolean for turning on and off our gradient.
+			bool useBackgroundGradient = rtParams._background_gradient_top.w == 1.0f;
+				
+			ImGui::Checkbox("Use Background Gradient", &useBackgroundGradient);
+
+			// we'll make both color picker half of the size
+			float width = ImGui::CalcItemWidth() / 2.0f;
+
+			//show the color picker for the top
+			ImGui::PushItemWidth(width);
+			changed |= ImGui::ColorPicker4("Top", rtParams._background_gradient_top.scalar);
+			ImGui::PopItemWidth();
+
+			//we put it on the same line 
+			ImGui::SameLine();
+
+			//show the top color picker
+			ImGui::PushItemWidth(width);
+			changed |= ImGui::ColorPicker4("Bottom", rtParams._background_gradient_bottom.scalar);
+			ImGui::PopItemWidth();
+
+			ImGui::EndGroup();
+
+			rtParams._background_gradient_top.w = useBackgroundGradient ? 1.0f : 0.0f;
+
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+bool ImGuiHelper::LightUI(const char* label, Light& light, bool& changed)
+{
+
+	if (ImGui::CollapsingHeader(label))
+	{
+		switch (light._LightType)
+		{
+			case LightType::DIRECTIONNAL:
+				changed |= ImGui::SliderFloat3("Light Direction", light._dir.scalar, LIGHT_DIR_EDIT_MIN, LIGHT_DIR_EDIT_MAX);
+				break;
+			case LightType::SPHERE:
+				changed |= ImGui::SliderFloat3("Light Position", light._pos.scalar, -LIGHT_POS_EDIT_MAX, LIGHT_POS_EDIT_MAX);
+				changed |= ImGui::SliderFloat("Light Radius", light._pos.scalar, -LIGHT_RADIUS_EDIT_MAX, LIGHT_RADIUS_EDIT_MAX);
+				break;
+			default:
+				printf("error ImGuiHelper::LightUI : Light is something that does not exist");
+			return false;
+		}
+
+		changed |= ImGui::ColorPicker3("Color", light._color.scalar);
+
+		return true;
+
+	}
+
+
+	return false;
+}
+
+bool ImGuiHelper::CelParamsUI(const char* label, CelParams& celParams, bool& changed)
+{
+	if (ImGui::CollapsingHeader(label))
+	{
+		changed |= ImGui::SliderFloat("Specular Glossiness", &celParams._specGlossiness, 0.0f, MAX_CEL_SPECULAR_GLOSS);
+		changed |= ImGui::SliderFloat2("Diffuse Step", celParams._celDiffuseStep.scalar, 0.0f,MAX_CEL_DIFFUSE_STEP, "%5f");
+		changed |= ImGui::SliderFloat2("Specular Step", celParams._celSpecStep.scalar, 0.0f, MAX_CEL_SPECULAR_STEP, "%5f");
+
+		return true;
+
+	}
+
+
+	return false;
 }

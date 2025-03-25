@@ -549,6 +549,18 @@ __forceinline mat4 operator*(const mat4& lhs, const mat4& rhs)
 }
 
 
+struct Transform
+{
+	vec3 pos;
+	vec3 rot;
+	vec3 scale;
+};
+
+__forceinline mat4 TransformToMat(const Transform& trs)
+{
+	return scale(trs.scale.x, trs.scale.y, trs.scale.z) * intrinsic_rot(trs.rot.x, trs.rot.y, trs.rot.z) * translate(trs.pos);
+}
+
 
 
 #endif //__MATHS_H__

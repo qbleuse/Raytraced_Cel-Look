@@ -6,6 +6,7 @@
 //include app class
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
+#include "ImGuiHelper.h"
 
 #include "CornellBox.h"
 
@@ -948,8 +949,8 @@ void RaytracedCel::Prepare(class GraphicsAPIManager& GAPI)
 	}
 
 	//a "zero init" of the transform values
-	_ObjData.scale = vec3{ 1.0f, 1.0f, 1.0f };
-	_ObjData.pos = vec3{ 0.0f, 0.0f, 0.0f };
+	_ObjData._Trs.scale = vec3{ 1.0f, 1.0f, 1.0f };
+	_ObjData._Trs.pos = vec3{ 0.0f, 0.0f, 0.0f };
 
 	//preparing hardware raytracing props
 	{
@@ -1082,11 +1083,7 @@ void RaytracedCel::Act(AppWideContext& AppContext)
 	if (SceneCanShowUI(AppContext))
 	{
 
-		changedFlag |= ImGui::SliderInt("SampleNb", (int*)&_RayBuffer._nb_samples, 1, 100);
-		changedFlag |= ImGui::SliderInt("Max Bounce Depth", (int*)&_RayBuffer._depth, 1, 20);
-
-		changedFlag |= ImGui::ColorPicker4("Background Gradient Top", _RayBuffer._background_color_top.scalar);
-		changedFlag |= ImGui::ColorPicker4("Background Gradient Bottom", _RayBuffer._background_color_bottom.scalar);
+		ImGuiHelper::RaytracingParamsUI("Raytracing Parameters", _RayBuffer._rtParams, _ObjData._ChangedFlag);
 
 	}
 
@@ -1120,9 +1117,9 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 
 	//if (changedFlag)
 	{
-		mat4 transform = scale(_ObjData.scale.x, _ObjData.scale.y, _ObjData.scale.z) * transpose(extrinsic_rot(_ObjData.euler_angles.x, _ObjData.euler_angles.y, _ObjData.euler_angles.z)) * translate(_ObjData.pos);
+		mat4 transform = _UniformBuffer._model;//scale(_ObjData.scale.x, _ObjData.scale.y, _ObjData.scale.z) * transpose(extrinsic_rot(_ObjData.euler_angles.x, _ObjData.euler_angles.y, _ObjData.euler_angles.z)) * translate(_ObjData.pos);
 	
-		changedFlag = false;
+		//_ObjData._ChangedFlag = false;
 	
 		VulkanHelper::Uploader tmpUploader;
 		VulkanHelper::StartUploader(GAPIHandle, tmpUploader);

@@ -6,6 +6,7 @@
 //include app class
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
+#include "ImGuiHelper.h"
 
 /*==== Prepare =====*/
 
@@ -429,8 +430,8 @@ void RasterObject::Prepare(class GraphicsAPIManager& GAPI)
 	PrepareVulkanProps(GAPI, VertexShader, FragmentShader);
 
 	//a "zero init" of the transform values
-	_ObjData.scale = vec3{ 1.0f, 1.0f, 1.0f };
-	_ObjData.pos = vec3{ 0.0f, 0.0f, 1.0f };
+	_ObjData._Trs.scale = vec3{ 1.0f, 1.0f, 1.0f };
+	_ObjData._Trs.pos = vec3{ 0.0f, 0.0f, 1.0f };
 
 	enabled = true;
 }
@@ -552,21 +553,20 @@ void RasterObject::Resize(class GraphicsAPIManager& GAPI, int32_t old_width, int
 void RasterObject::Act(struct AppWideContext& AppContext)
 {
 
-	_ObjData.euler_angles.y += AppContext.delta_time;
+	_ObjData._Trs.rot.y += AppContext.delta_time;
 
 	//it will change every frame
 	{
 		_ObjBuffer.proj = AppContext.proj_mat;
 		_ObjBuffer.view = AppContext.view_mat;
-		_ObjBuffer.model = scale(_ObjData.scale.x, _ObjData.scale.y, _ObjData.scale.z) * intrinsic_rot(_ObjData.euler_angles.x, _ObjData.euler_angles.y, _ObjData.euler_angles.z) * translate(_ObjData.pos);
+		_ObjBuffer.model = TransformToMat(_ObjData._Trs);
 	}
 
 	//UI update
 	if (SceneCanShowUI(AppContext))
 	{
-		ImGui::SliderFloat3("Object Postion", _ObjData.pos.scalar, -100.0f, 100.0f);
-		ImGui::SliderFloat3("Object Rotation", _ObjData.euler_angles.scalar, -180.0f, 180.0f);
-		ImGui::SliderFloat3("Object Scale", _ObjData.scale.scalar, 0.0f, 1.0f, "%0.01f");
+		bool dummy;
+		ImGuiHelper::TransformUI("Object Transform", _ObjData._Trs, dummy);
 	}
 
 }

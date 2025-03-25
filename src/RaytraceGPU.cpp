@@ -6,6 +6,7 @@
 //include app class
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
+#include "ImGuiHelper.h"
 
 #define NUMBER_OF_SPHERES 30
 
@@ -1022,8 +1023,8 @@ void RaytraceGPU::Prepare(class GraphicsAPIManager& GAPI)
 	}
 
 	//a "zero init" of the transform values
-	_RayObjData.scale = vec3{ 1.0f, 1.0f, 1.0f };
-	_RayObjData.pos = vec3{ 0.0f, 0.0f, 0.0f };
+	_RayObjData._Trs.scale = vec3{ 1.0f, 1.0f, 1.0f };
+	_RayObjData._Trs.pos = vec3{ 0.0f, 0.0f, 0.0f };
 
 	//preparing full screen copy pipeline
 	{
@@ -1137,19 +1138,13 @@ void RaytraceGPU::Act(struct AppWideContext& AppContext)
 	//UI update
 	if (SceneCanShowUI(AppContext))
 	{
-		 changedFlag |= ImGui::SliderFloat3("Object Postion", _RayObjData.pos.scalar, -100.0f, 100.0f);
-		 changedFlag |= ImGui::SliderFloat3("Object Rotation", _RayObjData.euler_angles.scalar, -180.0f, 180.0f);
-		 changedFlag |= ImGui::SliderFloat3("Object Scale", _RayObjData.scale.scalar, 0.0f, 1.0f, "%0.01f");
+		ImGuiHelper::TransformUI("Teapot Transform", _RayObjData._Trs, _RayObjData._ChangedFlag);
 
-		 changedFlag |= ImGui::SliderInt("SampleNb", (int*)&_RayBuffer._nb_samples, 1, 100);
-		 changedFlag |= ImGui::SliderInt("Max Bounce Depth", (int*)&_RayBuffer._depth, 1, 20);
-
-		 changedFlag |= ImGui::ColorPicker4("Background Gradient Top", _RayBuffer._background_color_top.scalar);
-		 changedFlag |= ImGui::ColorPicker4("Background Gradient Bottom", _RayBuffer._background_color_bottom.scalar);
+		ImGuiHelper::RaytracingParamsUI("Raytracing Parameters", _RayBuffer._rt_params, _RayObjData._ChangedFlag);
 
 	}
 
-	_RayObjData.euler_angles.y += 20.0f * AppContext.delta_time;
+	_RayObjData._Trs.rot.y += 20.0f * AppContext.delta_time;
 	_RayBuffer._random = randf();
 	_RayBuffer._nb_frame = ImGui::GetFrameCount();
 }
@@ -1182,9 +1177,9 @@ void RaytraceGPU::Show(GAPIHandle& GAPIHandle)
 
 	//if (changedFlag)
 	{
-		mat4 transform = scale(_RayObjData.scale.x, _RayObjData.scale.y, _RayObjData.scale.z) * intrinsic_rot(_RayObjData.euler_angles.x, _RayObjData.euler_angles.y, _RayObjData.euler_angles.z) * translate(_RayObjData.pos);
+		mat4 transform = TransformToMat(_RayObjData._Trs);//scale(_RayObjData.scale.x, _RayObjData.scale.y, _RayObjData.scale.z) * intrinsic_rot(_RayObjData.euler_angles.x, _RayObjData.euler_angles.y, _RayObjData.euler_angles.z) * translate(_RayObjData.pos);
 
-		changedFlag = false;
+		//changedFlag = false;
 
 		VulkanHelper::Uploader tmpUploader;
 		VulkanHelper::StartUploader(GAPIHandle, tmpUploader);

@@ -14,12 +14,8 @@
 //utilities include
 #include "Utilities.h"
 #include "Maths.h"
+#include "Define.h"
 
-
-#define PIXEL_SAMPLE_NB 5
-#define BACKGROUND_GRADIENT_TOP vec4{ 0.3f, 0.7f, 1.0f, 1.0f }
-#define BACKGROUND_GRADIENT_BOTTOM vec4{ 1.0f, 1.0f, 1.0f, 1.0f }
-#define BOUNCE_DEPTH 10
 
 /**
 * This class is a scene to raytrace using GPU raytracing a model.
@@ -200,24 +196,19 @@ public:
 	
 	struct ObjectData
 	{
-		vec3 pos;
-		vec3 euler_angles;
-		vec3 scale;
+		Transform			_Trs;
+		bool				_ChangedFlag = false;
 	};
 	//a struct to group the data that can be changed by user
 	ObjectData _RayObjData;
-	bool changedFlag = false;
 
 	struct UniformBuffer
 	{
-		mat4 _view;
-		mat4 _proj;
-		vec4 _background_color_top{BACKGROUND_GRADIENT_TOP};
-		vec4 _background_color_bottom{BACKGROUND_GRADIENT_BOTTOM};
-		uint32_t _nb_samples{ PIXEL_SAMPLE_NB };
-		uint32_t _depth{BOUNCE_DEPTH};
-		uint32_t _nb_frame;
-		float	_random;
+		mat4				_view;
+		mat4				_proj;
+		RaytracingParams	_rt_params;
+		uint32_t			_nb_frame;
+		float				_random;
 	};
 	//a buffer to allow sending the data changed by user at once
 	UniformBuffer _RayBuffer;

@@ -13,6 +13,7 @@
 //utilities include
 #include "Utilities.h"
 #include "Maths.h"
+#include "Define.h"
 
 /**
 * This class is a scene to make a deffered renderer.
@@ -191,14 +192,13 @@ public:
 
 	struct ObjectData
 	{
-		vec3 pos;
-		vec3 euler_angles;
-		vec3 scale;
+		Transform	_Trs;
+		bool		_ChangedFlag = false;
+		float		_ObjRotSpeed = 20.0f;
 	};
 	//a struct to group the data that can be changed by user
 	ObjectData _ObjData;
-	bool changedFlag = false;
-	float _ObjRotSpeed = 20.0f;
+
 
 	struct UniformBuffer
 	{
@@ -212,21 +212,15 @@ public:
 	struct CompositingBuffer
 	{
 		//the position of the camera for the light
-		vec3	_cameraPos;
+		vec3		_cameraPos;
 		//an index allowing to change the output to debug frames
-		uint32_t _debugIndex{ 0 };
-		//directionnal Light direction
-		vec3	_directionalDir{ 1.0f, -1.0f, 1.0f };
-		//specular Glossiness
-		float	_specGlossiness{4.0f};
-		//the color of the directional light
-		vec3	_directionnalColor{1.0f,1.0f,1.0f};
+		uint32_t	_debugIndex{ 0 };
+		//our directionnal light
+		Light		_dirLight  INIT_DIR_LIGHT ;
+		// the parameters for the CelShading Material
+		CelParams	_celParams;
 		//the ambient occlusion
-		float	_ambientOcclusion{0.2f};
-		//cel Shading Diffuse Step
-		vec2	_celDiffuseStep{0.0f, 0.01f};
-		//cel shading spec Step
-		vec2	_celSpecStep{0.005f, 0.01f};
+		float		_ambientOcclusion{ INIT_AO };
 	};
 	//a buffer to allow sending the data changed by user at once
 	CompositingBuffer _CompositingBuffer;
