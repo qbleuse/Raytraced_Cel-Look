@@ -155,6 +155,17 @@ protected:
 public:
 	/*===== Scene Interface =====*/
 
+
+	/*
+	* Imports all the data user can change, saved from each use.
+	*/
+	virtual void Import(rapidjspon::Document& AppSettings)override;
+
+	/*
+	* Exports all the data user can change in the document, to save it for next use.
+	*/
+	virtual void Export(rapidjspon::Document& AppSettings)override;
+
 	/*
 	* Prepares once all the unmovable resources needed (such as pipelines in recent Graphics APIs)
 	*/

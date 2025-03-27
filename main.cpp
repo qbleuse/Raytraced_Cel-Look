@@ -15,6 +15,11 @@
 //Graphics API include
 #include "GraphicsAPIManager.h"
 
+//json include
+#include "rapidjson/document.h"
+#include "rapidjson/filereadstream.h"
+#include "rapidjson/filewritestream.h"
+
 //app include
 #include "AppWideContext.h"
 #include "Scene.h"
@@ -262,7 +267,23 @@ int main()
 			scenes[3] = new DefferedRendering();
 		}
 
+		//import saved user data from json
+		{
 
+			rapidjson::Document appSettings;
+
+			//first reading the file 
+			{
+				FILE* json_file = fopen("RaytracedCelSettings.json", "r");
+
+				std::string readBuffer;
+				rapidjson::FileReadStream file_stream(json_file, &readBuffer[0], readBuffer.size());
+
+				appSettings.ParseStream(file_stream);
+
+				fclose(json_file);
+			}
+		}
 
 		InitAppWideContext(GAPI, AppContext);
 

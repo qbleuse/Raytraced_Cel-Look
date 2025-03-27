@@ -10,9 +10,22 @@
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
 #include "ImGuiHelper.h"
+#include "rapidjson/document.h"
 
-//include loader app
-#include "tiny_obj_loader.h"
+/*===== Import =====*/
+
+void RaytraceCPU::Import(rapidjspon::Document& AppSettings)
+{
+
+}
+
+
+/*===== Export =====*/
+
+void RaytraceCPU::Export(rapidjspon::Document& AppSettings)
+{
+
+}
 
 /*==== Prepare =====*/
 

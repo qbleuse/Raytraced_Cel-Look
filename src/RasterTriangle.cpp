@@ -4,7 +4,23 @@
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
 #include "imgui/imgui.h"
+#include "rapidjson/document.h"
 
+
+/*===== Import =====*/
+
+void RasterTriangle::Import(rapidjspon::Document& AppSettings)
+{
+
+}
+
+
+/*===== Export =====*/
+
+void RasterTriangle::Export(rapidjspon::Document& AppSettings)
+{
+
+}
 
 /*===== Prepare =====*/
 

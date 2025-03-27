@@ -7,6 +7,22 @@
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
 #include "ImGuiHelper.h"
+#include "rapidjson/document.h"
+
+/*===== Import =====*/
+
+void DefferedRendering::Import(rapidjspon::Document& AppSettings)
+{
+
+}
+
+
+/*===== Export =====*/
+
+void DefferedRendering::Export(rapidjspon::Document& AppSettings)
+{
+
+}
 
 /*==== Prepare =====*/
 

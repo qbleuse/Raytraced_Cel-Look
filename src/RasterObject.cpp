@@ -7,6 +7,23 @@
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
 #include "ImGuiHelper.h"
+#include "rapidjson/document.h"
+
+
+/*===== Import =====*/
+
+void RasterObject::Import(rapidjspon::Document& AppSettings)
+{
+
+}
+
+
+/*===== Export =====*/
+
+void RasterObject::Export(rapidjspon::Document& AppSettings)
+{
+
+}
 
 /*==== Prepare =====*/
 

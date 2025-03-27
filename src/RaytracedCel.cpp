@@ -7,10 +7,23 @@
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
 #include "ImGuiHelper.h"
+#include "rapidjson/document.h"
 
 #include "CornellBox.h"
 
-#define NUMBER_OF_SPHERES 30
+/*===== Import =====*/
+
+void RaytracedCel::Import(rapidjspon::Document& AppSettings)
+{
+
+}
+
+/*===== Export =====*/
+
+void RaytracedCel::Export(rapidjspon::Document& AppSettings)
+{
+
+}
 
 /*==== Prepare =====*/
 

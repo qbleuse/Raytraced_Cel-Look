@@ -3,6 +3,12 @@
 
 #include <stdint.h>
 
+//forward declaration
+namespace rapidjspon
+{
+	class Document;
+}
+
 /**
 * This a class representing the familiar scene known in different other engines.
 * The only different is that I am using the semantic field of plays.
@@ -11,6 +17,16 @@ class Scene
 {
 public:
 	bool enabled = false;
+
+	/*
+	* Imports all the data user can change, saved from each use.
+	*/
+	virtual void Import(rapidjspon::Document& AppSettings) = 0;
+
+	/*
+	* Exports all the data user can change in the document, to save it for next use.
+	*/
+	virtual void Export(rapidjspon::Document& AppSettings) = 0;
 
 	/*
 	* Prepares once all the unmovable resources needed (such as pipelines in recent Graphics APIs)

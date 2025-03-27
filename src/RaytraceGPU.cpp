@@ -7,8 +7,24 @@
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
 #include "ImGuiHelper.h"
+#include "rapidjson/document.h"
 
 #define NUMBER_OF_SPHERES 30
+
+/*===== Import =====*/
+
+void RaytraceGPU::Import(rapidjspon::Document& AppSettings)
+{
+
+}
+
+
+/*===== Export =====*/
+
+void RaytraceGPU::Export(rapidjspon::Document& AppSettings)
+{
+
+}
 
 /*==== Prepare =====*/
 
