@@ -4,22 +4,67 @@
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
 #include "imgui/imgui.h"
-#include "rapidjson/document.h"
 
+//include serialization
+#include "rapidjson/document.h"
+#include "SerializationHelper.h"
 
 /*===== Import =====*/
 
-void RasterTriangle::Import(rapidjspon::Document& AppSettings)
+void RasterTriangle::Import(const rapidjson::Value& AppSettings)
 {
+	if (AppSettings.IsObject() && AppSettings.HasMember(Name()))
+	{
+		const rapidjson::Value& SceneObject = AppSettings[Name()];
 
+		//if it does not exists fill inital value
+		if (SceneObject.IsObject())
+		{
+			//load our points
+			SerializationHelper::LoadVector("First Point", SceneObject, _PointBuffer.first);
+			SerializationHelper::LoadVector("Second Point", SceneObject, _PointBuffer.second);
+			SerializationHelper::LoadVector("Third Point", SceneObject, _PointBuffer.third);
+
+			//load the colours
+			SerializationHelper::LoadVector("First Point Colour", SceneObject, _ColourBuffer.first);
+			SerializationHelper::LoadVector("Second Point Colour", SceneObject, _ColourBuffer.second);
+			SerializationHelper::LoadVector("Third Point Colour", SceneObject, _ColourBuffer.third);
+
+			return;
+		}
+	}
+
+	//fill up uniform buffers with initial data
+	_PointBuffer.first = vec4{ 0.0f, -1.0f, 0.0f, 0.0f };
+	_PointBuffer.second = vec4{ 0.5f, 0.5f, 0.0f, 0.0f };
+	_PointBuffer.third = vec4{ -0.5f, 0.5f, 0.0f, 0.0f };
+
+	_ColourBuffer.first = vec4{ 1.0f, 0.0f, 0.0f, 0.0f };
+	_ColourBuffer.second = vec4{ 0.0f, 1.0f, 0.0f, 0.0f };
+	_ColourBuffer.third = vec4{ 0.0f, 0.0f, 1.0f, 0.0f };
 }
 
 
 /*===== Export =====*/
 
-void RasterTriangle::Export(rapidjspon::Document& AppSettings)
+void RasterTriangle::Export(rapidjson::Value& AppSettings, rapidjson::MemoryPoolAllocator<>& Allocator)
 {
+	rapidjson::Value SceneObject(rapidjson::kObjectType);
 
+	{
+		//copy our points
+		SerializationHelper::SerializeVector("First Point", SceneObject, _PointBuffer.first, Allocator);
+		SerializationHelper::SerializeVector("Second Point", SceneObject, _PointBuffer.second, Allocator);
+		SerializationHelper::SerializeVector("Third Point", SceneObject, _PointBuffer.third, Allocator);
+
+		//copy the ccolours
+		SerializationHelper::SerializeVector("First Point Colour", SceneObject, _ColourBuffer.first, Allocator);
+		SerializationHelper::SerializeVector("Second Point Colour", SceneObject, _ColourBuffer.second, Allocator);
+		SerializationHelper::SerializeVector("Third Point Colour", SceneObject, _ColourBuffer.third, Allocator);
+
+	}
+
+	AppSettings.AddMember(rapidjson::StringRef(Name()), SceneObject, Allocator);
 }
 
 /*===== Prepare =====*/
@@ -262,16 +307,6 @@ void RasterTriangle::Prepare(GraphicsAPIManager& GAPI)
 {
 	//the shaders needed
 	VkShaderModule vertexShader{}, fragmentShader{};
-
-	//fill up uniform buffers with initial data
-	_PointBuffer.first	= vec4{0.0f, -1.0f, 0.0f, 0.0f};
-	_PointBuffer.second	= vec4{0.5f, 0.5f, 0.0f, 0.0f};
-	_PointBuffer.third	= vec4{-0.5f, 0.5f, 0.0f, 0.0f};
-
-	_ColourBuffer.first = vec4{1.0f, 0.0f, 0.0f, 0.0f};
-	_ColourBuffer.second = vec4{0.0f, 1.0f, 0.0f, 0.0f};
-	_ColourBuffer.third = vec4{0.0f, 0.0f, 1.0f, 0.0f};
-
 
 	//compile the shaders here
 	PrepareVulkanScripts(GAPI, vertexShader, fragmentShader);

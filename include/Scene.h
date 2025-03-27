@@ -4,10 +4,22 @@
 #include <stdint.h>
 
 //forward declaration
-namespace rapidjspon
+namespace rapidjson
 {
-	class Document;
+	template<typename CharType = char>
+	struct UTF8;
+
+	class CrtAllocator;
+
+	template <typename BaseAllocator = CrtAllocator>
+	class MemoryPoolAllocator;
+
+	template <typename Encoding, typename Allocator = MemoryPoolAllocator<> >
+	class GenericValue;
+
+	typedef GenericValue<UTF8<> > Value;
 }
+
 
 /**
 * This a class representing the familiar scene known in different other engines.
@@ -21,12 +33,12 @@ public:
 	/*
 	* Imports all the data user can change, saved from each use.
 	*/
-	virtual void Import(rapidjspon::Document& AppSettings) = 0;
+	virtual void Import(const rapidjson::Value& AppSettings) = 0;
 
 	/*
 	* Exports all the data user can change in the document, to save it for next use.
 	*/
-	virtual void Export(rapidjspon::Document& AppSettings) = 0;
+	virtual void Export(rapidjson::Value& AppSettings, rapidjson::MemoryPoolAllocator<>& Allocator) = 0;
 
 	/*
 	* Prepares once all the unmovable resources needed (such as pipelines in recent Graphics APIs)

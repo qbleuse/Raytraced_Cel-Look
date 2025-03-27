@@ -9,6 +9,15 @@
 #include "Maths.h"
 
 
+#ifndef _WIN32
+#define __forceinline inline
+#endif
+
+/*==== SERIALIZATION ====*/
+
+#define JSON_FILE_RW_BUFFER 2048
+
+
 /*==== TRANSFORM ====*/
 
 //Transform UI MAX VALUES

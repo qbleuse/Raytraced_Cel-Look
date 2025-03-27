@@ -7,22 +7,52 @@
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
 #include "ImGuiHelper.h"
-#include "rapidjson/document.h"
+
+//include serialize
+#include "SerializationHelper.h"
 
 
 /*===== Import =====*/
 
-void RasterObject::Import(rapidjspon::Document& AppSettings)
+void RasterObject::Import(const rapidjson::Value& AppSettings)
 {
+	if (AppSettings.IsObject() && AppSettings.HasMember(Name()))
+	{
+
+		const rapidjson::Value& SceneObject = AppSettings[Name()];
+
+		if (SceneObject.IsObject())
+		{
+
+			SerializationHelper::LoadTransform("Object Transform", SceneObject, _ObjData._Trs);
+			return;
+		}
+
+	}
+
+	//if it does not exists fill inital value
+	{
+		//a "zero init" of the transform values
+		_ObjData._Trs.scale = vec3{ 1.0f, 1.0f, 1.0f };
+		_ObjData._Trs.pos = vec3{ 0.0f, 0.0f, 1.0f };
+	}
 
 }
 
 
 /*===== Export =====*/
 
-void RasterObject::Export(rapidjspon::Document& AppSettings)
+void RasterObject::Export(rapidjson::Value& AppSettings, rapidjson::MemoryPoolAllocator<>& Allocator)
 {
+	rapidjson::Value SceneObject(rapidjson::kObjectType);
 
+	{
+		//copy our transform
+		SerializationHelper::SerializeTransform("Object Transform", SceneObject, _ObjData._Trs, Allocator);
+
+	}
+
+	AppSettings.AddMember(rapidjson::StringRef(Name()), SceneObject, Allocator);
 }
 
 /*==== Prepare =====*/
@@ -445,10 +475,6 @@ void RasterObject::Prepare(class GraphicsAPIManager& GAPI)
 	PrepareVulkanScripts(GAPI, VertexShader, FragmentShader);
 	//then create the pipeline
 	PrepareVulkanProps(GAPI, VertexShader, FragmentShader);
-
-	//a "zero init" of the transform values
-	_ObjData._Trs.scale = vec3{ 1.0f, 1.0f, 1.0f };
-	_ObjData._Trs.pos = vec3{ 0.0f, 0.0f, 1.0f };
 
 	enabled = true;
 }

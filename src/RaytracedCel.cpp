@@ -7,22 +7,50 @@
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
 #include "ImGuiHelper.h"
-#include "rapidjson/document.h"
+
+//include Setialization
+#include "SerializationHelper.h"
 
 #include "CornellBox.h"
 
 /*===== Import =====*/
 
-void RaytracedCel::Import(rapidjspon::Document& AppSettings)
+void RaytracedCel::Import(const rapidjson::Value& AppSettings)
 {
+	if (AppSettings.IsObject() && AppSettings.HasMember(Name()))
+	{
 
+		const rapidjson::Value& SceneObject = AppSettings[Name()];
+
+		if (SceneObject.IsObject())
+		{
+
+			DefferedRendering::Import(SceneObject);
+
+			SerializationHelper::LoadRaytracingParams("Raytracing Params", SceneObject, _RayBuffer._rtParams);
+
+			return;
+		}
+
+	}
+
+	//init value are in defines
 }
 
 /*===== Export =====*/
 
-void RaytracedCel::Export(rapidjspon::Document& AppSettings)
+void RaytracedCel::Export(rapidjson::Value& AppSettings, rapidjson::MemoryPoolAllocator<>& Allocator)
 {
+	rapidjson::Value SceneObject(rapidjson::kObjectType);
 
+	{
+
+		DefferedRendering::Export(SceneObject, Allocator);
+		SerializationHelper::SerializRaytracingParams("Raytracing Params", SceneObject, _RayBuffer._rtParams, Allocator);
+
+	}
+
+	AppSettings.AddMember(rapidjson::StringRef(Name()), SceneObject, Allocator);
 }
 
 /*==== Prepare =====*/
@@ -961,10 +989,6 @@ void RaytracedCel::Prepare(class GraphicsAPIManager& GAPI)
 		PrepareVulkanProps(GAPI);
 	}
 
-	//a "zero init" of the transform values
-	_ObjData._Trs.scale = vec3{ 1.0f, 1.0f, 1.0f };
-	_ObjData._Trs.pos = vec3{ 0.0f, 0.0f, 0.0f };
-
 	//preparing hardware raytracing props
 	{
 		//compile the shaders here...
@@ -1278,7 +1302,7 @@ void RaytracedCel::Close(GraphicsAPIManager& GAPI)
 	VulkanHelper::ClearRaytracedGroup(GAPI._VulkanDevice, _RayTopAS);
 
 	//release descriptors
-	ClearPipelineDescriptor(GAPI._VulkanDevice, _CornellBoxDescriptor);
+	VulkanHelper::ReleaseDescriptor(GAPI._VulkanDevice, _CornellBoxDescriptor);
 	ClearPipelineDescriptor(GAPI._VulkanDevice, _RayPipelineStaticDescriptor);
 	ClearPipelineDescriptor(GAPI._VulkanDevice, _RayPipelineDynamicDescriptor);
 

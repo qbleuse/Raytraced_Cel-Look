@@ -7,21 +7,71 @@
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
 #include "ImGuiHelper.h"
-#include "rapidjson/document.h"
+
+//include serialization
+#include "SerializationHelper.h"
 
 /*===== Import =====*/
 
-void DefferedRendering::Import(rapidjspon::Document& AppSettings)
+void DefferedRendering::Import(const rapidjson::Value& AppSettings)
 {
+	if (AppSettings.IsObject() && AppSettings.HasMember(DefferedRendering::Name()))
+	{
+
+		const rapidjson::Value& SceneObject = AppSettings[DefferedRendering::Name()];
+
+		if (SceneObject.IsObject())
+		{
+
+			SerializationHelper::LoadTransform("Object Transform", SceneObject, _ObjData._Trs);
+			SerializationHelper::LoadCelParams("Cel Params", SceneObject, _CompositingBuffer._celParams);
+			SerializationHelper::LoadLight("Light", SceneObject, _CompositingBuffer._dirLight);
+
+			//get our ambient occlusion parameter
+			if (SceneObject.HasMember("AO"))
+				_CompositingBuffer._ambientOcclusion = SceneObject["AO"].GetFloat();
+
+			//get our ambient occlusion parameter
+			if (SceneObject.HasMember("Rot Speed"))
+				_ObjData._ObjRotSpeed = SceneObject["Rot Speed"].GetFloat();
+
+			return;
+		}
+
+	}
+
+	//if it does not exists fill inital value
+	{
+		//a "zero init" of the transform values
+		_ObjData._Trs.scale = vec3{ 1.0f, 1.0f, 1.0f };
+		_ObjData._Trs.pos = vec3{ 0.0f, 0.0f, 1.0f };
+	}
 
 }
 
 
 /*===== Export =====*/
 
-void DefferedRendering::Export(rapidjspon::Document& AppSettings)
+void DefferedRendering::Export(rapidjson::Value& AppSettings, rapidjson::MemoryPoolAllocator<>& Allocator)
 {
+	rapidjson::Value SceneObject(rapidjson::kObjectType);
 
+	{
+		//copy our transform
+		SerializationHelper::SerializeTransform("Object Transform", SceneObject, _ObjData._Trs, Allocator);
+		//serialize cel Params
+		SerializationHelper::SerializeCelParams("Cel Params", SceneObject, _CompositingBuffer._celParams, Allocator);
+		//copy light
+		SerializationHelper::SerializeLight("Light", SceneObject, _CompositingBuffer._dirLight, Allocator);
+
+		//serialize our ambient occlusion parameter
+		SceneObject.AddMember("AO", _CompositingBuffer._ambientOcclusion, Allocator);
+		//anmd rot speed
+		SceneObject.AddMember("Rot Speed", _ObjData._ObjRotSpeed, Allocator);
+
+	}
+
+	AppSettings.AddMember(rapidjson::StringRef(DefferedRendering::Name()), SceneObject, Allocator);
 }
 
 /*==== Prepare =====*/
@@ -674,10 +724,6 @@ void DefferedRendering::PrepareVulkanScripts(GraphicsAPIManager& GAPI)
 
 void DefferedRendering::Prepare(class GraphicsAPIManager& GAPI)
 {
-	//a "zero init" of the transform values
-	_ObjData._Trs.scale = vec3{ 1.0f, 1.0f, 1.0f };
-	_ObjData._Trs.pos = vec3{ 0.0f, 0.0f, 0.0f };
-
 	//preparing full screen copy pipeline
 	{
 		//the shaders needed

@@ -1244,15 +1244,15 @@ bool VulkanHelper::CreateModelFromRawVertices(Uploader& VulkanUploader,
 		
 
 		model._Meshes.Alloc(1);
-		model._Meshes[0]._VertexMemoryHandle.Alloc(4);
-		model._Meshes[0]._Positions				= posBuffer._StaticGPUBuffer;
-		model._Meshes[0]._VertexMemoryHandle[0]	= posBuffer._StaticGPUMemoryHandle;
-		model._Meshes[0]._Indices				= indexBuffer._StaticGPUBuffer;
-		model._Meshes[0]._VertexMemoryHandle[1]	= indexBuffer._StaticGPUMemoryHandle;
-		model._Meshes[0]._Uvs					= uvBuffer._StaticGPUBuffer;
-		model._Meshes[0]._VertexMemoryHandle[2]	= uvBuffer._StaticGPUMemoryHandle;
-		model._Meshes[0]._Normals				= normalBuffer._StaticGPUBuffer;
-		model._Meshes[0]._VertexMemoryHandle[3]	= normalBuffer._StaticGPUMemoryHandle;
+		model._BuffersHandle.Alloc(4);
+		model._Meshes[0]._Positions		= posBuffer._StaticGPUBuffer;
+		model._BuffersHandle[0]			= posBuffer._StaticGPUMemoryHandle;
+		model._Meshes[0]._Indices		= indexBuffer._StaticGPUBuffer;
+		model._BuffersHandle[1]			= indexBuffer._StaticGPUMemoryHandle;
+		model._Meshes[0]._Uvs			= uvBuffer._StaticGPUBuffer;
+		model._BuffersHandle[2]			= uvBuffer._StaticGPUMemoryHandle;
+		model._Meshes[0]._Normals		= normalBuffer._StaticGPUBuffer;
+		model._BuffersHandle[3]			= normalBuffer._StaticGPUMemoryHandle;
 
 		model._Meshes[0]._pos_offset = 0;
 		model._Meshes[0]._indices_offset = 0;

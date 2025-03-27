@@ -10,21 +10,45 @@
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
 #include "ImGuiHelper.h"
-#include "rapidjson/document.h"
+
+//include serialization
+#include "SerializationHelper.h"
 
 /*===== Import =====*/
 
-void RaytraceCPU::Import(rapidjspon::Document& AppSettings)
+void RaytraceCPU::Import(const rapidjson::Value& AppSettings)
 {
+	if (AppSettings.IsObject() && AppSettings.HasMember(Name()))
+	{
 
+		const rapidjson::Value& SceneObject = AppSettings[Name()];
+
+		if (SceneObject.IsObject())
+		{
+
+			SerializationHelper::LoadRaytracingParams("Raytracing Params", SceneObject, _rtParams);
+			return;
+		}
+
+	}
+
+	//init value are in defines
 }
 
 
 /*===== Export =====*/
 
-void RaytraceCPU::Export(rapidjspon::Document& AppSettings)
+void RaytraceCPU::Export(rapidjson::Value& AppSettings, rapidjson::MemoryPoolAllocator<>& Allocator)
 {
+	rapidjson::Value SceneObject(rapidjson::kObjectType);
 
+	{
+		//copy our transform
+		SerializationHelper::SerializRaytracingParams("Raytracing Params", SceneObject, _rtParams, Allocator);
+
+	}
+
+	AppSettings.AddMember(rapidjson::StringRef(Name()), SceneObject, Allocator);
 }
 
 /*==== Prepare =====*/

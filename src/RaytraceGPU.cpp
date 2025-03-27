@@ -7,23 +7,54 @@
 #include "GraphicsAPIManager.h"
 #include "VulkanHelper.h"
 #include "ImGuiHelper.h"
-#include "rapidjson/document.h"
+
+//include serialization
+#include "SerializationHelper.h"
 
 #define NUMBER_OF_SPHERES 30
 
 /*===== Import =====*/
 
-void RaytraceGPU::Import(rapidjspon::Document& AppSettings)
+void RaytraceGPU::Import(const rapidjson::Value& AppSettings)
 {
+	if (AppSettings.IsObject() && AppSettings.HasMember(Name()))
+	{
 
+		const rapidjson::Value& SceneObject = AppSettings[Name()];
+
+		if (SceneObject.IsObject())
+		{
+			
+			SerializationHelper::LoadTransform("Teapot Transform", SceneObject, _RayObjData._Trs);
+			SerializationHelper::LoadRaytracingParams("Raytracing Params", SceneObject, _RayBuffer._rt_params);
+			return;
+		}
+
+	}
+
+	//if it does not exists fill inital value
+	{
+		//a "zero init" of the transform values
+		_RayObjData._Trs.scale = vec3{ 1.0f, 1.0f, 1.0f };
+		_RayObjData._Trs.pos = vec3{ 0.0f, 0.0f, 1.0f };
+	}
 }
 
 
 /*===== Export =====*/
 
-void RaytraceGPU::Export(rapidjspon::Document& AppSettings)
+void RaytraceGPU::Export(rapidjson::Value& AppSettings, rapidjson::MemoryPoolAllocator<>& Allocator)
 {
+	rapidjson::Value SceneObject(rapidjson::kObjectType);
 
+	{
+		//copy our transform
+		SerializationHelper::SerializeTransform("Teapot Transform", SceneObject, _RayObjData._Trs, Allocator);
+		SerializationHelper::SerializRaytracingParams("Raytracing Params", SceneObject, _RayBuffer._rt_params, Allocator);
+
+	}
+
+	AppSettings.AddMember(rapidjson::StringRef(Name()), SceneObject, Allocator);
 }
 
 /*==== Prepare =====*/
@@ -1037,10 +1068,6 @@ void RaytraceGPU::Prepare(class GraphicsAPIManager& GAPI)
 		//then create the pipeline
 		PrepareVulkanRaytracingProps(GAPI);
 	}
-
-	//a "zero init" of the transform values
-	_RayObjData._Trs.scale = vec3{ 1.0f, 1.0f, 1.0f };
-	_RayObjData._Trs.pos = vec3{ 0.0f, 0.0f, 0.0f };
 
 	//preparing full screen copy pipeline
 	{

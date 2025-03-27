@@ -19,6 +19,7 @@
 #include "rapidjson/document.h"
 #include "rapidjson/filereadstream.h"
 #include "rapidjson/filewritestream.h"
+#include "rapidjson/prettywriter.h"
 
 //app include
 #include "AppWideContext.h"
@@ -272,16 +273,23 @@ int main()
 
 			rapidjson::Document appSettings;
 
-			//first reading the file 
+			//first reading the file if the file actually exists
+			if (FILE* json_file = fopen("RaytracedCelSettings.json", "r"))
 			{
-				FILE* json_file = fopen("RaytracedCelSettings.json", "r");
-
 				std::string readBuffer;
-				rapidjson::FileReadStream file_stream(json_file, &readBuffer[0], readBuffer.size());
+				readBuffer.reserve(JSON_FILE_RW_BUFFER);
+				rapidjson::FileReadStream file_stream(json_file, &readBuffer[0], readBuffer.capacity());
 
 				appSettings.ParseStream(file_stream);
 
 				fclose(json_file);
+			}
+			
+
+			//sets data for each class
+			for (uint32_t i = 0; i < scenes.Nb(); i++)
+			{
+				scenes[i]->Import(appSettings);
 			}
 		}
 
@@ -371,6 +379,34 @@ int main()
 		ImGui_ImplVulkan_Shutdown();
 		ImGui_ImplGlfw_Shutdown();
 		ImGui::DestroyContext();
+
+		//exports user data to json
+		{
+
+			rapidjson::Document appSettings;
+			appSettings.SetObject();
+
+			//gets the data from each scenes
+			for (uint32_t i = 0; i < scenes.Nb(); i++)
+			{
+				scenes[i]->Export(appSettings, appSettings.GetAllocator());
+			}
+
+			//writing into the file. discard the file's previous content or create new one if none
+			if (FILE* json_file = fopen("RaytracedCelSettings.json", "w"))
+			{
+				std::string writeBuffer;
+				writeBuffer.reserve(appSettings.GetAllocator().Capacity());
+				rapidjson::FileWriteStream write_stream(json_file, &writeBuffer[0], writeBuffer.capacity());
+
+				rapidjson::PrettyWriter<rapidjson::FileWriteStream> writer(write_stream);
+
+				appSettings.Accept(writer);
+
+				fclose(json_file);
+			}
+
+		}
 
 		for (uint32_t i = 0; i < scenes.Nb(); i++)
 		{
