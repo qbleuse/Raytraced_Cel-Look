@@ -11,6 +11,8 @@
 //include serialization
 #include "SerializationHelper.h"
 
+#include "CornellBox.h"
+
 /*===== Import =====*/
 
 void DefferedRendering::Import(const rapidjson::Value& AppSettings)
@@ -25,7 +27,7 @@ void DefferedRendering::Import(const rapidjson::Value& AppSettings)
 
 			SerializationHelper::LoadTransform("Object Transform", SceneObject, _ObjData._Trs);
 			SerializationHelper::LoadCelParams("Cel Params", SceneObject, _CompositingBuffer._celParams);
-			SerializationHelper::LoadLight("Light", SceneObject, _CompositingBuffer._dirLight);
+			SerializationHelper::LoadLight("Light", SceneObject, _CompositingBuffer._light);
 
 			//get our ambient occlusion parameter
 			if (SceneObject.HasMember("AO"))
@@ -62,7 +64,7 @@ void DefferedRendering::Export(rapidjson::Value& AppSettings, rapidjson::MemoryP
 		//serialize cel Params
 		SerializationHelper::SerializeCelParams("Cel Params", SceneObject, _CompositingBuffer._celParams, Allocator);
 		//copy light
-		SerializationHelper::SerializeLight("Light", SceneObject, _CompositingBuffer._dirLight, Allocator);
+		SerializationHelper::SerializeLight("Light", SceneObject, _CompositingBuffer._light, Allocator);
 
 		//serialize our ambient occlusion parameter
 		SceneObject.AddMember("AO", _CompositingBuffer._ambientOcclusion, Allocator);
@@ -81,6 +83,61 @@ void DefferedRendering::PrepareVulkanProps(GraphicsAPIManager& GAPI)
 	PrepareModelProps(GAPI);
 	PrepareGBufferProps(GAPI);
 	PrepareDefferedPassProps(GAPI);
+}
+
+void CreateCornellBoxModel(GraphicsAPIManager& GAPI, VulkanHelper::Model& model)
+{
+	{
+		//all the raw vertices info
+		VolatileLoopArray<vec3>		pos;
+		VolatileLoopArray<vec2>		uv;
+		VolatileLoopArray<vec3>		normal;
+		VolatileLoopArray<vec4>		vertexColor;
+		VolatileLoopArray<uint32_t> indices;
+
+		//fill the raw vertices array with the info
+		CornellBox::CreateMesh(200.0f, pos, uv, normal, vertexColor, indices);
+
+		//make a model out of it
+		VulkanHelper::CreateModelFromRawVertices(GAPI._VulkanUploader, pos, uv, normal, vertexColor, indices, model);
+
+		//clear out 
+		pos.Clear();
+		uv.Clear();
+		normal.Clear();
+		vertexColor.Clear();
+		indices.Clear();
+	}
+
+	//separate the box and the light into two meshes
+	{
+		//add a mesh
+		ExpandHeap(model._Meshes, model._Meshes.Nb(), model._Meshes.Nb() + 1);
+		ExpandHeap(model._material_index, model._Meshes.Nb(), model._Meshes.Nb() + 1);
+		model._material_index[1] = model._material_index[0];
+
+		//the new mesh uses the same buffer as the other one, we will just change some info
+		memcpy(&model._Meshes[1], &model._Meshes[0], sizeof(VulkanHelper::Mesh));
+
+		//we need to offset the buffer by the number of vertices the box has, which is 5 quads * 4 vertices per quads = 20
+		model._Meshes[1]._pos_offset = 0;
+		model._Meshes[1]._normal_offset = 0;
+		model._Meshes[1]._uv_offset = 0;
+		//we need to offset the buffer by the number of indices the box has, which is 5 quads * 6 indices per quads = 30
+		model._Meshes[1]._indices_offset = sizeof(uint32_t) * 30;
+
+		//we remove 4 vertices of a single quad
+		model._Meshes[0]._pos_nb -= 4;
+		model._Meshes[0]._uv_nb -= 4;
+		model._Meshes[0]._normal_nb -= 4;
+		// and the 6 indices that makes one quad
+		model._Meshes[0]._indices_nb -= 6;
+
+		//the number of vertices of a single quad is 4
+		//model._Meshes[1]._pos_nb = model._Meshes[1]._normal_nb = model._Meshes[1]._uv_nb = 4;
+		//the number of indices of a single quad is 4
+		model._Meshes[1]._indices_nb = 6;
+	}
 }
 
 //Creates the model and the other necessary resources 
@@ -122,6 +179,35 @@ void DefferedRendering::PrepareModelProps(class GraphicsAPIManager& GAPI)
 			}
 			_Model._Materials[i]._TextureDescriptors = _ModelDescriptors._DescriptorSets[i];
 		}
+	}
+
+
+	//create Cornell Box as "background"
+	{
+		CreateCornellBoxModel(GAPI, _CornellBox);
+
+		_CornellBoxDescriptor._DescriptorBindings = _ModelDescriptors._DescriptorBindings;
+		_CornellBoxDescriptor._DescriptorLayout = _ModelDescriptors._DescriptorLayout;
+
+		VulkanHelper::AllocateDescriptor(GAPI._VulkanUploader, _CornellBoxDescriptor, _CornellBox._Textures.Nb());
+
+		for (uint32_t i = 0; i < _CornellBox._Materials.Nb(); i++)
+		{
+			//the order of the textures in the material need to be ALBEDO, METAL-ROUGH, then NORMAL to actually work...
+			for (uint32_t j = 0; j < _CornellBox._Materials[i]._Textures.Nb(); j++)
+			{
+				//describing our combined sampler
+				VkDescriptorImageInfo samplerInfo{};
+				samplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				samplerInfo.imageView = _CornellBox._Materials[i]._Textures[j]._ImageView;
+				samplerInfo.sampler = _CornellBox._Materials[i]._Textures[j]._Sampler;
+
+				VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _CornellBoxDescriptor, _CornellBox._Materials[i]._Textures[j]._ImageView, _CornellBox._Materials[i]._Textures[j]._Sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, j, i);
+
+			}
+			_CornellBox._Materials[i]._TextureDescriptors = _CornellBoxDescriptor._DescriptorSets[i];
+		}
+
 	}
 }
 
@@ -593,12 +679,12 @@ void DefferedRendering::PrepareCompositingScripts(GraphicsAPIManager& GAPI)
 
 			//directionnal Light direction
 			vec3	directionalDir;
-			//light padding
-			float padding;
+			//light radius if is a sphere light or padding
+			float	radius;
 			//the color of the directional light
 			vec3	directionnalColor;
-			//light padding
-			float padding2;
+			//light type between directional or sphere
+			int		lightType;
 
 			//cel Shading Diffuse Step
 			vec2	celDiffuseStep;
@@ -622,7 +708,7 @@ void DefferedRendering::PrepareCompositingScripts(GraphicsAPIManager& GAPI)
 			float x = 0;
 			float y = 0;
 
-			vec2 offset = vec2(1.0,1.0);
+			vec2 offset = vec2(0.5,0.5);
 
 			float a  = 1.0f;
 			float b = 2.0f;
@@ -661,19 +747,29 @@ void DefferedRendering::PrepareCompositingScripts(GraphicsAPIManager& GAPI)
 			}
 
 
-			vec3 lightDir = normalize(directionalDir);
-			vec3 viewDir = normalize(pos - cameraPos);
+			vec3 lightDir = vec3(0.0); 
+
+			if (lightType == 0)
+				lightDir = normalize(directionalDir);
+			else if (lightType == 1)
+				lightDir = normalize(directionalDir - pos);
+
+			vec3 viewDir  = normalize(pos - cameraPos);
 
 			vec3 halfDir	= normalize(viewDir+lightDir);
 			float specAngle = max(dot(halfDir,normal), 0.0);
 			vec3 specular	=  directionnalColor * smoothstep(celSpecStep.x, celSpecStep.y,pow(specAngle,specGlossiness* specGlossiness));
 			vec3 diffuse	= directionnalColor * smoothstep(celDiffuseStep.x,celDiffuseStep.y,dot(lightDir, normal));
 
+			vec3 finalLight = specular + diffuse;
+			if (lightType == 1)
+				finalLight *= clamp((radius*radius)/dot(directionalDir - pos, directionalDir - pos), 0.0, 1.0);
+
 			//the compositing input
 			if (debugIndex == 0)
 			{
 				//light = specular + diffuse + ambient occlusion
-				outColor = vec4(color * (diffuse + specular + ambientOcclusion),1.0);
+				outColor = vec4(color * (finalLight + ambientOcclusion),1.0);
 			}
 			else if (debugIndex == 1)
 			{
@@ -867,7 +963,7 @@ void DefferedRendering::Act(struct AppWideContext& AppContext)
 		}
 
 		//light edit
-		if (ImGuiHelper::LightUI("Directionnal Light", _CompositingBuffer._dirLight, _ObjData._ChangedFlag))
+		if (ImGuiHelper::LightUI("Light", _CompositingBuffer._light, _ObjData._ChangedFlag))
 		{
 			_ObjData._ChangedFlag |= ImGui::SliderFloat("Ambient Occlusion", &_CompositingBuffer._ambientOcclusion, 0.0f, 1.0f);
 		}
@@ -1016,6 +1112,8 @@ void DefferedRendering::Show(GAPIHandle& GAPIHandle)
 
 	DrawModel(GAPIHandle, _Model, _GBUfferLayout, _ModelDescriptors);
 
+	DrawModel(GAPIHandle, _CornellBox, _GBUfferLayout, _CornellBoxDescriptor);
+
 	EndGBuffer(GAPIHandle);
 
 	DrawCompositingPass(GAPIHandle);
@@ -1049,6 +1147,8 @@ void DefferedRendering::Close(class GraphicsAPIManager& GAPI)
 {
 	//clear model resrouces
 	VulkanHelper::ClearModel(GAPI._VulkanDevice,_Model);
+	VulkanHelper::ClearModel(GAPI._VulkanDevice, _CornellBox);
+
 	VulkanHelper::ClearPipelineDescriptor(GAPI._VulkanDevice, _ModelDescriptors);
 	VulkanHelper::ClearUniformBufferHandle(GAPI._VulkanDevice, _GBUfferUniformBuffer);
 	VulkanHelper::ClearUniformBufferHandle(GAPI._VulkanDevice, _DefferedUniformBuffer);
@@ -1062,6 +1162,8 @@ void DefferedRendering::Close(class GraphicsAPIManager& GAPI)
 	VulkanHelper::ClearPipelineDescriptor(GAPI._VulkanDevice, _GBufferDescriptors);
 	VulkanHelper::ClearPipelineDescriptor(GAPI._VulkanDevice, _DefferedDescriptors);
 	VulkanHelper::ClearPipelineDescriptor(GAPI._VulkanDevice, _DefferedCompositingDescriptors);
+	VulkanHelper::ReleaseDescriptor(GAPI._VulkanDevice, _CornellBoxDescriptor);
+
 
 	//clear framebuffers
 	VulkanHelper::ClearPipelineOutput(GAPI._VulkanDevice, _GBUfferPipelineOutput);

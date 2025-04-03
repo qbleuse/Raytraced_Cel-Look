@@ -27,6 +27,11 @@ protected:
 
 	/* Vulkan */
 
+	//a model containing a CornellBox
+	VulkanHelper::Model _CornellBox;
+	//the descriptors for the ccornell box
+	VulkanHelper::PipelineDescriptors	_CornellBoxDescriptor;
+
 	//the model/scene to render for this scene
 	VulkanHelper::Model	_Model;
 	//the descriptor needed for the scene's model
@@ -227,7 +232,7 @@ public:
 		//an index allowing to change the output to debug frames
 		uint32_t	_debugIndex{ 0 };
 		//our directionnal light
-		Light		_dirLight  INIT_DIR_LIGHT ;
+		Light		_light  INIT_DIR_LIGHT ;
 		// the parameters for the CelShading Material
 		CelParams	_celParams;
 		//the ambient occlusion

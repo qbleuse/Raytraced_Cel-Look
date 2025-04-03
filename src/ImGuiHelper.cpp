@@ -386,6 +386,12 @@ bool ImGuiHelper::LightUI(const char* label, Light& light, bool& changed)
 
 	if (ImGui::CollapsingHeader(label))
 	{
+		if (ImGui::Button("Directionnal"))
+			light._LightType = LightType::DIRECTIONNAL;
+		ImGui::SameLine();
+		if (ImGui::Button("Sphere"))
+			light._LightType = LightType::SPHERE;
+
 		switch (light._LightType)
 		{
 			case LightType::DIRECTIONNAL:
@@ -393,7 +399,7 @@ bool ImGuiHelper::LightUI(const char* label, Light& light, bool& changed)
 				break;
 			case LightType::SPHERE:
 				changed |= ImGui::SliderFloat3("Light Position", light._pos.scalar, -LIGHT_POS_EDIT_MAX, LIGHT_POS_EDIT_MAX);
-				changed |= ImGui::SliderFloat("Light Radius", light._pos.scalar, -LIGHT_RADIUS_EDIT_MAX, LIGHT_RADIUS_EDIT_MAX);
+				changed |= ImGui::SliderFloat("Light Radius", &light._radius, -LIGHT_RADIUS_EDIT_MAX, LIGHT_RADIUS_EDIT_MAX);
 				break;
 			default:
 				printf("error ImGuiHelper::LightUI : Light is something that does not exist");

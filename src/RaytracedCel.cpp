@@ -11,8 +11,6 @@
 //include Setialization
 #include "SerializationHelper.h"
 
-#include "CornellBox.h"
-
 /*===== Import =====*/
 
 void RaytracedCel::Import(const rapidjson::Value& AppSettings)
@@ -230,6 +228,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				float	hitDistance;// the distance from the ray's origin the hit was recorded
 				vec3	hitNormal;// the normal got from contact with the object
 				uint	RandomSeed;
+				vec3	cameraPos;
 				
 			};
 			layout(location = 0) rayPayloadEXT HitRecord payload;
@@ -340,6 +339,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 					payload.hitColor	= vec3(0.0);
 					payload.hitDistance = 0.0;
 					payload.hitNormal	= vec3(0.0);
+					payload.cameraPos	= view[3].xyz;
 
 					vec3 fragColor = vec3(1.0);
 
@@ -398,6 +398,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				float	hitDistance;// the distance from the ray's origin the hit was recorded
 				vec3	hitNormal;// the normal got from contact with the object
 				uint	RandomSeed;
+				vec3	cameraPos;
 				
 			};
 			layout(location = 0) rayPayloadInEXT HitRecord payload;
@@ -427,7 +428,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 	//define traingle closest hit shader
 	const char* trinagle_closest_hit_shader =
 		R"(#version 460
-			#line 368
+			#line 431
 			#extension GL_EXT_ray_tracing : enable
 
 
@@ -438,6 +439,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				float	hitDistance;// the distance from the ray's origin the hit was recorded
 				vec3	hitNormal;// the normal got from contact with the object
 				uint	RandomSeed;
+				vec3	cameraPos;
 				
 			};
 			layout(location = 0) rayPayloadInEXT HitRecord payload;
@@ -483,6 +485,16 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				const vec2 UV3 = vec2(UVs[uv3_offset + 0], UVs[uv3_offset + 1]);
 
 				const vec2 uv		= vec2(UV1 * coordinates.x + UV2 * coordinates.y + UV3 * coordinates.z);
+
+				
+				//vec3 viewDir  = normalize(hitPoint - payload.cameraPos);
+				//
+				//vec3 halfDir	= normalize(viewDir+normalize(gl_WorldRayDirectionEXT));
+				//float specAngle = max(dot(halfDir,normal), 0.0);
+				//vec3 specular	= vec3(smoothstep(0.005, 0.1,pow(specAngle,64)));
+				//vec3 diffuse	= vec3(smoothstep(0.0,0.1,dot(gl_WorldRayDirectionEXT, normal)));
+				//
+				//vec3 finalLight = specular + diffuse;
 
 				payload.matIndex	= gl_InstanceCustomIndexEXT;
 				payload.hitColor	= texture(Textures, vec3(uv, textureOffset)).rgb;
@@ -684,93 +696,12 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 	}
 }
 
-void CreateCornellBoxModel(GraphicsAPIManager& GAPI, VulkanHelper::Model& model)
-{
-	{
-		//all the raw vertices info
-		VolatileLoopArray<vec3>		pos;
-		VolatileLoopArray<vec2>		uv;
-		VolatileLoopArray<vec3>		normal;
-		VolatileLoopArray<vec4>		vertexColor;
-		VolatileLoopArray<uint32_t> indices;
 
-		//fill the raw vertices array with the info
-		CornellBox::CreateMesh(200.0f, pos, uv, normal, vertexColor, indices);
-
-		//make a model out of it
-		VulkanHelper::CreateModelFromRawVertices(GAPI._VulkanUploader, pos, uv, normal, vertexColor, indices, model);
-
-		//clear out 
-		pos.Clear();
-		uv.Clear();
-		normal.Clear();
-		vertexColor.Clear();
-		indices.Clear();
-	}
-
-	//separate the box and the light into two meshes
-	{
-		//add a mesh
-		ExpandHeap(model._Meshes, model._Meshes.Nb(), model._Meshes.Nb() + 1);
-		ExpandHeap(model._material_index, model._Meshes.Nb(), model._Meshes.Nb() + 1);
-		model._material_index[1] = model._material_index[0];
-
-		//the new mesh uses the same buffer as the other one, we will just change some info
-		memcpy(&model._Meshes[1], &model._Meshes[0], sizeof(VulkanHelper::Mesh));
-
-		//we need to offset the buffer by the number of vertices the box has, which is 5 quads * 4 vertices per quads = 20
-		model._Meshes[1]._pos_offset		= 0;
-		model._Meshes[1]._normal_offset		= 0;
-		model._Meshes[1]._uv_offset			= 0;
-		//we need to offset the buffer by the number of indices the box has, which is 5 quads * 6 indices per quads = 30
-		model._Meshes[1]._indices_offset = sizeof(uint32_t) * 30;
-
-		//we remove 4 vertices of a single quad
-		model._Meshes[0]._pos_nb -= 4;
-		model._Meshes[0]._uv_nb -= 4;
-		model._Meshes[0]._normal_nb -= 4;
-		// and the 6 indices that makes one quad
-		model._Meshes[0]._indices_nb -= 6;
-		
-		//the number of vertices of a single quad is 4
-		//model._Meshes[1]._pos_nb = model._Meshes[1]._normal_nb = model._Meshes[1]._uv_nb = 4;
-		//the number of indices of a single quad is 4
-		model._Meshes[1]._indices_nb = 6;
-	}
-}
 
 void RaytracedCel::PrepareModelProps(class GraphicsAPIManager& GAPI)
 {
 	//get actual model
 	DefferedRendering::PrepareModelProps(GAPI);
-
-	//create Cornell Box as "background"
-	{
-		CreateCornellBoxModel(GAPI, _CornellBox);
-
-		_CornellBoxDescriptor._DescriptorBindings = _ModelDescriptors._DescriptorBindings;
-		_CornellBoxDescriptor._DescriptorLayout = _ModelDescriptors._DescriptorLayout;
-
-		VulkanHelper::AllocateDescriptor(GAPI._VulkanUploader, _CornellBoxDescriptor, _CornellBox._Textures.Nb());
-
-		for (uint32_t i = 0; i < _CornellBox._Materials.Nb(); i++)
-		{
-			//the order of the textures in the material need to be ALBEDO, METAL-ROUGH, then NORMAL to actually work...
-			for (uint32_t j = 0; j < _CornellBox._Materials[i]._Textures.Nb(); j++)
-			{
-				//describing our combined sampler
-				VkDescriptorImageInfo samplerInfo{};
-				samplerInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				samplerInfo.imageView = _CornellBox._Materials[i]._Textures[j]._ImageView;
-				samplerInfo.sampler = _CornellBox._Materials[i]._Textures[j]._Sampler;
-
-				VulkanHelper::UploadDescriptor(GAPI._VulkanUploader, _CornellBoxDescriptor, _CornellBox._Materials[i]._Textures[j]._ImageView, _CornellBox._Materials[i]._Textures[j]._Sampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, j, i);
-
-			}
-			_CornellBox._Materials[i]._TextureDescriptors = _CornellBoxDescriptor._DescriptorSets[i];
-		}
-
-	}
 }
 
 void RaytracedCel::PrepareDefferedPassProps(GraphicsAPIManager& GAPI)
@@ -871,18 +802,25 @@ void RaytracedCel::PrepareCompositingScripts(GraphicsAPIManager& GAPI)
 			vec3	cameraPos;
 			//an index allowing to change the output to debug frames
 			uint	debugIndex;
-			//directionnal Light direction
+			
+			//directionnal Light direction or position if sphere light
 			vec3	directionalDir;
-			//specular Glossiness
-			float	specGlossiness;
+			//light radius if is a sphere light or padding
+			float	radius;
 			//the color of the directional light
 			vec3	directionnalColor;
-			//the ambient occlusion
-			float	ambientOcclusion;
+			//light type between directional or sphere
+			int		lightType;
+
 			//cel Shading Diffuse Step
 			vec2	celDiffuseStep;
 			//cel shading spec Step
 			vec2	celSpecStep;
+
+			//specular Glossiness
+			float	specGlossiness;
+			//the ambient occlusion
+			float	ambientOcclusion;
 		};
 
 		//gets the "intensity" of the pixel, basically computing the length
@@ -1180,7 +1118,7 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 	//binding an available uniform buffer (current frame and frame index may be different, as we can ask for redraw multiple times while the frame is not presenting)
 	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, _GBUfferLayout, 0, 1, &_GBufferDescriptors._DescriptorSets[GAPIHandle._vk_current_frame], 0, nullptr);
 
-	DrawModel(GAPIHandle, _Model, _GBUfferLayout, _ModelDescriptors);
+ 	DrawModel(GAPIHandle, _Model, _GBUfferLayout, _ModelDescriptors);
 
 	DrawModel(GAPIHandle, _CornellBox, _GBUfferLayout, _CornellBoxDescriptor);
 
@@ -1292,8 +1230,6 @@ void RaytracedCel::Close(GraphicsAPIManager& GAPI)
 	//the memory allocated by the Vulkan Helper is volatile : it must be explecitly freed !
 	DefferedRendering::Close(GAPI);
 
-	VulkanHelper::ClearModel(GAPI._VulkanDevice, _CornellBox);
-
 	VulkanHelper::ClearSceneBuffer(GAPI._VulkanDevice, _RaySceneBuffer);
 
 	//clear Acceleration Structures
@@ -1302,7 +1238,6 @@ void RaytracedCel::Close(GraphicsAPIManager& GAPI)
 	VulkanHelper::ClearRaytracedGroup(GAPI._VulkanDevice, _RayTopAS);
 
 	//release descriptors
-	VulkanHelper::ReleaseDescriptor(GAPI._VulkanDevice, _CornellBoxDescriptor);
 	ClearPipelineDescriptor(GAPI._VulkanDevice, _RayPipelineStaticDescriptor);
 	ClearPipelineDescriptor(GAPI._VulkanDevice, _RayPipelineDynamicDescriptor);
 
