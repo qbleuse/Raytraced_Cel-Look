@@ -376,18 +376,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 						direction	= vec4(callablePayload.normal,0.0);
 					}
 
-					origin = imageLoad(posBuffer, ivec2(pixelCenter));
-					vec4 normal = imageLoad(normalBuffer, ivec2(pixelCenter));
-
-					vec3 lightDir = vec3(0.0, 19.9, 0.0) - origin.xyz;
-					vec3 viewDir  = normalize(origin.rgb - cameraPos);
-					
-					vec3 halfDir	= normalize(viewDir+normalize(lightDir));
-					float specAngle = max(dot(halfDir,normal.xyz), 0.0);
-					vec3 specular	= vec3(smoothstep(0.005, 0.1,pow(specAngle,64)));
-					vec3 diffuse	= vec3(smoothstep(0.0,0.1,dot(lightDir, normal.xyz)));
-
-					finalColor += (specular + diffuse) * fragColor;
+					finalColor += fragColor;
 				}
 
 				finalColor /= nb_samples;
@@ -868,13 +857,33 @@ void RaytracedCel::PrepareCompositingScripts(GraphicsAPIManager& GAPI)
 			const vec3 directLight = texture(sampler2D(directLightBuffer,pointSampler),uv).rgb;
 			const vec3 indirectLight = texture(sampler2D(indirectLightBuffer,pointSampler),uv).rgb;
 
+			vec3 lightDir = vec3(0.0); 
+
+			if (lightType == 0)
+				lightDir = normalize(directionalDir);
+			else if (lightType == 1)
+				lightDir = normalize(directionalDir - pos);
+
+			vec3 viewDir  = normalize(pos - cameraPos);
+
+			vec3 halfDir	= normalize(viewDir+lightDir);
+			float specAngle = max(dot(halfDir,normal), 0.0);
+			vec3 specular	=  directionnalColor * smoothstep(celSpecStep.x, celSpecStep.y,pow(specAngle,specGlossiness* specGlossiness));
+			vec3 diffuse	= directionnalColor * smoothstep(celDiffuseStep.x,celDiffuseStep.y,dot(lightDir, normal));
+
+			vec3 finalLight = specular + diffuse;
+			if (lightType == 1)
+				finalLight *= clamp((radius*radius)/dot(directionalDir - pos, directionalDir - pos), 0.0, 1.0);
+
+			finalLight += directLight + indirectLight + ambientOcclusion;
+
 			const float outline = sobel(normalBuffer, uv);
 
 			//the compositing input
 			if (debugIndex == 0)
 			{
 				//light = specular + diffuse + ambient occlusion
-				outColor = vec4(color * (directLight + indirectLight + ambientOcclusion),1.0);
+				outColor = vec4(color * finalLight,1.0);
 			}
 			else if (debugIndex == 1)
 			{
@@ -890,11 +899,11 @@ void RaytracedCel::PrepareCompositingScripts(GraphicsAPIManager& GAPI)
 			}
 			else if (debugIndex == 4)
 			{
-				outColor = vec4(directLight,1.0);
+				outColor = vec4(directLight + indirectLight ,1.0);
 			}
 			else if (debugIndex == 5)
 			{
-				outColor = vec4(indirectLight,1.0);
+				outColor = vec4(specular + diffuse,1.0);
 			}
 			else if (debugIndex == 6)
 			{
@@ -1094,7 +1103,7 @@ void RaytracedCel::Show(GAPIHandle& GAPIHandle)
 
 	//if (changedFlag)
 	{
-		mat4 transform = _UniformBuffer._model;//scale(_ObjData.scale.x, _ObjData.scale.y, _ObjData.scale.z) * transpose(extrinsic_rot(_ObjData.euler_angles.x, _ObjData.euler_angles.y, _ObjData.euler_angles.z)) * translate(_ObjData.pos);
+		mat4 transform = scale(_ObjData._Trs.scale.x, _ObjData._Trs.scale.y, _ObjData._Trs.scale.z) * transpose(extrinsic_rot(_ObjData._Trs.rot.x, _ObjData._Trs.rot.y, _ObjData._Trs.rot.z)) * translate(_ObjData._Trs.pos);
 	
 		//_ObjData._ChangedFlag = false;
 	
