@@ -228,7 +228,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				float	hitDistance;// the distance from the ray's origin the hit was recorded
 				vec3	hitNormal;// the normal got from contact with the object
 				uint	RandomSeed;
-				vec3	cameraPos;
+				vec3	hitPoint;
 				
 			};
 			layout(location = 0) rayPayloadEXT HitRecord payload;
@@ -339,9 +339,9 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 					payload.hitColor	= vec3(0.0);
 					payload.hitDistance = 0.0;
 					payload.hitNormal	= vec3(0.0);
-					payload.cameraPos	= view[3].xyz;
+					vec3 cameraPos	= view[3].xyz;
 
-					vec3 fragColor = vec3(1.0);
+					vec3 fragColor = vec3(10.0);
 
 					for (int i = 0; i <= depth; i++)
 					{
@@ -362,7 +362,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 							0
 						);
 
-						fragColor *= vec3(payload.hitColor);
+						fragColor *= payload.hitColor.rgb;
 
 						if (payload.hitDistance <= 0.0 || payload.matIndex == 3)
 							break;
@@ -376,7 +376,18 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 						direction	= vec4(callablePayload.normal,0.0);
 					}
 
-					finalColor += fragColor;
+					origin = imageLoad(posBuffer, ivec2(pixelCenter));
+					vec4 normal = imageLoad(normalBuffer, ivec2(pixelCenter));
+
+					vec3 lightDir = vec3(0.0, 19.9, 0.0) - origin.xyz;
+					vec3 viewDir  = normalize(origin.rgb - cameraPos);
+					
+					vec3 halfDir	= normalize(viewDir+normalize(lightDir));
+					float specAngle = max(dot(halfDir,normal.xyz), 0.0);
+					vec3 specular	= vec3(smoothstep(0.005, 0.1,pow(specAngle,64)));
+					vec3 diffuse	= vec3(smoothstep(0.0,0.1,dot(lightDir, normal.xyz)));
+
+					finalColor += (specular + diffuse) * fragColor;
 				}
 
 				finalColor /= nb_samples;
@@ -398,7 +409,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				float	hitDistance;// the distance from the ray's origin the hit was recorded
 				vec3	hitNormal;// the normal got from contact with the object
 				uint	RandomSeed;
-				vec3	cameraPos;
+				vec3	hitPoint;
 				
 			};
 			layout(location = 0) rayPayloadInEXT HitRecord payload;
@@ -439,7 +450,7 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 				float	hitDistance;// the distance from the ray's origin the hit was recorded
 				vec3	hitNormal;// the normal got from contact with the object
 				uint	RandomSeed;
-				vec3	cameraPos;
+				vec3	hitPoint;
 				
 			};
 			layout(location = 0) rayPayloadInEXT HitRecord payload;
@@ -486,20 +497,11 @@ void RaytracedCel::PrepareVulkanRaytracingScripts(class GraphicsAPIManager& GAPI
 
 				const vec2 uv		= vec2(UV1 * coordinates.x + UV2 * coordinates.y + UV3 * coordinates.z);
 
-				
-				//vec3 viewDir  = normalize(hitPoint - payload.cameraPos);
-				//
-				//vec3 halfDir	= normalize(viewDir+normalize(gl_WorldRayDirectionEXT));
-				//float specAngle = max(dot(halfDir,normal), 0.0);
-				//vec3 specular	= vec3(smoothstep(0.005, 0.1,pow(specAngle,64)));
-				//vec3 diffuse	= vec3(smoothstep(0.0,0.1,dot(gl_WorldRayDirectionEXT, normal)));
-				//
-				//vec3 finalLight = specular + diffuse;
-
 				payload.matIndex	= gl_InstanceCustomIndexEXT;
 				payload.hitColor	= texture(Textures, vec3(uv, textureOffset)).rgb;
 				payload.hitDistance = gl_HitTEXT;
 				payload.hitNormal	= normal;
+				payload.hitPoint	= hitPoint;
 
 			})";
 
