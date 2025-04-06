@@ -776,6 +776,7 @@ void RaytracedCel::PrepareCompositingScripts(GraphicsAPIManager& GAPI)
 
 	const char* deffered_fragment_shader =
 		R"(#version 450
+#line 779
 		layout(location = 0) in vec2 uv;
 		layout(location = 0) out vec4 outColor;
 
@@ -825,7 +826,7 @@ void RaytracedCel::PrepareCompositingScripts(GraphicsAPIManager& GAPI)
 			float x = 0;
 			float y = 0;
 
-			vec2 offset = vec2(1.0,1.0);
+			vec2 offset = vec2(1.0/1000.0,1.0/600.0);
 
 			float a  = 1.0f;
 			float b = 2.0f;
@@ -849,12 +850,81 @@ void RaytracedCel::PrepareCompositingScripts(GraphicsAPIManager& GAPI)
 			return sqrt(x * x + y * y);
 		}
 
+		//taken from GPUImageView for Android https://stackoverflow.com/a/39385318
+		vec3 GetBilinearFilteredTexture(texture2D textureToSample, vec2 uv)
+		{
+			vec4 centralColor;
+            float gaussianWeightTotal;
+            vec4 sum;
+            vec4 sampleColor;
+            float distanceFromCentralColor;
+            float gaussianWeight;
+			float distanceNormalizationFactor = 0.2;
+
+
+			vec2 offset = vec2(1.0/1000.0,1.0/600.0);
+            
+            centralColor = texture(sampler2D(textureToSample,pointSampler), uv);
+            gaussianWeightTotal = 0.18;
+            sum = centralColor * 0.18;
+            
+            sampleColor = texture(sampler2D(textureToSample,pointSampler),uv + vec2(-offset.x, -offset.y));
+            distanceFromCentralColor = min(distance(centralColor, sampleColor) * distanceNormalizationFactor, 1.0);
+            gaussianWeight = 0.05 * (1.0 - distanceFromCentralColor);
+            gaussianWeightTotal += gaussianWeight;
+            sum += sampleColor * gaussianWeight;
+
+            sampleColor = texture(sampler2D(textureToSample,pointSampler),uv + vec2(0, -offset.y));
+            distanceFromCentralColor = min(distance(centralColor, sampleColor) * distanceNormalizationFactor, 1.0);
+            gaussianWeight = 0.09 * (1.0 - distanceFromCentralColor);
+            gaussianWeightTotal += gaussianWeight;
+            sum += sampleColor * gaussianWeight;
+
+            sampleColor = texture(sampler2D(textureToSample,pointSampler),uv + vec2(offset.x, -offset.y));
+            distanceFromCentralColor = min(distance(centralColor, sampleColor) * distanceNormalizationFactor, 1.0);
+            gaussianWeight = 0.12 * (1.0 - distanceFromCentralColor);
+            gaussianWeightTotal += gaussianWeight;
+            sum += sampleColor * gaussianWeight;
+
+            sampleColor = texture(sampler2D(textureToSample,pointSampler),uv + vec2(-offset.x, 0));
+            distanceFromCentralColor = min(distance(centralColor, sampleColor) * distanceNormalizationFactor, 1.0);
+            gaussianWeight = 0.15 * (1.0 - distanceFromCentralColor);
+            gaussianWeightTotal += gaussianWeight;
+            sum += sampleColor * gaussianWeight;
+
+            sampleColor = texture(sampler2D(textureToSample,pointSampler), uv + vec2(offset.x, 0));
+            distanceFromCentralColor = min(distance(centralColor, sampleColor) * distanceNormalizationFactor, 1.0);
+            gaussianWeight = 0.15 * (1.0 - distanceFromCentralColor);
+            gaussianWeightTotal += gaussianWeight;
+            sum += sampleColor * gaussianWeight;
+
+            sampleColor = texture(sampler2D(textureToSample,pointSampler), uv + vec2(-offset.x,	offset.y));
+            distanceFromCentralColor = min(distance(centralColor, sampleColor) * distanceNormalizationFactor, 1.0);
+            gaussianWeight = 0.12 * (1.0 - distanceFromCentralColor);
+            gaussianWeightTotal += gaussianWeight;
+            sum += sampleColor * gaussianWeight;
+
+            sampleColor = texture(sampler2D(textureToSample,pointSampler), uv + vec2(0, offset.y));
+            distanceFromCentralColor = min(distance(centralColor, sampleColor) * distanceNormalizationFactor, 1.0);
+            gaussianWeight = 0.09 * (1.0 - distanceFromCentralColor);
+            gaussianWeightTotal += gaussianWeight;
+            sum += sampleColor * gaussianWeight;
+
+            sampleColor = texture(sampler2D(textureToSample,pointSampler), uv + vec2(offset.x, offset.y));
+            distanceFromCentralColor = min(distance(centralColor, sampleColor) * distanceNormalizationFactor, 1.0);
+            gaussianWeight = 0.05 * (1.0 - distanceFromCentralColor);
+            gaussianWeightTotal += gaussianWeight;
+            sum += sampleColor * gaussianWeight;
+
+			return (sum/gaussianWeightTotal).rgb;
+		}
+
 		void main()
 		{
 			const vec3 pos = texture(sampler2D(posBuffer,pointSampler),uv).rgb;
 			const vec3 normal = texture(sampler2D(normalBuffer,pointSampler),uv).rgb;
 			const vec3 color = texture(sampler2D(colorBuffer,pointSampler),uv).rgb;
-			const vec3 directLight = texture(sampler2D(directLightBuffer,pointSampler),uv).rgb;
+			const vec3 directLight = GetBilinearFilteredTexture(directLightBuffer,uv);//;texture(sampler2D(directLightBuffer,pointSampler),uv).rgb;
 			const vec3 indirectLight = texture(sampler2D(indirectLightBuffer,pointSampler),uv).rgb;
 
 			vec3 lightDir = vec3(0.0); 
@@ -883,7 +953,7 @@ void RaytracedCel::PrepareCompositingScripts(GraphicsAPIManager& GAPI)
 			if (debugIndex == 0)
 			{
 				//light = specular + diffuse + ambient occlusion
-				outColor = vec4(color * finalLight,1.0);
+				outColor = vec4(color * finalLight ,1.0);
 			}
 			else if (debugIndex == 1)
 			{
@@ -899,11 +969,11 @@ void RaytracedCel::PrepareCompositingScripts(GraphicsAPIManager& GAPI)
 			}
 			else if (debugIndex == 4)
 			{
-				outColor = vec4(directLight + indirectLight ,1.0);
+				outColor = vec4(directLight,1.0);
 			}
 			else if (debugIndex == 5)
 			{
-				outColor = vec4(specular + diffuse,1.0);
+				outColor = vec4(specular,1.0);
 			}
 			else if (debugIndex == 6)
 			{
